@@ -1,11 +1,8 @@
 import { useEffect, useRef, useState } from 'preact/hooks'
 import { detectRenderer, renderInto, splitFrontmatter, type Renderer } from '../preview/render'
+import { isDark } from '../theme'
 
 const rendererText: Record<Renderer, string> = { zenn: 'Zenn', markdown: 'Markdown' }
-
-function prefersDark() {
-  return window.matchMedia?.('(prefers-color-scheme: dark)').matches ?? false
-}
 
 /** Rendered preview of a Markdown file, shown beside the source. */
 export function Preview({ path, content, scrollRatio }: { path: string; content: string; scrollRatio: number }) {
@@ -16,15 +13,8 @@ export function Preview({ path, content, scrollRatio }: { path: string; content:
   const pane = useRef<HTMLDivElement>(null)
   const [error, setError] = useState<string | null>(null)
   const [busy, setBusy] = useState(true)
-  const [dark, setDark] = useState(prefersDark)
+  const dark = isDark.value
   const { fm } = splitFrontmatter(content)
-
-  useEffect(() => {
-    const mq = window.matchMedia?.('(prefers-color-scheme: dark)')
-    const on = () => setDark(prefersDark())
-    mq?.addEventListener('change', on)
-    return () => mq?.removeEventListener('change', on)
-  }, [])
 
   useEffect(() => setOverride(null), [path])
 

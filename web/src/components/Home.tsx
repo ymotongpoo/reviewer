@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from 'preact/hooks'
 import { api } from '../api'
 import type { DirEntry, DirListing, ProjectSummary, ServerInfo } from '../types'
 import { fmt } from './Overview'
+import { ThemeToggle } from './ThemeToggle'
 
 function statusText(p: ProjectSummary) {
   if (!p.exists) return 'ディレクトリがありません'
@@ -66,6 +67,8 @@ export function Home() {
       <header class="app-header">
         <span class="brand">reviewer</span>
         <span class="muted small">{info?.version}</span>
+        <span class="spacer" />
+        <ThemeToggle />
       </header>
       <div class="home-body">
         {error && <div class="banner error">{error}</div>}

@@ -1,6 +1,7 @@
 import { render } from 'preact'
 import { useEffect } from 'preact/hooks'
 import './style.css'
+import './theme'
 import { connectEvents, fatal, info, refreshAll, toasts } from './state'
 import { route } from './router'
 import { Header } from './components/Header'

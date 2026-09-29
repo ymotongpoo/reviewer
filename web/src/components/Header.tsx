@@ -4,6 +4,7 @@ import { copyText } from '../clipboard'
 import { agentInfo, comments, draftCount, info, refreshAll, responseBanner, toast } from '../state'
 import { AgentChip } from './Agent'
 import { AnnotateButton } from './Annotate'
+import { ThemeToggle } from './ThemeToggle'
 import type { ProjectSummary, SubmitResult } from '../types'
 
 export function CopyPrompt({ prompt, label = '指示文をコピー' }: { prompt: string; label?: string }) {
@@ -97,6 +98,7 @@ export function Header() {
           ラウンド {i.round} · {submitted ? '提出済み' : '下書き中'}
         </span>
         <span class="spacer" />
+        <ThemeToggle />
         <AnnotateButton />
         <AgentChip />
         {submitted && (
