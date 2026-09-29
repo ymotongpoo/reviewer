@@ -329,6 +329,7 @@ func (a *App) HandleChanges(paths []string, dataChanged bool) {
 	}
 	if dataChanged {
 		a.importResponses()
+		a.importAllAnnotations()
 	}
 }
 
@@ -375,6 +376,7 @@ func (a *App) reanchor(paths []string) {
 	if len(changedPaths) > 0 {
 		a.notify(Event{Type: "comments", Paths: changedPaths})
 	}
+	a.reanchorAnnotations(paths)
 }
 
 func (a *App) reanchorComment(c *store.Comment, newLines []string, h string) {

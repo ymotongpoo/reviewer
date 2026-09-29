@@ -165,6 +165,26 @@ func (c *Client) Sessions(ctx context.Context) ([]agent.Session, error) {
 	return out, nil
 }
 
+// CreateSession creates an empty Hermes session with a title.
+func (c *Client) CreateSession(ctx context.Context, title string) (agent.Session, error) {
+	var res struct {
+		Session apiSession `json:"session"`
+	}
+	if err := c.do(ctx, http.MethodPost, "/api/sessions", map[string]string{
+		"title": title, "source": "api_server",
+	}, &res, nil); err != nil {
+		return agent.Session{}, err
+	}
+	if res.Session.ID == "" {
+		return agent.Session{}, fmt.Errorf("Hermes API が session.id を返しませんでした")
+	}
+	s := agent.Session{ID: res.Session.ID, Source: res.Session.Source, UpdatedAt: parseTime(res.Session.LastActive)}
+	if res.Session.Title != nil {
+		s.Title = *res.Session.Title
+	}
+	return s, nil
+}
+
 // parseTime accepts epoch seconds (number or numeric string) and RFC 3339.
 func parseTime(v any) time.Time {
 	switch t := v.(type) {

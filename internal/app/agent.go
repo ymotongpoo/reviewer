@@ -73,6 +73,13 @@ func (a *App) reattach() {
 			}
 		}
 	}
+	for _, req := range a.Store.Requests() {
+		for _, r := range a.Store.RequestAgentRuns(req.ID) {
+			if r.Status == store.RunRunning {
+				stale = append(stale, r)
+			}
+		}
+	}
 	a.mu.Unlock()
 	a.agents.mu.Lock()
 	ag := a.agents.ag
@@ -197,6 +204,13 @@ type AgentRunView struct {
 
 // AgentRuns returns the runs of round n.
 func (a *App) AgentRuns(n int) []AgentRunView {
+	a.mu.Lock()
+	stored := a.Store.AgentRuns(n)
+	a.mu.Unlock()
+	return a.agentRuns(stored)
+}
+
+func (a *App) agentRuns(stored []*store.AgentRun) []AgentRunView {
 	// Running runs keep their latest state (e.g. the text so far) in memory.
 	a.agents.mu.Lock()
 	live := map[string]store.AgentRun{}
@@ -207,7 +221,7 @@ func (a *App) AgentRuns(n int) []AgentRunView {
 	a.mu.Lock()
 	defer a.mu.Unlock()
 	out := []AgentRunView{}
-	for _, r := range a.Store.AgentRuns(n) {
+	for _, r := range stored {
 		if l, ok := live[r.ID]; ok {
 			r = &l
 		}
@@ -218,6 +232,14 @@ func (a *App) AgentRuns(n int) []AgentRunView {
 		out = append(out, AgentRunView{AgentRun: r, Events: evs})
 	}
 	return out
+}
+
+// AnnotationAgentRuns returns the runs of an annotation request.
+func (a *App) AnnotationAgentRuns(id string) []AgentRunView {
+	a.mu.Lock()
+	stored := a.Store.RequestAgentRuns(id)
+	a.mu.Unlock()
+	return a.agentRuns(stored)
 }
 
 const autoSentHeader = "（このメッセージは reviewer から自動送信されています）\n\n"
@@ -280,7 +302,7 @@ func (a *App) follow(rec *store.AgentRun, run agent.Run) {
 	}
 	a.agents.active[rec.ID] = &activeRun{rec: rec, run: run}
 	a.agents.mu.Unlock()
-	a.notify(Event{Type: "agent", Round: rec.Round, Run: rec.ID})
+	a.notify(a.agentEvent(rec, nil))
 	go func() {
 		for ev := range run.Events() {
 			a.handleEvent(rec, run, ev)
@@ -302,7 +324,7 @@ func (a *App) handleEvent(rec *store.AgentRun, run agent.Run, ev agent.Event) {
 	a.mu.Lock()
 	a.Store.AppendAgentEvent(rec, ev)
 	a.mu.Unlock()
-	a.notify(Event{Type: "agent", Round: rec.Round, Run: rec.ID, Agent: &ev})
+	a.notify(a.agentEvent(rec, &ev))
 
 	a.agents.mu.Lock()
 	changed := false
@@ -359,6 +381,10 @@ func (a *App) finish(rec *store.AgentRun, run agent.Run, ev agent.Event) {
 			a.mu.Unlock()
 		}
 	}
+	if rec.Purpose == "annotate" {
+		a.finishAnnotationRun(rec)
+		return
+	}
 
 	// The watcher imports response.json too; import synchronously so the
 	// summary is available for the notice.
@@ -376,7 +402,7 @@ func (a *App) finish(rec *store.AgentRun, run agent.Run, ev agent.Event) {
 	status, errText, text, noResp := rec.Status, rec.Error, rec.Text, rec.NoResponse
 	a.agents.mu.Unlock()
 	a.saveRun(rec)
-	a.notify(Event{Type: "agent", Round: rec.Round, Run: rec.ID})
+	a.notify(a.agentEvent(rec, nil))
 
 	var msg string
 	switch status {
@@ -425,8 +451,15 @@ func (a *App) sendNotice(rec *store.AgentRun, msg string) {
 		rec.NotifyError = err.Error()
 		a.agents.mu.Unlock()
 		a.saveRun(rec)
-		a.notify(Event{Type: "agent", Round: rec.Round, Run: rec.ID})
+		a.notify(a.agentEvent(rec, nil))
 	}
+}
+
+func (a *App) agentEvent(rec *store.AgentRun, ev *agent.Event) Event {
+	if rec.Purpose == "annotate" {
+		return Event{Type: "annotate", Request: rec.Request, Run: rec.ID, Agent: ev}
+	}
+	return Event{Type: "agent", Round: rec.Round, Run: rec.ID, Agent: ev}
 }
 
 // saveRun persists a snapshot of rec.
