@@ -1,0 +1,24 @@
+internal/server/server.go
+  s_7494ec2db548fb::t_9accf946b26710 510-511
+internal/app/annotate.go
+  s_7494ec2db548fb::t_b7b358f07a2d73 460
+  s_7494ec2db548fb::t_9accf946b26710 449-451
+internal/server/server_test.go
+  s_7494ec2db548fb::t_9accf946b26710 256-259
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "b7a1ae359903dde3892f23c2038420d6a1ca58d9",
+  "prompts": {},
+  "sessions": {
+    "s_7494ec2db548fb": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a0ed3a-6f31-7553-8e65-7d45571cc2eb",
+        "model": "gpt-5.6-sol"
+      },
+      "human_author": "Yoshi Yamaguchi <ymotongpoo@gmail.com>"
+    }
+  }
+}
