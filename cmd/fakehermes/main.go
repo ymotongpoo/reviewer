@@ -51,6 +51,14 @@ func main() {
 			{"id": "cli_1", "source": "cli", "title": "ローカルで作業", "last_active": now - 3600},
 		},
 		Script: func(input string) []hermestest.Step {
+			if strings.Contains(input, "/instructions.md`") {
+				return []hermestest.Step{
+					{Event: "message.delta", Fields: map[string]any{"delta": "確認依頼を受け取りました。"}, Delay: 500 * time.Millisecond},
+					{Event: "tool.started", Fields: map[string]any{"tool": "read_file", "preview": "instructions.md"}, Delay: 300 * time.Millisecond},
+					{Event: "tool.completed", Fields: map[string]any{"tool": "read_file", "duration": 0.2, "error": false}, Delay: 300 * time.Millisecond},
+					{Event: "message.delta", Fields: map[string]any{"delta": "annotations.json に指摘を書きました。"}, Delay: 400 * time.Millisecond},
+				}
+			}
 			steps := []hermestest.Step{
 				{Event: "message.delta", Fields: map[string]any{"delta": "レビューを受け取りました。"}, Delay: 500 * time.Millisecond},
 				{Event: "tool.started", Fields: map[string]any{"tool": "read_file", "preview": "feedback.md"}, Delay: 300 * time.Millisecond},
