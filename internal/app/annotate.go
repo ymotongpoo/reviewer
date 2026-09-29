@@ -329,18 +329,24 @@ func (a *App) importAnnotations(id string) (bool, error) {
 	if parseErr != nil {
 		info.Error = parseErr.Error()
 	} else {
+		reusableIDs := []string{}
 		for _, old := range a.Store.Annotations() {
 			if old.Request == id && old.State == store.AnnotationPending {
-				old.State = store.AnnotationDismissed
-				old.UpdatedAt = a.now()
-				if err := a.Store.PutAnnotation(old); err != nil {
+				reusableIDs = append(reusableIDs, old.ID)
+				if err := a.Store.DeleteAnnotation(old.ID); err != nil {
 					return false, err
 				}
 			}
 		}
 		info.Summary, info.Warnings = resp.Summary, warnings
-		for _, parsed := range resp.Annotations {
-			ann := a.storedAnnotation(id, parsed, snapshots[parsed.Path])
+		for i, parsed := range resp.Annotations {
+			annotationID := ""
+			if i < len(reusableIDs) {
+				annotationID = reusableIDs[i]
+			} else {
+				annotationID = a.Store.NewAnnotationID()
+			}
+			ann := a.storedAnnotation(annotationID, id, parsed, snapshots[parsed.Path])
 			if err := a.Store.PutAnnotation(ann); err != nil {
 				return false, err
 			}
@@ -359,10 +365,10 @@ func (a *App) importAnnotations(id string) (bool, error) {
 	return true, nil
 }
 
-func (a *App) storedAnnotation(request string, p annotationdoc.Annotation, snap annotationdoc.Snapshot) *store.Annotation {
+func (a *App) storedAnnotation(id, request string, p annotationdoc.Annotation, snap annotationdoc.Snapshot) *store.Annotation {
 	now := a.now()
 	ann := &store.Annotation{
-		ID: a.Store.NewAnnotationID(), Request: request, Path: p.Path,
+		ID: id, Request: request, Path: p.Path,
 		OrigStart: p.StartLine, OrigEnd: p.EndLine, OrigBlob: snap.Blob,
 		Severity: p.Severity, Confidence: p.Confidence, Label: p.Label,
 		Body: p.Body, Suggestion: p.Suggestion, State: store.AnnotationPending,
