@@ -158,7 +158,7 @@ func (s *Store) Request(id string) (*AnnotationRequest, error) {
 // Requests returns all annotation requests in numeric order.
 func (s *Store) Requests() []*AnnotationRequest {
 	entries, _ := os.ReadDir(filepath.Join(s.Dir, "requests"))
-	var out []*AnnotationRequest
+	out := []*AnnotationRequest{}
 	for _, e := range entries {
 		if !e.IsDir() || !validRequestID(e.Name()) {
 			continue
