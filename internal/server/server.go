@@ -18,6 +18,7 @@ import (
 	"time"
 
 	"github.com/ymotongpoo/reviewer/internal/app"
+	"github.com/ymotongpoo/reviewer/internal/config"
 	"github.com/ymotongpoo/reviewer/internal/store"
 )
 
@@ -110,6 +111,17 @@ func (p *Project) Handler() http.Handler {
 		mux.HandleFunc("GET /api/agent/runs", p.handleAgentRuns)
 		mux.HandleFunc("POST /api/agent/runs/{id}/stop", p.handleAgentStop)
 		mux.HandleFunc("POST /api/agent/runs/{id}/approval", p.handleAgentApproval)
+		mux.HandleFunc("GET /api/presets", p.handlePresets)
+		mux.HandleFunc("PUT /api/presets", p.handleSavePresets)
+		mux.HandleFunc("POST /api/annotate", p.handleAnnotate)
+		mux.HandleFunc("GET /api/annotate/requests", p.handleAnnotationRequests)
+		mux.HandleFunc("GET /api/annotate/requests/{id}", p.handleAnnotationRequest)
+		mux.HandleFunc("PATCH /api/annotate/requests/{id}", p.handleUpdateAnnotationRequest)
+		mux.HandleFunc("POST /api/annotate/requests/{id}/discard", p.handleDiscardAnnotationRequest)
+		mux.HandleFunc("GET /api/annotate/requests/{id}/diff", p.handleAnnotationRequestDiff)
+		mux.HandleFunc("GET /api/annotations", p.handleAnnotations)
+		mux.HandleFunc("POST /api/annotations/{id}/adopt", p.handleAdoptAnnotation)
+		mux.HandleFunc("PATCH /api/annotations/{id}", p.handleUpdateAnnotation)
 		mux.HandleFunc("GET /api/events", p.handleEvents)
 		mux.HandleFunc("/api/", func(w http.ResponseWriter, r *http.Request) {
 			writeError(w, &app.Error{Code: http.StatusNotFound, Msg: "not found"})
@@ -432,6 +444,95 @@ func (p *Project) handleAgentApproval(w http.ResponseWriter, r *http.Request) {
 	}
 	err := p.App.AnswerAgentRun(r.Context(), r.PathValue("id"), req.ApprovalID, req.Choice)
 	respond(w, map[string]bool{"ok": true}, err)
+}
+
+func (p *Project) handlePresets(w http.ResponseWriter, _ *http.Request) {
+	writeJSON(w, map[string]any{"presets": p.App.Presets()})
+}
+
+func (p *Project) handleSavePresets(w http.ResponseWriter, r *http.Request) {
+	var req struct {
+		Presets []config.Preset `json:"presets"`
+	}
+	if err := decode(r, &req); err != nil {
+		writeError(w, err)
+		return
+	}
+	presets, err := p.App.SaveProjectPresets(req.Presets)
+	respond(w, map[string]any{"presets": presets}, err)
+}
+
+func (p *Project) handleAnnotate(w http.ResponseWriter, r *http.Request) {
+	var req app.AnnotateInput
+	if err := decode(r, &req); err != nil {
+		writeError(w, err)
+		return
+	}
+	result, err := p.App.Annotate(r.Context(), req)
+	respond(w, result, err)
+}
+
+func (p *Project) handleAnnotationRequests(w http.ResponseWriter, _ *http.Request) {
+	writeJSON(w, map[string]any{"requests": p.App.AnnotationRequests()})
+}
+
+func (p *Project) handleAnnotationRequest(w http.ResponseWriter, r *http.Request) {
+	request, err := p.App.AnnotationRequest(r.PathValue("id"))
+	respond(w, request, err)
+}
+
+func (p *Project) handleUpdateAnnotationRequest(w http.ResponseWriter, r *http.Request) {
+	var patch struct {
+		Hidden *bool `json:"hidden"`
+	}
+	if err := decode(r, &patch); err != nil {
+		writeError(w, err)
+		return
+	}
+	if patch.Hidden == nil {
+		writeError(w, &app.Error{Code: http.StatusBadRequest, Msg: "hidden を指定してください"})
+		return
+	}
+	request, err := p.App.SetRequestHidden(r.PathValue("id"), *patch.Hidden)
+	respond(w, request, err)
+}
+
+func (p *Project) handleDiscardAnnotationRequest(w http.ResponseWriter, r *http.Request) {
+	err := p.App.DiscardRequest(r.PathValue("id"))
+	respond(w, map[string]bool{"ok": true}, err)
+}
+
+func (p *Project) handleAnnotationRequestDiff(w http.ResponseWriter, r *http.Request) {
+	diff, err := p.App.AnnotationRequestDiff(r.PathValue("id"), r.URL.Query().Get("path"))
+	respond(w, diff, err)
+}
+
+func (p *Project) handleAnnotations(w http.ResponseWriter, _ *http.Request) {
+	writeJSON(w, map[string]any{"annotations": p.App.Annotations()})
+}
+
+func (p *Project) handleAdoptAnnotation(w http.ResponseWriter, r *http.Request) {
+	var patch app.AnnotationAdoptPatch
+	if r.ContentLength != 0 {
+		if err := decode(r, &patch); err != nil {
+			writeError(w, err)
+			return
+		}
+	}
+	comment, err := p.App.AdoptAnnotation(r.PathValue("id"), patch)
+	respond(w, comment, err)
+}
+
+func (p *Project) handleUpdateAnnotation(w http.ResponseWriter, r *http.Request) {
+	var patch struct {
+		State string `json:"state"`
+	}
+	if err := decode(r, &patch); err != nil {
+		writeError(w, err)
+		return
+	}
+	annotation, err := p.App.SetAnnotationState(r.PathValue("id"), patch.State)
+	respond(w, annotation, err)
 }
 
 func (p *Project) handleOpenRound(w http.ResponseWriter, r *http.Request) {

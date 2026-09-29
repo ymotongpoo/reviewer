@@ -325,6 +325,7 @@ func (a *App) importAnnotations(id string) (bool, error) {
 	}
 	info := &store.AnnotationImport{Hash: h, ImportedAt: a.now()}
 	resp, warnings, parseErr := annotationdoc.ParseResponse(b, id, snapshots)
+	changedPaths := []string{}
 	if parseErr != nil {
 		info.Error = parseErr.Error()
 	} else {
@@ -344,6 +345,7 @@ func (a *App) importAnnotations(id string) (bool, error) {
 				return false, err
 			}
 			info.Count++
+			changedPaths = append(changedPaths, parsed.Path)
 		}
 	}
 	req.Import = info
@@ -351,7 +353,8 @@ func (a *App) importAnnotations(id string) (bool, error) {
 		return false, err
 	}
 	a.reanchorAnnotations(nil)
-	a.notify(Event{Type: "annotations", Request: id})
+	sort.Strings(changedPaths)
+	a.notify(Event{Type: "annotations", Paths: compactStrings(changedPaths), Request: id})
 	a.notify(Event{Type: "annotate", Request: id})
 	return true, nil
 }
@@ -451,7 +454,7 @@ func (a *App) Annotations() []*store.Annotation {
 	for _, req := range a.Store.Requests() {
 		hidden[req.ID] = req.Hidden
 	}
-	var out []*store.Annotation
+	out := []*store.Annotation{}
 	for _, ann := range a.Store.Annotations() {
 		if ann.State == store.AnnotationPending && !hidden[ann.Request] {
 			out = append(out, ann)

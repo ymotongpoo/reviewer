@@ -11,6 +11,8 @@ import (
 	"strings"
 	"testing"
 	"time"
+
+	"github.com/ymotongpoo/reviewer/internal/store"
 )
 
 type env struct {
@@ -188,5 +190,88 @@ func TestEventsAreScoped(t *testing.T) {
 	case <-lines:
 	case <-time.After(2 * time.Second):
 		t.Error("project b did not receive its own event")
+	}
+}
+
+func TestAnnotationAPI(t *testing.T) {
+	e := newEnv(t)
+	id := e.open(t, filepath.Join(e.root, "a"))
+	p, err := e.reg.Get(id)
+	if err != nil {
+		t.Fatal(err)
+	}
+	fv, err := p.App.File("a.md")
+	if err != nil {
+		t.Fatal(err)
+	}
+	req := &store.AnnotationRequest{
+		ID: p.App.Store.NewRequestID(), Prompt: "確認", Preset: "test",
+		Files: map[string]string{"a.md": fv.Hash}, Target: "new", CreatedAt: time.Now(),
+	}
+	if err := p.App.Store.PutRequest(req); err != nil {
+		t.Fatal(err)
+	}
+	annotations := `{"request":"` + req.ID + `","annotations":[{"path":"a.md","startLine":2,"endLine":2,"quote":["line"],"severity":"major","confidence":"high","body":"wrong"}]}`
+	if err := os.WriteFile(filepath.Join(p.App.Store.RequestDir(req.ID), "annotations.json"), []byte(annotations), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := p.App.ImportAnnotations(req.ID); err != nil {
+		t.Fatal(err)
+	}
+	base := e.ts.URL + "/p/" + id
+
+	res, body := do(t, "GET", base+"/api/presets", "", bearer)
+	if res.StatusCode != 200 || !strings.Contains(body, `"origin":"builtin"`) {
+		t.Fatalf("presets: %d %s", res.StatusCode, body)
+	}
+	res, body = do(t, "PUT", base+"/api/presets", `{"presets":[{"name":"project","prompt":"check","scope":"all"}]}`, bearer)
+	if res.StatusCode != 200 || !strings.Contains(body, `"origin":"project"`) {
+		t.Fatalf("save presets: %d %s", res.StatusCode, body)
+	}
+	res, body = do(t, "GET", base+"/api/annotate/requests", "", bearer)
+	if res.StatusCode != 200 || !strings.Contains(body, `"id":"`+req.ID+`"`) {
+		t.Fatalf("requests: %d %s", res.StatusCode, body)
+	}
+	res, body = do(t, "GET", base+"/api/annotate/requests/"+req.ID, "", bearer)
+	if res.StatusCode != 200 || !strings.Contains(body, `"runs":[]`) {
+		t.Fatalf("request: %d %s", res.StatusCode, body)
+	}
+	res, body = do(t, "GET", base+"/api/annotations", "", bearer)
+	var list struct {
+		Annotations []store.Annotation `json:"annotations"`
+	}
+	json.Unmarshal([]byte(body), &list)
+	if res.StatusCode != 200 || len(list.Annotations) != 1 {
+		t.Fatalf("annotations: %d %s", res.StatusCode, body)
+	}
+	annotationID := list.Annotations[0].ID
+	res, _ = do(t, "PATCH", base+"/api/annotations/"+annotationID, `{"state":"dismissed"}`, bearer)
+	if res.StatusCode != 200 {
+		t.Fatalf("dismiss: %d", res.StatusCode)
+	}
+	_, body = do(t, "GET", base+"/api/annotations", "", bearer)
+	if !strings.Contains(body, `"annotations":[]`) {
+		t.Fatalf("dismissed annotations: %s", body)
+	}
+	do(t, "PATCH", base+"/api/annotations/"+annotationID, `{"state":"pending"}`, bearer)
+	res, body = do(t, "POST", base+"/api/annotations/"+annotationID+"/adopt", `{"label":"question","body":"override"}`, bearer)
+	if res.StatusCode != 200 || !strings.Contains(body, `"label":"question"`) || !strings.Contains(body, `"body":"override"`) {
+		t.Fatalf("adopt: %d %s", res.StatusCode, body)
+	}
+
+	if err := os.WriteFile(filepath.Join(e.root, "a", "a.md"), []byte("# a\nchanged\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	res, body = do(t, "GET", base+"/api/annotate/requests/"+req.ID+"/diff?path=a.md", "", bearer)
+	if res.StatusCode != 200 || !strings.Contains(body, `"kind":"modified"`) {
+		t.Fatalf("diff: %d %s", res.StatusCode, body)
+	}
+	res, body = do(t, "PATCH", base+"/api/annotate/requests/"+req.ID, `{"hidden":true}`, bearer)
+	if res.StatusCode != 200 || !strings.Contains(body, `"hidden":true`) {
+		t.Fatalf("hide: %d %s", res.StatusCode, body)
+	}
+	res, body = do(t, "POST", base+"/api/annotate/requests/"+req.ID+"/discard", "", bearer)
+	if res.StatusCode != 200 || !strings.Contains(body, `"ok":true`) {
+		t.Fatalf("discard: %d %s", res.StatusCode, body)
 	}
 }
