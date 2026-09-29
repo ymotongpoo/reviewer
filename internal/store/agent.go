@@ -149,3 +149,16 @@ func (s *Store) AgentEvents(n int, runID string) []agent.Event {
 	})
 	return out
 }
+
+// Peek reads the review state and agent binding of the data directory dir
+// without opening the store. ok is false when dir holds no review data.
+func Peek(dir string) (st State, binding *AgentBinding, ok bool) {
+	if err := readJSON(filepath.Join(dir, "state.json"), &st); err != nil {
+		return st, nil, false
+	}
+	var b AgentBinding
+	if readJSON(filepath.Join(dir, "agent.json"), &b) == nil && b.SessionID != "" {
+		binding = &b
+	}
+	return st, binding, true
+}

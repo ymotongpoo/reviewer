@@ -1,9 +1,9 @@
-import { useState } from 'preact/hooks'
-import { api } from '../api'
+import { useEffect, useState } from 'preact/hooks'
+import { api, projectId } from '../api'
 import { copyText } from '../clipboard'
 import { agentInfo, comments, draftCount, info, refreshAll, responseBanner, toast } from '../state'
 import { AgentChip } from './Agent'
-import type { SubmitResult } from '../types'
+import type { ProjectSummary, SubmitResult } from '../types'
 
 export function CopyPrompt({ prompt, label = '指示文をコピー' }: { prompt: string; label?: string }) {
   const [done, setDone] = useState(false)
@@ -28,6 +28,57 @@ export function CopyPrompt({ prompt, label = '指示文をコピー' }: { prompt
   )
 }
 
+/** Project name with a menu of recent projects. */
+function ProjectSwitcher({ name, root }: { name: string; root: string }) {
+  const [open, setOpen] = useState(false)
+  const [list, setList] = useState<ProjectSummary[] | null>(null)
+  useEffect(() => {
+    document.title = `${name} - reviewer`
+  }, [name])
+  async function toggle() {
+    if (!open) api.projects().then(setList).catch(() => setList([]))
+    setOpen(!open)
+  }
+  return (
+    <span class="switcher">
+      <button class="project" title={root} onClick={() => void toggle()}>
+        {name} ▾
+      </button>
+      {open && (
+        <div class="switcher-menu" onMouseLeave={() => setOpen(false)}>
+          {list === null && <div class="muted small">読み込み中…</div>}
+          {list
+            ?.filter((p) => p.exists)
+            .map((p) => (
+              <a class={`switcher-item ${p.id === projectId ? 'on' : ''}`} href={`/p/${p.id}/`}>
+                <span class="project-name">{p.name}</span>
+                <span class="muted small">{p.display}</span>
+              </a>
+            ))}
+          <div class="switcher-foot">
+            <a href="/">別のディレクトリを開く…</a>
+            {projectId && (
+              <button
+                class="link"
+                onClick={async () => {
+                  try {
+                    await api.closeProject(projectId!)
+                    location.href = '/'
+                  } catch (e) {
+                    toast((e as Error).message, 'error')
+                  }
+                }}
+              >
+                このプロジェクトを閉じる
+              </button>
+            )}
+          </div>
+        </div>
+      )}
+    </span>
+  )
+}
+
 export function Header() {
   const i = info.value
   const [dialog, setDialog] = useState<'confirm' | SubmitResult | null>(null)
@@ -37,12 +88,10 @@ export function Header() {
   return (
     <>
       <header class="app-header">
-        <a class="brand" href="#/">
+        <a class="brand" href="/" title="ディレクトリの選択画面へ">
           reviewer
         </a>
-        <span class="project" title={i.root}>
-          {i.name}
-        </span>
+        <ProjectSwitcher name={i.name} root={i.root} />
         <span class={`round-chip ${i.roundStatus}`}>
           ラウンド {i.round} · {submitted ? '提出済み' : '下書き中'}
         </span>

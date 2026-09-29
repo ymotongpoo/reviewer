@@ -9,6 +9,7 @@ import (
 	"io/fs"
 	"os"
 	"path/filepath"
+	"strings"
 
 	"github.com/BurntSushi/toml"
 )
@@ -24,9 +25,11 @@ type Config struct {
 	// DataDir is where review data is stored. Relative paths are resolved
 	// against the project root. The special value "xdg" selects
 	// $XDG_DATA_HOME/reviewer/<project>-<hash>.
-	DataDir        string   `toml:"data_dir"`
-	Port           int      `toml:"port"`
-	Bind           string   `toml:"bind"`
+	DataDir string `toml:"data_dir"`
+	Port    int    `toml:"port"`
+	Bind    string `toml:"bind"`
+	// Roots limits the directories the server may open ("~" = home).
+	Roots          []string `toml:"roots"`
 	Exclude        []string `toml:"exclude"`
 	Labels         []Label  `toml:"labels"`
 	PromptTemplate string   `toml:"prompt_template"`
@@ -76,6 +79,7 @@ func Default() Config {
 			{Name: "nit", Description: "細かい指摘"},
 		},
 	}
+	c.Roots = []string{"~"}
 	c.Anchor.FuzzyThreshold = 0.7
 	c.Agent.Kind = "auto"
 	c.Agent.AutoSend = true
@@ -95,6 +99,32 @@ func GlobalPath() string {
 		dir = filepath.Join(home, ".config")
 	}
 	return filepath.Join(dir, "reviewer", "config.toml")
+}
+
+// StateDir returns the directory for server state that does not belong to
+// any project: the recent project list and the access token.
+func StateDir() string {
+	dir := os.Getenv("XDG_STATE_HOME")
+	if dir == "" {
+		home, err := os.UserHomeDir()
+		if err != nil {
+			return ""
+		}
+		dir = filepath.Join(home, ".local", "state")
+	}
+	return filepath.Join(dir, "reviewer")
+}
+
+// ExpandHome replaces a leading "~" with the home directory.
+func ExpandHome(p string) string {
+	if p != "~" && !strings.HasPrefix(p, "~/") {
+		return p
+	}
+	home, err := os.UserHomeDir()
+	if err != nil {
+		return p
+	}
+	return filepath.Join(home, strings.TrimPrefix(p, "~"))
 }
 
 // ProjectPath returns the path of the project configuration file.
@@ -126,6 +156,24 @@ func Load(root, projectPath string) (Config, error) {
 	}
 	if c.PromptTemplate == "" {
 		c.PromptTemplate = DefaultPromptTemplate
+	}
+	return c, nil
+}
+
+// LoadGlobal reads the defaults and the global file only; it holds the
+// server-wide settings (port, bind, roots, agent).
+func LoadGlobal(path string) (Config, error) {
+	c := Default()
+	if path == "" {
+		path = GlobalPath()
+	}
+	if path != "" {
+		if _, err := toml.DecodeFile(path, &c); err != nil && !errors.Is(err, fs.ErrNotExist) {
+			return c, fmt.Errorf("config %s: %w", path, err)
+		}
+	}
+	if len(c.Roots) == 0 {
+		c.Roots = []string{"~"}
 	}
 	return c, nil
 }

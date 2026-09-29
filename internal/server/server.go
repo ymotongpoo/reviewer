@@ -24,12 +24,12 @@ import (
 //go:embed all:dist
 var distFS embed.FS
 
-// Server is the HTTP front end.
+// Server is the HTTP front end. It serves the project picker at "/" and
+// each open project under "/p/<id>/".
 type Server struct {
-	App    *app.App
 	Token  string
 	Port   int
-	hub    *Hub
+	Reg    *Registry
 	static http.Handler
 }
 
@@ -42,14 +42,13 @@ func NewToken() string {
 	return hex.EncodeToString(b)
 }
 
-// New creates a server. The returned Hub must be connected to the App's
-// notifications.
-func New(a *app.App, token string, port int, hub *Hub) *Server {
+// New creates a server for the projects in reg.
+func New(reg *Registry, token string, port int) *Server {
 	sub, err := fs.Sub(distFS, "dist")
 	if err != nil {
 		panic(err)
 	}
-	return &Server{App: a, Token: token, Port: port, hub: hub, static: spa(sub)}
+	return &Server{Token: token, Port: port, Reg: reg, static: spa(sub)}
 }
 
 func (s *Server) cookieName() string { return fmt.Sprintf("reviewer_token_%d", s.Port) }
@@ -57,35 +56,67 @@ func (s *Server) cookieName() string { return fmt.Sprintf("reviewer_token_%d", s
 // Handler returns the root HTTP handler.
 func (s *Server) Handler() http.Handler {
 	mux := http.NewServeMux()
-	mux.HandleFunc("GET /api/project", s.handleProject)
-	mux.HandleFunc("GET /api/tree", s.handleTree)
-	mux.HandleFunc("GET /api/file", s.handleFile)
-	mux.HandleFunc("GET /api/rounds/{n}/changes", s.handleRoundChanges)
-	mux.HandleFunc("GET /api/rounds/{n}/diff", s.handleRoundDiff)
-	mux.HandleFunc("GET /api/blob/{hash}", s.handleBlob)
-	mux.HandleFunc("GET /api/comments", s.handleComments)
-	mux.HandleFunc("POST /api/comments", s.handleCreateComment)
-	mux.HandleFunc("PATCH /api/comments/{id}", s.handleUpdateComment)
-	mux.HandleFunc("DELETE /api/comments/{id}", s.handleDeleteComment)
-	mux.HandleFunc("POST /api/comments/{id}/replies", s.handleAddReply)
-	mux.HandleFunc("PATCH /api/comments/{id}/replies/{rid}", s.handleUpdateReply)
-	mux.HandleFunc("DELETE /api/comments/{id}/replies/{rid}", s.handleDeleteReply)
-	mux.HandleFunc("POST /api/rounds/submit", s.handleSubmit)
-	mux.HandleFunc("POST /api/rounds/open", s.handleOpenRound)
-	mux.HandleFunc("GET /api/export", s.handleExport)
-	mux.HandleFunc("GET /api/agent", s.handleAgent)
-	mux.HandleFunc("GET /api/agent/sessions", s.handleAgentSessions)
-	mux.HandleFunc("PUT /api/agent/binding", s.handleAgentBinding)
-	mux.HandleFunc("POST /api/agent/send", s.handleAgentSend)
-	mux.HandleFunc("GET /api/agent/runs", s.handleAgentRuns)
-	mux.HandleFunc("POST /api/agent/runs/{id}/stop", s.handleAgentStop)
-	mux.HandleFunc("POST /api/agent/runs/{id}/approval", s.handleAgentApproval)
-	mux.HandleFunc("GET /api/events", s.handleEvents)
+	mux.HandleFunc("GET /api/server", s.handleServer)
+	mux.HandleFunc("GET /api/projects", s.handleProjects)
+	mux.HandleFunc("POST /api/projects/open", s.handleOpenProject)
+	mux.HandleFunc("POST /api/projects/{id}/close", s.handleCloseProject)
+	mux.HandleFunc("DELETE /api/projects/{id}", s.handleForgetProject)
+	mux.HandleFunc("GET /api/fs", s.handleFS)
+	mux.HandleFunc("/p/{id}/api/", s.handleProjectAPI)
 	mux.HandleFunc("/api/", func(w http.ResponseWriter, r *http.Request) {
 		writeError(w, &app.Error{Code: http.StatusNotFound, Msg: "not found"})
 	})
+	mux.Handle("/p/{id}/", s.static)
 	mux.Handle("/", s.static)
 	return s.auth(securityHeaders(mux))
+}
+
+// handleProjectAPI dispatches /p/<id>/api/... to the project, opening it
+// again when it is known (e.g. after a server restart).
+func (s *Server) handleProjectAPI(w http.ResponseWriter, r *http.Request) {
+	id := r.PathValue("id")
+	p, err := s.Reg.Get(id)
+	if err != nil {
+		writeError(w, err)
+		return
+	}
+	http.StripPrefix("/p/"+id, p.Handler()).ServeHTTP(w, r)
+}
+
+// Handler returns the per-project API handler; paths start with /api/.
+func (p *Project) Handler() http.Handler {
+	p.muxOnce.Do(func() {
+		mux := http.NewServeMux()
+		mux.HandleFunc("GET /api/project", p.handleProject)
+		mux.HandleFunc("GET /api/tree", p.handleTree)
+		mux.HandleFunc("GET /api/file", p.handleFile)
+		mux.HandleFunc("GET /api/rounds/{n}/changes", p.handleRoundChanges)
+		mux.HandleFunc("GET /api/rounds/{n}/diff", p.handleRoundDiff)
+		mux.HandleFunc("GET /api/blob/{hash}", p.handleBlob)
+		mux.HandleFunc("GET /api/comments", p.handleComments)
+		mux.HandleFunc("POST /api/comments", p.handleCreateComment)
+		mux.HandleFunc("PATCH /api/comments/{id}", p.handleUpdateComment)
+		mux.HandleFunc("DELETE /api/comments/{id}", p.handleDeleteComment)
+		mux.HandleFunc("POST /api/comments/{id}/replies", p.handleAddReply)
+		mux.HandleFunc("PATCH /api/comments/{id}/replies/{rid}", p.handleUpdateReply)
+		mux.HandleFunc("DELETE /api/comments/{id}/replies/{rid}", p.handleDeleteReply)
+		mux.HandleFunc("POST /api/rounds/submit", p.handleSubmit)
+		mux.HandleFunc("POST /api/rounds/open", p.handleOpenRound)
+		mux.HandleFunc("GET /api/export", p.handleExport)
+		mux.HandleFunc("GET /api/agent", p.handleAgent)
+		mux.HandleFunc("GET /api/agent/sessions", p.handleAgentSessions)
+		mux.HandleFunc("PUT /api/agent/binding", p.handleAgentBinding)
+		mux.HandleFunc("POST /api/agent/send", p.handleAgentSend)
+		mux.HandleFunc("GET /api/agent/runs", p.handleAgentRuns)
+		mux.HandleFunc("POST /api/agent/runs/{id}/stop", p.handleAgentStop)
+		mux.HandleFunc("POST /api/agent/runs/{id}/approval", p.handleAgentApproval)
+		mux.HandleFunc("GET /api/events", p.handleEvents)
+		mux.HandleFunc("/api/", func(w http.ResponseWriter, r *http.Request) {
+			writeError(w, &app.Error{Code: http.StatusNotFound, Msg: "not found"})
+		})
+		p.mux = mux
+	})
+	return p.mux
 }
 
 // auth accepts the token from the query (then stored in a cookie), the
@@ -213,16 +244,16 @@ func respond(w http.ResponseWriter, v any, err error) {
 	writeJSON(w, v)
 }
 
-func (s *Server) handleProject(w http.ResponseWriter, r *http.Request) {
-	writeJSON(w, s.App.Info())
+func (p *Project) handleProject(w http.ResponseWriter, r *http.Request) {
+	writeJSON(w, p.App.Info())
 }
 
-func (s *Server) handleTree(w http.ResponseWriter, r *http.Request) {
-	writeJSON(w, map[string]any{"files": s.App.Tree()})
+func (p *Project) handleTree(w http.ResponseWriter, r *http.Request) {
+	writeJSON(w, map[string]any{"files": p.App.Tree()})
 }
 
-func (s *Server) handleFile(w http.ResponseWriter, r *http.Request) {
-	fv, err := s.App.File(r.URL.Query().Get("path"))
+func (p *Project) handleFile(w http.ResponseWriter, r *http.Request) {
+	fv, err := p.App.File(r.URL.Query().Get("path"))
 	respond(w, fv, err)
 }
 
@@ -232,18 +263,18 @@ func roundParam(r *http.Request) int {
 	return n
 }
 
-func (s *Server) handleRoundChanges(w http.ResponseWriter, r *http.Request) {
-	rc, err := s.App.RoundChanges(roundParam(r))
+func (p *Project) handleRoundChanges(w http.ResponseWriter, r *http.Request) {
+	rc, err := p.App.RoundChanges(roundParam(r))
 	respond(w, rc, err)
 }
 
-func (s *Server) handleRoundDiff(w http.ResponseWriter, r *http.Request) {
-	d, err := s.App.RoundDiff(roundParam(r), r.URL.Query().Get("path"))
+func (p *Project) handleRoundDiff(w http.ResponseWriter, r *http.Request) {
+	d, err := p.App.RoundDiff(roundParam(r), r.URL.Query().Get("path"))
 	respond(w, d, err)
 }
 
-func (s *Server) handleBlob(w http.ResponseWriter, r *http.Request) {
-	b, err := s.App.Blob(r.PathValue("hash"))
+func (p *Project) handleBlob(w http.ResponseWriter, r *http.Request) {
+	b, err := p.App.Blob(r.PathValue("hash"))
 	if err != nil {
 		writeError(w, err)
 		return
@@ -253,32 +284,32 @@ func (s *Server) handleBlob(w http.ResponseWriter, r *http.Request) {
 	w.Write(b)
 }
 
-func (s *Server) handleComments(w http.ResponseWriter, r *http.Request) {
-	writeJSON(w, map[string]any{"comments": s.App.Comments()})
+func (p *Project) handleComments(w http.ResponseWriter, r *http.Request) {
+	writeJSON(w, map[string]any{"comments": p.App.Comments()})
 }
 
-func (s *Server) handleCreateComment(w http.ResponseWriter, r *http.Request) {
+func (p *Project) handleCreateComment(w http.ResponseWriter, r *http.Request) {
 	var req app.NewComment
 	if err := decode(r, &req); err != nil {
 		writeError(w, err)
 		return
 	}
-	c, err := s.App.CreateComment(req)
+	c, err := p.App.CreateComment(req)
 	respond(w, c, err)
 }
 
-func (s *Server) handleUpdateComment(w http.ResponseWriter, r *http.Request) {
-	var p app.CommentPatch
-	if err := decode(r, &p); err != nil {
+func (p *Project) handleUpdateComment(w http.ResponseWriter, r *http.Request) {
+	var patch app.CommentPatch
+	if err := decode(r, &patch); err != nil {
 		writeError(w, err)
 		return
 	}
-	c, err := s.App.UpdateComment(r.PathValue("id"), p)
+	c, err := p.App.UpdateComment(r.PathValue("id"), patch)
 	respond(w, c, err)
 }
 
-func (s *Server) handleDeleteComment(w http.ResponseWriter, r *http.Request) {
-	err := s.App.DeleteComment(r.PathValue("id"))
+func (p *Project) handleDeleteComment(w http.ResponseWriter, r *http.Request) {
+	err := p.App.DeleteComment(r.PathValue("id"))
 	respond(w, map[string]bool{"ok": true}, err)
 }
 
@@ -286,28 +317,28 @@ type replyReq struct {
 	Body string `json:"body"`
 }
 
-func (s *Server) handleAddReply(w http.ResponseWriter, r *http.Request) {
+func (p *Project) handleAddReply(w http.ResponseWriter, r *http.Request) {
 	var req replyReq
 	if err := decode(r, &req); err != nil {
 		writeError(w, err)
 		return
 	}
-	c, err := s.App.AddReply(r.PathValue("id"), req.Body)
+	c, err := p.App.AddReply(r.PathValue("id"), req.Body)
 	respond(w, c, err)
 }
 
-func (s *Server) handleUpdateReply(w http.ResponseWriter, r *http.Request) {
+func (p *Project) handleUpdateReply(w http.ResponseWriter, r *http.Request) {
 	var req replyReq
 	if err := decode(r, &req); err != nil {
 		writeError(w, err)
 		return
 	}
-	c, err := s.App.UpdateReply(r.PathValue("id"), r.PathValue("rid"), req.Body)
+	c, err := p.App.UpdateReply(r.PathValue("id"), r.PathValue("rid"), req.Body)
 	respond(w, c, err)
 }
 
-func (s *Server) handleDeleteReply(w http.ResponseWriter, r *http.Request) {
-	c, err := s.App.UpdateReply(r.PathValue("id"), r.PathValue("rid"), "")
+func (p *Project) handleDeleteReply(w http.ResponseWriter, r *http.Request) {
+	c, err := p.App.UpdateReply(r.PathValue("id"), r.PathValue("rid"), "")
 	respond(w, c, err)
 }
 
@@ -321,7 +352,7 @@ type submitRes struct {
 	AgentError string          `json:"agentError,omitempty"`
 }
 
-func (s *Server) handleSubmit(w http.ResponseWriter, r *http.Request) {
+func (p *Project) handleSubmit(w http.ResponseWriter, r *http.Request) {
 	var req submitReq
 	if r.ContentLength != 0 {
 		if err := decode(r, &req); err != nil {
@@ -329,7 +360,7 @@ func (s *Server) handleSubmit(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 	}
-	res, err := s.App.Submit()
+	res, err := p.App.Submit()
 	if err != nil {
 		writeError(w, err)
 		return
@@ -337,7 +368,7 @@ func (s *Server) handleSubmit(w http.ResponseWriter, r *http.Request) {
 	out := submitRes{SubmitResult: res}
 	if req.SendToAgent {
 		// The round is submitted either way; a failed send can be retried.
-		run, err := s.App.SendToAgent(r.Context(), res.Round)
+		run, err := p.App.SendToAgent(r.Context(), res.Round)
 		if err != nil {
 			out.AgentError = err.Error()
 		}
@@ -346,16 +377,16 @@ func (s *Server) handleSubmit(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, out)
 }
 
-func (s *Server) handleAgent(w http.ResponseWriter, r *http.Request) {
-	writeJSON(w, s.App.AgentInfo())
+func (p *Project) handleAgent(w http.ResponseWriter, r *http.Request) {
+	writeJSON(w, p.App.AgentInfo())
 }
 
-func (s *Server) handleAgentSessions(w http.ResponseWriter, r *http.Request) {
-	ss, err := s.App.AgentSessions(r.Context())
+func (p *Project) handleAgentSessions(w http.ResponseWriter, r *http.Request) {
+	ss, err := p.App.AgentSessions(r.Context())
 	respond(w, map[string]any{"sessions": ss}, err)
 }
 
-func (s *Server) handleAgentBinding(w http.ResponseWriter, r *http.Request) {
+func (p *Project) handleAgentBinding(w http.ResponseWriter, r *http.Request) {
 	var req struct {
 		SessionID string `json:"sessionId"`
 	}
@@ -363,11 +394,11 @@ func (s *Server) handleAgentBinding(w http.ResponseWriter, r *http.Request) {
 		writeError(w, err)
 		return
 	}
-	b, err := s.App.BindAgent(r.Context(), req.SessionID)
+	b, err := p.App.BindAgent(r.Context(), req.SessionID)
 	respond(w, map[string]any{"binding": b}, err)
 }
 
-func (s *Server) handleAgentSend(w http.ResponseWriter, r *http.Request) {
+func (p *Project) handleAgentSend(w http.ResponseWriter, r *http.Request) {
 	var req struct {
 		Round int `json:"round"`
 	}
@@ -375,22 +406,22 @@ func (s *Server) handleAgentSend(w http.ResponseWriter, r *http.Request) {
 		writeError(w, err)
 		return
 	}
-	run, err := s.App.SendToAgent(r.Context(), req.Round)
+	run, err := p.App.SendToAgent(r.Context(), req.Round)
 	respond(w, run, err)
 }
 
-func (s *Server) handleAgentRuns(w http.ResponseWriter, r *http.Request) {
+func (p *Project) handleAgentRuns(w http.ResponseWriter, r *http.Request) {
 	var n int
 	fmt.Sscan(r.URL.Query().Get("round"), &n)
-	writeJSON(w, map[string]any{"runs": s.App.AgentRuns(n)})
+	writeJSON(w, map[string]any{"runs": p.App.AgentRuns(n)})
 }
 
-func (s *Server) handleAgentStop(w http.ResponseWriter, r *http.Request) {
-	err := s.App.StopAgentRun(r.Context(), r.PathValue("id"))
+func (p *Project) handleAgentStop(w http.ResponseWriter, r *http.Request) {
+	err := p.App.StopAgentRun(r.Context(), r.PathValue("id"))
 	respond(w, map[string]bool{"ok": true}, err)
 }
 
-func (s *Server) handleAgentApproval(w http.ResponseWriter, r *http.Request) {
+func (p *Project) handleAgentApproval(w http.ResponseWriter, r *http.Request) {
 	var req struct {
 		ApprovalID string `json:"approvalId"`
 		Choice     string `json:"choice"`
@@ -399,20 +430,20 @@ func (s *Server) handleAgentApproval(w http.ResponseWriter, r *http.Request) {
 		writeError(w, err)
 		return
 	}
-	err := s.App.AnswerAgentRun(r.Context(), r.PathValue("id"), req.ApprovalID, req.Choice)
+	err := p.App.AnswerAgentRun(r.Context(), r.PathValue("id"), req.ApprovalID, req.Choice)
 	respond(w, map[string]bool{"ok": true}, err)
 }
 
-func (s *Server) handleOpenRound(w http.ResponseWriter, r *http.Request) {
-	err := s.App.OpenNextRound()
+func (p *Project) handleOpenRound(w http.ResponseWriter, r *http.Request) {
+	err := p.App.OpenNextRound()
 	respond(w, map[string]bool{"ok": true}, err)
 }
 
-func (s *Server) handleExport(w http.ResponseWriter, r *http.Request) {
+func (p *Project) handleExport(w http.ResponseWriter, r *http.Request) {
 	var n int
 	fmt.Sscan(r.URL.Query().Get("round"), &n)
 	format := r.URL.Query().Get("format")
-	b, err := s.App.Export(n, format)
+	b, err := p.App.Export(n, format)
 	if err != nil {
 		writeError(w, err)
 		return
@@ -425,7 +456,7 @@ func (s *Server) handleExport(w http.ResponseWriter, r *http.Request) {
 	w.Write(b)
 }
 
-func (s *Server) handleEvents(w http.ResponseWriter, r *http.Request) {
+func (p *Project) handleEvents(w http.ResponseWriter, r *http.Request) {
 	fl, ok := w.(http.Flusher)
 	if !ok {
 		http.Error(w, "streaming unsupported", http.StatusInternalServerError)
@@ -434,8 +465,8 @@ func (s *Server) handleEvents(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "text/event-stream")
 	w.Header().Set("Cache-Control", "no-cache")
 	w.Header().Set("X-Accel-Buffering", "no")
-	ch := s.hub.Subscribe()
-	defer s.hub.Unsubscribe(ch)
+	ch := p.Hub.Subscribe()
+	defer p.Hub.Unsubscribe(ch)
 	fmt.Fprint(w, "retry: 2000\n\n")
 	fl.Flush()
 	ping := time.NewTicker(25 * time.Second)

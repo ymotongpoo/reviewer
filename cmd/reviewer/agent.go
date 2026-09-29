@@ -9,19 +9,30 @@ import (
 	"github.com/ymotongpoo/reviewer/internal/config"
 )
 
-// setupAgent connects the app to the configured agent. A missing agent is
+// agentConn is the agent connection shared by all projects.
+type agentConn struct {
+	ag         agent.Agent
+	reason     string
+	notifier   agent.Notifier
+	notifyName string
+}
+
+// setup connects a project to the agent; url is the project page.
+func (c agentConn) setup(a *app.App, url string) {
+	a.ConfigureAgent(c.ag, c.reason, c.notifier, c.notifyName, url)
+}
+
+// connectAgent builds the configured agent connection. A missing agent is
 // not an error: the UI shows the reason and the copy-the-prompt flow keeps
 // working.
-func setupAgent(a *app.App, cfg config.Config, baseURL string) {
+func connectAgent(cfg config.Config) agentConn {
 	ac := cfg.Agent
 	switch ac.Kind {
 	case "none", "":
-		a.ConfigureAgent(nil, "", nil, "none", baseURL)
-		return
+		return agentConn{notifyName: "none"}
 	case "auto", "hermes":
 	default:
-		a.ConfigureAgent(nil, "未対応のエージェントです: "+ac.Kind, nil, "none", baseURL)
-		return
+		return agentConn{reason: "未対応のエージェントです: " + ac.Kind, notifyName: "none"}
 	}
 	opts := hermes.Options{URL: ac.Hermes.URL, Profile: ac.Hermes.Profile, Command: ac.Hermes.Command, Home: ac.Hermes.Home}
 	if ac.Hermes.APIKeyEnv != "" {
@@ -35,8 +46,7 @@ func setupAgent(a *app.App, cfg config.Config, baseURL string) {
 				reason = "" // Hermes is not installed here: stay quiet.
 			}
 		}
-		a.ConfigureAgent(nil, reason, nil, "none", baseURL)
-		return
+		return agentConn{reason: reason, notifyName: "none"}
 	}
 	var n agent.Notifier
 	notify := ac.Notify
@@ -52,5 +62,5 @@ func setupAgent(a *app.App, cfg config.Config, baseURL string) {
 	default:
 		notify = "none"
 	}
-	a.ConfigureAgent(hermes.New(opts), "", n, notify, baseURL)
+	return agentConn{ag: hermes.New(opts), notifier: n, notifyName: notify}
 }

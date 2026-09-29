@@ -90,6 +90,13 @@ func (a *App) reattach() {
 	}
 }
 
+// AgentBusy reports whether a run of the agent is in progress.
+func (a *App) AgentBusy() bool {
+	a.agents.mu.Lock()
+	defer a.agents.mu.Unlock()
+	return len(a.agents.active) > 0
+}
+
 // AgentInfo describes the agent connection for the UI.
 type AgentInfo struct {
 	Available bool                `json:"available"`

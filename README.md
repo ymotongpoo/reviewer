@@ -22,19 +22,45 @@ scp dist/linux-amd64/reviewer devbox:~/bin/
 
 ## 使い方
 
-リモートマシンで起動し、表示された URL を手元のブラウザで開きます。mDNS（Bonjour / Avahi）が使える環境では、ホスト名でアクセスできます。
+### サーバーを起動する
 
 ```sh
-devbox$ reviewer serve ./docs
-Serving /home/me/docs
-  data: /home/me/docs/.reviewer
+devbox$ reviewer serve            # ディレクトリの選択画面から始める
+devbox$ reviewer serve ./docs     # ./docs を開いた状態で始める
+reviewer dev
   Open: http://devbox.local:7777/?token=3f9a...
         http://192.168.1.10:7777/?token=3f9a...
 ```
 
-既定では全インターフェースの IPv4 と IPv6 の両方で待ち受けます（`--bind all`）。`.local` の名前が IPv6 のアドレスに解決される環境でもつながります。
+表示された URL を手元のブラウザで開きます。mDNS（Bonjour / Avahi）が使える環境では、ホスト名でアクセスできます。既定では全インターフェースの IPv4 と IPv6 の両方で待ち受けます（`--bind all`）。このマシンからだけ開けるようにしたいときは `--bind 127.0.0.1` を指定します。
 
-このマシンからだけ開けるようにしたいときは `--bind 127.0.0.1` を指定します。
+トークンは初回起動時に `~/.local/state/reviewer/token` に保存され、再起動しても変わりません。URL は `reviewer url` でいつでも表示できます。
+
+### 常駐させる（systemd）
+
+```sh
+reviewer service install        # ~/.config/systemd/user/reviewer.service を作って起動する
+reviewer service status | restart | uninstall
+reviewer url                    # アクセス用の URL を表示する
+```
+
+ログアウト後やマシンの再起動後も動かし続けるには、`sudo loginctl enable-linger $USER` が必要です。未設定の場合は install のときに案内が出ます。
+
+### ディレクトリを開いて切り替える
+
+トップページ（`/`）でレビューするディレクトリを選びます。
+
+- **最近開いたディレクトリ**：ラウンドの状況と、Hermes の送信先を一緒に表示します。
+- **パス入力**：`~/` から始められ、Tab で補完できます。
+- **ブラウズ**：ディレクトリをたどって選べます。
+
+開いたディレクトリは `/p/<id>/` で表示されます。ブラウザのタブを分ければ、複数のディレクトリを同時に開けます。ヘッダーのディレクトリ名から、最近のディレクトリに切り替えることもできます。
+
+ラウンドの履歴、コメント、Hermes の送信先は、そのディレクトリの `.reviewer/` に保存されます。サーバーを入れ直しても、同じディレクトリを開けばそのまま続きから使えます。サーバーの外に持つのは、最近開いたディレクトリの一覧（`~/.local/state/reviewer/projects.json`）とトークンだけです。
+
+開けるディレクトリは、既定ではホームディレクトリの中に限られます。変更するには、グローバル設定に `roots = ["~/repos", "~/writing"]` のように書きます。
+
+### レビューの流れ
 
 1. 左のツリーからファイルを開き、行番号をクリックしてコメントします。Shift+クリックかドラッグで範囲を選べます。入力内容は自動で下書き保存されます。
 2. Markdown ファイルでは、ファイルヘッダーの「プレビュー」を押すと右側にレンダリング結果を並べて表示します。スクロールはソースに合わせて追従し、オンオフの状態はブラウザに保存されます。
@@ -138,10 +164,11 @@ HERMES_HOME=/tmp/fh ./bin/reviewer serve ./docs
 
 ## 設定
 
-`~/.config/reviewer/config.toml`（グローバル）と `DIR/.reviewer/config.toml`（プロジェクト）を読み込みます。プロジェクトの設定が優先されます。
+`~/.config/reviewer/config.toml`（グローバル）と `DIR/.reviewer/config.toml`（プロジェクト）を読み込みます。port、bind、roots、agent はサーバー全体の設定なので、グローバル設定にだけ書きます。labels、exclude、prompt_template、anchor、data_dir は、プロジェクトの設定で上書きできます。
 
 ```toml
-data_dir = ".reviewer"      # "xdg" にすると ~/.local/share/reviewer/<project>-<hash> に保存する
+# ~/.config/reviewer/config.toml（サーバー全体の設定）
+roots = ["~"]               # 開けるディレクトリ
 port = 7777
 bind = "all"                # 既定。"127.0.0.1" にするとこのマシンからのみ
 exclude = ["drafts/", "*.bak"]

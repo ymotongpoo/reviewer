@@ -30,7 +30,10 @@ var version = "dev"
 const usage = `reviewer — AI エージェントが書いた文書にコメントし、フィードバックをファイルで返すツール
 
 使い方:
-  reviewer serve  [DIR] [flags]   Web UI を起動する
+  reviewer serve  [DIR] [flags]   Web UI を起動する（DIR を省略すると画面からディレクトリを選ぶ）
+  reviewer service install|uninstall|status|restart
+                                  systemd のユーザーサービスとして常駐させる
+  reviewer url                    アクセス用の URL を表示する
   reviewer status [DIR] [flags]   現在のラウンドと未解決コメント数を表示する
   reviewer export [DIR] [flags]   フィードバックを標準出力に出す
   reviewer version
@@ -52,6 +55,10 @@ func main() {
 		err = status(os.Args[2:])
 	case "export":
 		err = export(os.Args[2:])
+	case "service":
+		err = service(os.Args[2:])
+	case "url":
+		err = urlCmd(os.Args[2:])
 	case "version", "--version", "-v":
 		fmt.Println(version)
 	case "help", "-h", "--help":
@@ -106,16 +113,15 @@ func (c *common) load(dir string) (config.Config, error) {
 
 func serve(args []string) error {
 	fs := flag.NewFlagSet("serve", flag.ExitOnError)
-	var c common
-	c.register(fs)
+	configPath := fs.String("config", "", "サーバー設定ファイル（既定: ~/.config/reviewer/config.toml）")
 	port := fs.Int("port", 0, "待ち受けポート（既定: 7777。使用中なら次の空きポート）")
 	bind := fs.String("bind", "", "待ち受けアドレス（既定: all = 全インターフェースの IPv4/IPv6。127.0.0.1 でこのマシンからのみ）")
-	token := fs.String("token", os.Getenv("REVIEWER_TOKEN"), "アクセストークン（既定: $REVIEWER_TOKEN または起動ごとにランダム）")
-	dir, err := parse(fs, args)
+	token := fs.String("token", os.Getenv("REVIEWER_TOKEN"), "アクセストークン（既定: $REVIEWER_TOKEN、なければ ~/.local/state/reviewer/token）")
+	dir, err := parseOptional(fs, args)
 	if err != nil {
 		return err
 	}
-	cfg, err := c.load(dir)
+	cfg, err := config.LoadGlobal(*configPath)
 	if err != nil {
 		return err
 	}
@@ -127,16 +133,9 @@ func serve(args []string) error {
 		*bind = cfg.Bind
 	}
 	if *token == "" {
-		*token = server.NewToken()
-	}
-
-	hub := server.NewHub()
-	a, err := app.New(dir, cfg, hub.Publish)
-	if err != nil {
-		return err
-	}
-	if err := a.Init(); err != nil {
-		return err
+		if *token, err = persistentToken(); err != nil {
+			return err
+		}
 	}
 
 	host := listenHost(*bind)
@@ -145,37 +144,50 @@ func serve(args []string) error {
 		return err
 	}
 	actualPort := ln.Addr().(*net.TCPAddr).Port
-	srv := server.New(a, *token, actualPort, hub)
+	urls := accessURLs(host, actualPort, *token, hostname(), interfaceAddrs())
+	base := strings.TrimSuffix(strings.SplitN(urls[0], "?", 2)[0], "/")
+
+	conn := connectAgent(cfg)
+	reg, err := server.NewRegistry(cfg.Roots, config.StateDir(), base, conn.setup)
+	if err != nil {
+		return err
+	}
+	defer reg.CloseAll()
+	server.Version = version
+	srv := server.New(reg, *token, actualPort)
 	httpSrv := &http.Server{Handler: srv.Handler(), ReadHeaderTimeout: 10 * time.Second}
 
-	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
-	defer stop()
-	go func() {
-		if err := a.Watch(ctx); err != nil {
-			log.Printf("watcher stopped: %v", err)
+	path := "/"
+	if dir != "" {
+		p, err := reg.Open(dir)
+		if err != nil {
+			return err
 		}
-	}()
-
-	fmt.Printf("Serving %s\n", a.Proj.Root)
-	fmt.Printf("  data: %s\n", a.DataDir)
-	for _, w := range a.Warnings() {
-		fmt.Printf("  warning: %s\n", w)
+		path = "/p/" + p.ID + "/"
+		fmt.Printf("Serving %s\n", p.Root)
+		fmt.Printf("  data: %s\n", p.App.DataDir)
+		for _, w := range p.App.Warnings() {
+			fmt.Printf("  warning: %s\n", w)
+		}
+	} else {
+		fmt.Printf("reviewer %s\n", version)
+		fmt.Printf("  roots: %s\n", strings.Join(cfg.Roots, ", "))
 	}
-	urls := accessURLs(host, actualPort, *token, hostname(), interfaceAddrs())
-	setupAgent(a, cfg, strings.SplitN(urls[0], "?", 2)[0])
-	fmt.Printf("  Open: %s\n", urls[0])
+	fmt.Printf("  Open: %s\n", withPath(urls[0], path))
 	for _, u := range urls[1:] {
-		fmt.Printf("        %s\n", u)
+		fmt.Printf("        %s\n", withPath(u, path))
 	}
-	if info := a.AgentInfo(); info.Available {
-		fmt.Printf("  agent: %s（通知: %s）\n", info.Name, info.Notify)
-	} else if info.Reason != "" {
-		fmt.Printf("  agent: 未接続（%s）\n", info.Reason)
+	if conn.ag != nil {
+		fmt.Printf("  agent: %s（通知: %s）\n", conn.ag.Name(), conn.notifyName)
+	} else if conn.reason != "" {
+		fmt.Printf("  agent: 未接続（%s）\n", conn.reason)
 	}
 	if isLoopback(host) {
 		fmt.Printf("  (このマシンからのみ開けます。他のマシンから開くには --bind all で起動してください)\n")
 	}
 
+	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
+	defer stop()
 	errc := make(chan error, 1)
 	go func() { errc <- httpSrv.Serve(ln) }()
 	select {
@@ -189,6 +201,53 @@ func serve(args []string) error {
 		httpSrv.Shutdown(shutdown)
 	}
 	return nil
+}
+
+// withPath inserts path before the query of an access URL.
+func withPath(u, path string) string {
+	base, q, _ := strings.Cut(u, "?")
+	return strings.TrimSuffix(base, "/") + path + "?" + q
+}
+
+// persistentToken returns the token stored in the state directory,
+// creating it on first use so that URLs survive restarts.
+func persistentToken() (string, error) {
+	dir := config.StateDir()
+	p := filepath.Join(dir, "token")
+	if b, err := os.ReadFile(p); err == nil {
+		if t := strings.TrimSpace(string(b)); t != "" {
+			return t, nil
+		}
+	}
+	if err := os.MkdirAll(dir, 0o700); err != nil {
+		return "", err
+	}
+	t := server.NewToken()
+	if err := os.WriteFile(p, []byte(t+"\n"), 0o600); err != nil {
+		return "", err
+	}
+	return t, nil
+}
+
+// parseOptional parses flags around an optional DIR argument ("" if absent).
+func parseOptional(fs *flag.FlagSet, args []string) (string, error) {
+	if err := fs.Parse(args); err != nil {
+		return "", err
+	}
+	if fs.NArg() == 0 {
+		return "", nil
+	}
+	dir := fs.Arg(0)
+	if err := fs.Parse(fs.Args()[1:]); err != nil {
+		return "", err
+	}
+	if fs.NArg() > 0 {
+		return "", fmt.Errorf("unexpected arguments: %v", fs.Args())
+	}
+	if abs, err := filepath.Abs(dir); err == nil {
+		dir = abs
+	}
+	return dir, nil
 }
 
 func listen(bind string, port int, probe bool) (net.Listener, error) {

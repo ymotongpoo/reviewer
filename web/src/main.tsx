@@ -8,6 +8,8 @@ import { Tree } from './components/Tree'
 import { FileView } from './components/FileView'
 import { Overview } from './components/Overview'
 import { RoundHistory } from './components/RoundHistory'
+import { Home } from './components/Home'
+import { projectId } from './api'
 
 function App() {
   useEffect(() => {
@@ -47,4 +49,4 @@ function App() {
   )
 }
 
-render(<App />, document.getElementById('app')!)
+render(projectId ? <App /> : <Home />, document.getElementById('app')!)

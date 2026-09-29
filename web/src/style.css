@@ -1433,3 +1433,223 @@ table.frontmatter td {
   background: var(--bg-muted);
   color: var(--fg-muted);
 }
+
+/* Project picker */
+.home {
+  height: 100%;
+  overflow: auto;
+}
+.home-body {
+  max-width: 900px;
+  margin: 0 auto;
+  padding: 20px 24px 80px;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+.home .card {
+  margin: 0;
+}
+.path-input {
+  position: relative;
+}
+.path-row {
+  display: flex;
+  gap: 8px;
+}
+.path-row input {
+  flex: 1;
+  font: 14px var(--mono);
+  padding: 6px 10px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--bg);
+  color: var(--fg);
+}
+.suggestions {
+  position: absolute;
+  z-index: 5;
+  left: 0;
+  right: 80px;
+  margin: 2px 0 0;
+  padding: 4px 0;
+  list-style: none;
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  box-shadow: 0 6px 20px rgba(0, 0, 0, 0.15);
+  max-height: 320px;
+  overflow: auto;
+}
+.suggestions li {
+  padding: 4px 12px;
+  cursor: pointer;
+  font-family: var(--mono);
+  font-size: 13px;
+  display: flex;
+  gap: 8px;
+  align-items: center;
+}
+.suggestions li.on,
+.suggestions li:hover {
+  background: var(--accent-subtle);
+}
+.small-chip {
+  font-size: 10px;
+  line-height: 16px;
+}
+.project-list {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.project-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 8px 12px;
+}
+.project-row:hover {
+  background: var(--bg-subtle);
+}
+.project-row.missing {
+  opacity: 0.55;
+}
+.project-main {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  color: var(--fg);
+}
+.project-main:hover {
+  text-decoration: none;
+}
+.project-name {
+  font-weight: 700;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+.project-path {
+  font-family: var(--mono);
+  font-size: 12px;
+  color: var(--fg-muted);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.project-meta {
+  display: flex;
+  gap: 6px;
+  align-items: center;
+  flex-wrap: wrap;
+}
+.project-actions {
+  display: flex;
+  gap: 6px;
+}
+.dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--success);
+  display: inline-block;
+}
+.dot.busy {
+  background: var(--accent);
+}
+.browser-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 6px;
+}
+.dir-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  max-height: 420px;
+  overflow: auto;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+}
+.dir-list li {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 3px 10px;
+  border-bottom: 1px solid var(--border);
+}
+.dir-list li:last-child {
+  border-bottom: none;
+}
+.dir-name {
+  border: none;
+  background: none;
+  color: var(--fg);
+  font: 13px var(--mono);
+  cursor: pointer;
+  padding: 2px 0;
+  text-align: left;
+}
+.dir-name:hover {
+  color: var(--accent);
+}
+/* Switcher in the header */
+.switcher {
+  position: relative;
+}
+.switcher .project {
+  border: none;
+  background: none;
+  color: var(--fg);
+  font: inherit;
+  font-weight: 600;
+  cursor: pointer;
+  padding: 2px 6px;
+  border-radius: 6px;
+}
+.switcher .project:hover {
+  background: var(--bg-muted);
+}
+.switcher-menu {
+  position: absolute;
+  z-index: 40;
+  top: 100%;
+  left: 0;
+  min-width: 340px;
+  max-height: 60vh;
+  overflow: auto;
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.2);
+  padding: 6px;
+}
+.switcher-item {
+  display: flex;
+  flex-direction: column;
+  padding: 6px 10px;
+  border-radius: 6px;
+  color: var(--fg);
+}
+.switcher-item:hover {
+  background: var(--bg-subtle);
+  text-decoration: none;
+}
+.switcher-item.on {
+  background: var(--accent-subtle);
+}
+.switcher-foot {
+  display: flex;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 6px 10px 2px;
+  border-top: 1px solid var(--border);
+  margin-top: 4px;
+  font-size: 12px;
+}

@@ -1,5 +1,5 @@
 import { computed, signal } from '@preact/signals'
-import { api } from './api'
+import { api, projectBase } from './api'
 import type { AgentInfo, AgentRunView, Comment, Info, ServerEvent, TreeFile } from './types'
 
 export const info = signal<Info | null>(null)
@@ -118,7 +118,7 @@ const lazyInfo = debounced(() => refreshInfo().catch(() => {}), 150)
 const lazyAgent = debounced(() => refreshAgent().catch(() => {}), 150)
 
 export function connectEvents() {
-  const es = new EventSource('/api/events')
+  const es = new EventSource(`${projectBase}/api/events`)
   let wasDown = false
   es.onopen = () => {
     if (wasDown) {

@@ -1,36 +1,46 @@
 package server
 
 import (
+	"bufio"
+	"encoding/json"
+	"io"
 	"net/http"
 	"net/http/httptest"
 	"os"
 	"path/filepath"
 	"strings"
 	"testing"
-
-	"github.com/ymotongpoo/reviewer/internal/app"
-	"github.com/ymotongpoo/reviewer/internal/config"
+	"time"
 )
 
-func newTestServer(t *testing.T) (*httptest.Server, *Server) {
+type env struct {
+	ts    *httptest.Server
+	reg   *Registry
+	root  string // allowed root
+	state string
+}
+
+func newEnv(t *testing.T) *env {
 	t.Helper()
-	root := t.TempDir()
-	os.WriteFile(filepath.Join(root, "a.md"), []byte("# a\nline\n"), 0o644)
-	hub := NewHub()
-	a, err := app.New(root, config.Default(), hub.Publish)
+	root, _ := filepath.EvalSymlinks(t.TempDir())
+	state := t.TempDir()
+	for _, d := range []string{"a", "b"} {
+		os.MkdirAll(filepath.Join(root, d), 0o755)
+		os.WriteFile(filepath.Join(root, d, d+".md"), []byte("# "+d+"\nline\n"), 0o644)
+	}
+	reg, err := NewRegistry([]string{root}, state, "http://host:7777", nil)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if err := a.Init(); err != nil {
-		t.Fatal(err)
-	}
-	s := New(a, "secret", 7777, hub)
+	s := New(reg, "secret", 7777)
 	ts := httptest.NewServer(s.Handler())
-	t.Cleanup(ts.Close)
-	return ts, s
+	t.Cleanup(func() { ts.Close(); reg.CloseAll() })
+	return &env{ts: ts, reg: reg, root: root, state: state}
 }
 
-func do(t *testing.T, method, url, body string, hdr map[string]string) *http.Response {
+var bearer = map[string]string{"Authorization": "Bearer secret", "X-Reviewer": "1"}
+
+func do(t *testing.T, method, url, body string, hdr map[string]string) (*http.Response, string) {
 	t.Helper()
 	req, _ := http.NewRequest(method, url, strings.NewReader(body))
 	for k, v := range hdr {
@@ -41,45 +51,142 @@ func do(t *testing.T, method, url, body string, hdr map[string]string) *http.Res
 	if err != nil {
 		t.Fatal(err)
 	}
+	b, _ := io.ReadAll(res.Body)
 	res.Body.Close()
-	return res
+	return res, string(b)
+}
+
+func (e *env) open(t *testing.T, path string) string {
+	t.Helper()
+	b, _ := json.Marshal(map[string]string{"path": path})
+	res, body := do(t, "POST", e.ts.URL+"/api/projects/open", string(b), bearer)
+	if res.StatusCode != 200 {
+		t.Fatalf("open %s: %d %s", path, res.StatusCode, body)
+	}
+	var out struct{ ID string }
+	json.Unmarshal([]byte(body), &out)
+	return out.ID
 }
 
 func TestAuth(t *testing.T) {
-	ts, _ := newTestServer(t)
-	bearer := map[string]string{"Authorization": "Bearer secret"}
-
-	if res := do(t, "GET", ts.URL+"/api/tree", "", nil); res.StatusCode != 401 {
+	e := newEnv(t)
+	if res, _ := do(t, "GET", e.ts.URL+"/api/projects", "", nil); res.StatusCode != 401 {
 		t.Errorf("no token: %d", res.StatusCode)
 	}
-	if res := do(t, "GET", ts.URL+"/api/tree", "", map[string]string{"Authorization": "Bearer nope"}); res.StatusCode != 401 {
-		t.Errorf("bad token: %d", res.StatusCode)
-	}
-	res := do(t, "GET", ts.URL+"/?token=secret", "", nil)
+	res, _ := do(t, "GET", e.ts.URL+"/?token=secret", "", nil)
 	if res.StatusCode != 302 || len(res.Cookies()) != 1 || res.Header.Get("Location") != "/" {
 		t.Errorf("token login: %d %v %q", res.StatusCode, res.Cookies(), res.Header.Get("Location"))
 	}
-	cookie := map[string]string{"Cookie": "reviewer_token_7777=secret"}
-	if res := do(t, "GET", ts.URL+"/api/tree", "", cookie); res.StatusCode != 200 {
+	if res, _ := do(t, "GET", e.ts.URL+"/api/projects", "", map[string]string{"Cookie": "reviewer_token_7777=secret"}); res.StatusCode != 200 {
 		t.Errorf("cookie: %d", res.StatusCode)
 	}
-	body := `{"scope":"project","body":"x"}`
-	if res := do(t, "POST", ts.URL+"/api/comments", body, bearer); res.StatusCode != 403 {
+	if res, _ := do(t, "POST", e.ts.URL+"/api/projects/open", `{"path":"x"}`, map[string]string{"Authorization": "Bearer secret"}); res.StatusCode != 403 {
 		t.Errorf("missing X-Reviewer: %d", res.StatusCode)
 	}
-	bearer["X-Reviewer"] = "1"
-	if res := do(t, "POST", ts.URL+"/api/comments", body, bearer); res.StatusCode != 200 {
-		t.Errorf("create: %d", res.StatusCode)
+}
+
+func TestProjects(t *testing.T) {
+	e := newEnv(t)
+	idA := e.open(t, filepath.Join(e.root, "a"))
+	if again := e.open(t, filepath.Join(e.root, "a", ".")); again != idA {
+		t.Errorf("id not stable: %s vs %s", idA, again)
+	}
+	idB := e.open(t, filepath.Join(e.root, "b"))
+
+	res, body := do(t, "GET", e.ts.URL+"/p/"+idA+"/api/tree", "", bearer)
+	if res.StatusCode != 200 || !strings.Contains(body, "a.md") || strings.Contains(body, "b.md") {
+		t.Errorf("tree a: %d %s", res.StatusCode, body)
+	}
+	if res, _ := do(t, "GET", e.ts.URL+"/p/000000000000/api/tree", "", bearer); res.StatusCode != 404 {
+		t.Errorf("unknown project: %d", res.StatusCode)
 	}
 	for _, p := range []string{"../etc/passwd", "/etc/passwd", ".reviewer/state.json"} {
-		if res := do(t, "GET", ts.URL+"/api/file?path="+p, "", bearer); res.StatusCode != 400 && res.StatusCode != 404 {
+		if res, _ := do(t, "GET", e.ts.URL+"/p/"+idA+"/api/file?path="+p, "", bearer); res.StatusCode != 400 && res.StatusCode != 404 {
 			t.Errorf("file %s: %d", p, res.StatusCode)
 		}
 	}
-	if res := do(t, "GET", ts.URL+"/api/file?path=a.md", "", bearer); res.StatusCode != 200 {
-		t.Errorf("file a.md: %d", res.StatusCode)
+	if res, _ := do(t, "GET", e.ts.URL+"/p/"+idA+"/", "", bearer); res.StatusCode != 200 {
+		t.Errorf("spa under project: %d", res.StatusCode)
 	}
-	if res := do(t, "GET", ts.URL+"/some/spa/route", "", bearer); res.StatusCode != 200 {
-		t.Errorf("spa fallback: %d", res.StatusCode)
+
+	// Outside the roots, directly or through a symlink.
+	outside := t.TempDir()
+	os.Symlink(outside, filepath.Join(e.root, "link"))
+	for _, p := range []string{outside, filepath.Join(e.root, "link"), filepath.Join(e.root, "..")} {
+		b, _ := json.Marshal(map[string]string{"path": p})
+		if res, _ := do(t, "POST", e.ts.URL+"/api/projects/open", string(b), bearer); res.StatusCode != 403 {
+			t.Errorf("open outside %s: %d", p, res.StatusCode)
+		}
+	}
+
+	// The list shows both, newest first, with their state.
+	_, body = do(t, "GET", e.ts.URL+"/api/projects", "", bearer)
+	var list struct{ Projects []ProjectSummary }
+	json.Unmarshal([]byte(body), &list)
+	if len(list.Projects) != 2 || list.Projects[0].ID != idB || !list.Projects[1].Open || list.Projects[1].Round != 1 || !list.Projects[1].Initialized {
+		t.Errorf("list = %+v", list.Projects)
+	}
+
+	// Directory browser.
+	_, body = do(t, "GET", e.ts.URL+"/api/fs?path="+e.root, "", bearer)
+	if !strings.Contains(body, `"name":"a","path"`) || !strings.Contains(body, `"hasReviewer":true`) {
+		t.Errorf("fs = %s", body)
+	}
+	if res, _ := do(t, "GET", e.ts.URL+"/api/fs?path=/", "", bearer); res.StatusCode != 403 {
+		t.Errorf("fs outside: %d", res.StatusCode)
+	}
+
+	// Close, then a request reopens it from the recent list (as after a restart).
+	if res, _ := do(t, "POST", e.ts.URL+"/api/projects/"+idA+"/close", "", bearer); res.StatusCode != 200 {
+		t.Errorf("close: %d", res.StatusCode)
+	}
+	reg2, _ := NewRegistry([]string{e.root}, e.state, "", nil)
+	defer reg2.CloseAll()
+	if p, err := reg2.Get(idA); err != nil || p.Root != filepath.Join(e.root, "a") {
+		t.Errorf("reopen from recent: %v %v", p, err)
+	}
+	// Forget removes it from the list but keeps the data.
+	do(t, "DELETE", e.ts.URL+"/api/projects/"+idA, "", bearer)
+	if _, err := e.reg.Get(idA); err == nil {
+		t.Error("forgotten project still reachable")
+	}
+	if _, err := os.Stat(filepath.Join(e.root, "a", ".reviewer", "state.json")); err != nil {
+		t.Errorf("data removed: %v", err)
+	}
+}
+
+func TestEventsAreScoped(t *testing.T) {
+	e := newEnv(t)
+	idA := e.open(t, filepath.Join(e.root, "a"))
+	idB := e.open(t, filepath.Join(e.root, "b"))
+
+	req, _ := http.NewRequest("GET", e.ts.URL+"/p/"+idB+"/api/events", nil)
+	req.Header.Set("Authorization", "Bearer secret")
+	res, err := http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer res.Body.Close()
+	lines := make(chan string, 16)
+	go func() {
+		sc := bufio.NewScanner(res.Body)
+		for sc.Scan() {
+			if strings.HasPrefix(sc.Text(), "data:") {
+				lines <- sc.Text()
+			}
+		}
+	}()
+	time.Sleep(100 * time.Millisecond)
+	do(t, "POST", e.ts.URL+"/p/"+idA+"/api/comments", `{"scope":"project","body":"for a"}`, bearer)
+	select {
+	case l := <-lines:
+		t.Errorf("project b received an event of a: %s", l)
+	case <-time.After(300 * time.Millisecond):
+	}
+	do(t, "POST", e.ts.URL+"/p/"+idB+"/api/comments", `{"scope":"project","body":"for b"}`, bearer)
+	select {
+	case <-lines:
+	case <-time.After(2 * time.Second):
+		t.Error("project b did not receive its own event")
 	}
 }

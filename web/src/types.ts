@@ -222,3 +222,39 @@ export interface AgentSession {
   preview?: string
   updatedAt: string
 }
+
+export interface ServerInfo {
+  roots: string[]
+  home: string
+  version: string
+}
+
+export interface ProjectSummary {
+  id: string
+  name: string
+  path: string
+  display: string
+  open: boolean
+  exists: boolean
+  initialized: boolean
+  lastOpened: string
+  round?: number
+  roundStatus?: 'open' | 'submitted'
+  agent?: AgentBinding
+  busy?: boolean
+}
+
+export interface DirEntry {
+  name: string
+  path: string
+  display: string
+  hasReviewer: boolean
+}
+
+export interface DirListing {
+  path?: string
+  display?: string
+  parent?: string
+  entries: DirEntry[]
+  hasReviewer: boolean
+}

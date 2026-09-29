@@ -1,3 +1,4 @@
+import type { DirListing, ProjectSummary, ServerInfo } from './types'
 import type { AgentBinding, AgentInfo, AgentRun, AgentRunView, AgentSession, Comment, FileView, Info, RoundChanges, RoundDiff, SubmitResult, TreeFile } from './types'
 
 export class ApiError extends Error {
@@ -6,7 +7,14 @@ export class ApiError extends Error {
   }
 }
 
+/** The id of the project this page shows, from /p/<id>/, or null on the picker. */
+export const projectId: string | null = location.pathname.match(/^\/p\/([0-9a-f]+)\//)?.[1] ?? null
+
+/** Prefix of the per-project API. */
+export const projectBase = projectId ? `/p/${projectId}` : ''
+
 async function request<T>(method: string, url: string, body?: unknown): Promise<T> {
+  if (url.startsWith('/api/') && !serverPaths.some((p) => url.startsWith(p))) url = projectBase + url
   const res = await fetch(url, {
     method,
     headers: {
@@ -29,6 +37,9 @@ async function request<T>(method: string, url: string, body?: unknown): Promise<
 }
 
 const q = encodeURIComponent
+
+/** Server-wide endpoints that are not scoped to a project. */
+const serverPaths = ['/api/server', '/api/projects', '/api/fs']
 
 export const api = {
   project: () => request<Info>('GET', '/api/project'),
@@ -64,4 +75,11 @@ export const api = {
   agentStop: (id: string) => request<{ ok: boolean }>('POST', `/api/agent/runs/${q(id)}/stop`),
   agentAnswer: (id: string, choice: string, approvalId?: string) =>
     request<{ ok: boolean }>('POST', `/api/agent/runs/${q(id)}/approval`, { choice, approvalId }),
+
+  server: () => request<ServerInfo>('GET', '/api/server'),
+  projects: () => request<{ projects: ProjectSummary[] }>('GET', '/api/projects').then((r) => r.projects),
+  openProject: (path: string) => request<{ id: string; url: string; path: string }>('POST', '/api/projects/open', { path }),
+  closeProject: (id: string) => request<{ ok: boolean }>('POST', `/api/projects/${q(id)}/close`),
+  forgetProject: (id: string) => request<{ ok: boolean }>('DELETE', `/api/projects/${q(id)}`),
+  listDir: (path: string) => request<DirListing>('GET', `/api/fs?path=${q(path)}`),
 }

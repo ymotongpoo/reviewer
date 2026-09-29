@@ -28,8 +28,11 @@ devbox$ reviewer serve ./docs
 - **Go製の単一バイナリ**。フロントエンドは `embed` で同梱する。リモートマシンへはバイナリ1つを置けば済む
 - サーバーはレビュー対象の文書があるマシン上で動かす。ローカルで使うときもリモートで使うときも同じバイナリで、SSH/SFTP経由でリモートのファイルを読み書きする機能は持たない
 - ブラウザからは mDNS のホスト名（`<host>.local`）か IP アドレスで直接接続する
+- サーバーは常駐させておき、画面（`/`）からディレクトリを開いて切り替える。開いたディレクトリは `/p/<id>/` で表示する（id はパスのハッシュ）。開けるのは設定の `roots` の中だけ（既定はホーム配下）。セッション情報は各ディレクトリの `.reviewer/` に置く。サーバー側には、最近の一覧とトークンだけを `~/.local/state/reviewer/` に置く
 - CLI
-  - `reviewer serve [DIR] [--port 7777] [--bind all] [--data-dir PATH] [--config PATH]`
+  - `reviewer serve [DIR] [--port 7777] [--bind all] [--config PATH]`（DIR を省略すると選択画面から始める）
+  - `reviewer service install|uninstall|status|restart`：systemd のユーザーサービスにする
+  - `reviewer url`：アクセス用の URL を表示する
   - `reviewer status [DIR]`：現在のラウンドと、未解決コメントの件数を表示する
   - `reviewer export [DIR] [--round N] [--format md|json]`：フィードバックを標準出力に出す（補助用）
 
