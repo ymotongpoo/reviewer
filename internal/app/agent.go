@@ -211,7 +211,7 @@ func (a *App) AgentRuns(n int) []AgentRunView {
 		if l, ok := live[r.ID]; ok {
 			r = &l
 		}
-		evs := a.Store.AgentEvents(n, r.ID)
+		evs := a.Store.AgentEvents(r)
 		if evs == nil {
 			evs = []agent.Event{}
 		}
@@ -300,7 +300,7 @@ func (a *App) handleEvent(rec *store.AgentRun, run agent.Run, ev agent.Event) {
 		ev.At = a.now()
 	}
 	a.mu.Lock()
-	a.Store.AppendAgentEvent(rec.Round, rec.ID, ev)
+	a.Store.AppendAgentEvent(rec, ev)
 	a.mu.Unlock()
 	a.notify(Event{Type: "agent", Round: rec.Round, Run: rec.ID, Agent: &ev})
 

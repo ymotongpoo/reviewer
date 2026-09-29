@@ -22,10 +22,12 @@ const stateVersion = 1
 
 // Store is the on-disk review database rooted at a data directory.
 type Store struct {
-	Dir      string
-	State    State
-	comments map[string]*Comment
-	logLines int
+	Dir                string
+	State              State
+	comments           map[string]*Comment
+	logLines           int
+	annotations        map[string]*Annotation
+	annotationLogLines int
 }
 
 // ErrNotInitialized is returned by OpenExisting for a missing data dir.
@@ -33,7 +35,7 @@ var ErrNotInitialized = errors.New("no review data")
 
 // Open opens or creates the store at dir.
 func Open(dir string) (*Store, error) {
-	for _, d := range []string{dir, filepath.Join(dir, "blobs"), filepath.Join(dir, "rounds")} {
+	for _, d := range []string{dir, filepath.Join(dir, "blobs"), filepath.Join(dir, "rounds"), filepath.Join(dir, "requests")} {
 		if err := os.MkdirAll(d, 0o755); err != nil {
 			return nil, err
 		}
@@ -53,14 +55,23 @@ func OpenExisting(dir string) (*Store, error) {
 }
 
 func load(dir string) (*Store, error) {
-	s := &Store{Dir: dir, comments: map[string]*Comment{}}
+	s := &Store{Dir: dir, comments: map[string]*Comment{}, annotations: map[string]*Annotation{}}
 	if err := readJSON(filepath.Join(dir, "state.json"), &s.State); err != nil && !errors.Is(err, fs.ErrNotExist) {
 		return nil, err
 	}
 	if s.State.Version == 0 {
-		s.State = State{Version: stateVersion, NextComment: 1, NextReply: 1}
+		s.State = State{Version: stateVersion, NextComment: 1, NextReply: 1, NextRequest: 1, NextAnnotation: 1}
+	}
+	if s.State.NextRequest == 0 {
+		s.State.NextRequest = 1
+	}
+	if s.State.NextAnnotation == 0 {
+		s.State.NextAnnotation = 1
 	}
 	if err := s.loadComments(); err != nil {
+		return nil, err
+	}
+	if err := s.loadAnnotations(); err != nil {
 		return nil, err
 	}
 	if s.logLines > 4*len(s.comments)+100 {
