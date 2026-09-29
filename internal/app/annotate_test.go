@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"net/http"
 	"net/http/httptest"
 	"os"
 	"path/filepath"
@@ -362,6 +363,110 @@ func TestAnnotateWithFakeHermes(t *testing.T) {
 	}
 }
 
+func TestAnnotateSessionTitle(t *testing.T) {
+	for _, title := range []string{"章の確認", "  指定した名前  ", strings.Repeat("章", 100), strings.Repeat("🔍", 100), "", " \t　 ", "two  spaces", "tab\there", "wide　space"} {
+		t.Run(fmt.Sprintf("%q", title), func(t *testing.T) {
+			a, _ := setup(t)
+			fake := &hermestest.Fake{Key: "k"}
+			ts := httptest.NewServer(fake)
+			defer ts.Close()
+			a.ConfigureAgent(hermes.New(hermes.Options{URL: ts.URL, APIKey: "k"}), "", nil, "test", "")
+			result, err := a.Annotate(context.Background(), AnnotateInput{
+				Preset: "test", Prompt: "確認", Target: AnnotationTargetNew, SessionTitle: &title,
+			})
+			if err != nil {
+				t.Fatal(err)
+			}
+			waitFor(t, "annotation run", func() bool { return len(a.AgentInfo().Active) == 0 })
+			want := strings.Join(strings.Fields(title), " ")
+			if want == "" {
+				want = "reviewer: " + a.Info().Name + " Q-1 test"
+			}
+			if len(fake.SessionRequests) != 1 || fake.SessionRequests[0].Title != want {
+				t.Fatalf("session requests = %+v, want %q", fake.SessionRequests, want)
+			}
+			stored, err := a.Store.Request(result.Request.ID)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if result.Request.SessionTitle != want || stored.SessionTitle != want {
+				t.Fatalf("returned title = %q, stored title = %q, want %q", result.Request.SessionTitle, stored.SessionTitle, want)
+			}
+		})
+	}
+}
+
+func TestAnnotateCustomSessionTitleConflict(t *testing.T) {
+	a, _ := setup(t)
+	title := "章の確認"
+	fake := &hermestest.Fake{Key: "k", Sessions: []map[string]any{{"id": "existing", "title": title}}}
+	ts := httptest.NewServer(fake)
+	defer ts.Close()
+	a.ConfigureAgent(hermes.New(hermes.Options{URL: ts.URL, APIKey: "k"}), "", nil, "test", "")
+	_, err := a.Annotate(context.Background(), AnnotateInput{Prompt: "確認", SessionTitle: &title})
+	var appErr *Error
+	want := "セッション名「章の確認」はすでに使われています。別の名前を入力してください"
+	if !errors.As(err, &appErr) || appErr.Code != http.StatusConflict || appErr.Msg != want {
+		t.Fatalf("Annotate error = %v", err)
+	}
+	if len(fake.SessionRequests) != 1 || fake.SessionRequests[0].Title != title || len(fake.Requests) != 0 || len(fake.Sessions) != 1 {
+		t.Fatalf("session requests = %+v, runs = %+v, sessions = %+v", fake.SessionRequests, fake.Requests, fake.Sessions)
+	}
+	if requests := a.AnnotationRequests(); len(requests) != 0 {
+		t.Fatalf("requests = %+v", requests)
+	}
+	if _, err := os.Stat(a.Store.RequestDir("Q-1")); !os.IsNotExist(err) {
+		t.Fatalf("request directory still exists: %v", err)
+	}
+}
+
+func TestAnnotateRejectsInvalidSessionTitle(t *testing.T) {
+	for _, title := range []string{
+		"line\nbreak", "line\rbreak", "null\x00byte", "\nedge", "edge\r", "\x00",
+		strings.Repeat("a", 101), strings.Repeat("章", 101), strings.Repeat("🔍", 101),
+		"control\x07", "delete\x7f", "zero\u200bwidth", "bidi\u202e", "join\u2060", "bom\ufeff",
+		"object\ufffc", "annotation\ufff9", "invalid\xff",
+	} {
+		t.Run(fmt.Sprintf("%q", title), func(t *testing.T) {
+			a, _ := setup(t)
+			fake := &hermestest.Fake{Key: "k"}
+			ts := httptest.NewServer(fake)
+			defer ts.Close()
+			a.ConfigureAgent(hermes.New(hermes.Options{URL: ts.URL, APIKey: "k"}), "", nil, "test", "")
+			_, err := a.Annotate(context.Background(), AnnotateInput{Prompt: "確認", SessionTitle: &title})
+			var appErr *Error
+			if !errors.As(err, &appErr) || appErr.Code != http.StatusBadRequest {
+				t.Fatalf("Annotate error = %v", err)
+			}
+			if len(fake.SessionRequests) != 0 || len(fake.Requests) != 0 || len(a.AnnotationRequests()) != 0 {
+				t.Fatal("invalid title created a session, run, or request")
+			}
+		})
+	}
+}
+
+func TestAnnotateRejectsSessionTitleForExistingTarget(t *testing.T) {
+	for _, target := range []string{AnnotationTargetBound, AnnotationTargetSession} {
+		for _, title := range []string{"custom", ""} {
+			t.Run(target+"/"+title, func(t *testing.T) {
+				a, _ := setup(t)
+				fake := &hermestest.Fake{Key: "k"}
+				ts := httptest.NewServer(fake)
+				defer ts.Close()
+				a.ConfigureAgent(hermes.New(hermes.Options{URL: ts.URL, APIKey: "k"}), "", nil, "test", "")
+				_, err := a.Annotate(context.Background(), AnnotateInput{Prompt: "確認", Target: target, SessionTitle: &title})
+				var appErr *Error
+				if !errors.As(err, &appErr) || appErr.Code != http.StatusBadRequest || appErr.Msg != "セッション名は新規セッションの場合だけ指定できます" {
+					t.Fatalf("Annotate error = %v", err)
+				}
+				if len(fake.SessionRequests) != 0 || len(fake.Requests) != 0 || len(a.AnnotationRequests()) != 0 {
+					t.Fatal("invalid target created a session, run, or request")
+				}
+			})
+		}
+	}
+}
+
 func TestAnnotateRetriesSessionTitleConflicts(t *testing.T) {
 	for _, conflicts := range []int{1, 4, 5} {
 		t.Run(fmt.Sprintf("%d conflicts", conflicts), func(t *testing.T) {
@@ -404,6 +509,13 @@ func TestAnnotateRetriesSessionTitleConflicts(t *testing.T) {
 				}
 				waitFor(t, "annotation run", func() bool { return len(a.AgentInfo().Active) == 0 })
 				created := fake.Sessions[len(fake.Sessions)-1]
+				stored, err := a.Store.Request(result.Request.ID)
+				if err != nil {
+					t.Fatal(err)
+				}
+				if stored.SessionTitle != titles[conflicts] || result.Request.SessionTitle != titles[conflicts] {
+					t.Fatalf("stored title = %q, returned title = %q", stored.SessionTitle, result.Request.SessionTitle)
+				}
 				if created["title"] != titles[conflicts] || created["id"] != result.Request.SessionID {
 					t.Fatalf("created session = %+v, request = %+v", created, result.Request)
 				}

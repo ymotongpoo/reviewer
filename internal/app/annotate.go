@@ -14,6 +14,7 @@ import (
 	"sort"
 	"strings"
 	"time"
+	"unicode/utf8"
 
 	"github.com/ymotongpoo/reviewer/internal/agent"
 	"github.com/ymotongpoo/reviewer/internal/anchor"
@@ -33,11 +34,12 @@ const (
 // AnnotateInput starts an agent annotation request. An empty Paths means all
 // reviewable files, and an empty Target means a new session.
 type AnnotateInput struct {
-	Preset    string   `json:"preset,omitempty"`
-	Prompt    string   `json:"prompt,omitempty"`
-	Paths     []string `json:"paths,omitempty"`
-	Target    string   `json:"target,omitempty"`
-	SessionID string   `json:"sessionId,omitempty"`
+	Preset       string   `json:"preset,omitempty"`
+	Prompt       string   `json:"prompt,omitempty"`
+	Paths        []string `json:"paths,omitempty"`
+	Target       string   `json:"target,omitempty"`
+	SessionID    string   `json:"sessionId,omitempty"`
+	SessionTitle *string  `json:"sessionTitle,omitempty"`
 }
 
 // AnnotateResult is returned after the agent run starts.
@@ -56,6 +58,16 @@ func (a *App) Annotate(ctx context.Context, in AnnotateInput) (*AnnotateResult, 
 	target := in.Target
 	if target == "" {
 		target = AnnotationTargetNew
+	}
+	var sessionTitle string
+	if in.SessionTitle != nil {
+		if target != AnnotationTargetNew {
+			return nil, badRequest("セッション名は新規セッションの場合だけ指定できます")
+		}
+		sessionTitle, err = validateAnnotationSessionTitle(*in.SessionTitle)
+		if err != nil {
+			return nil, err
+		}
 	}
 	prompt, preset, err := a.annotationPrompt(in.Preset, in.Prompt)
 	if err != nil {
@@ -105,10 +117,15 @@ func (a *App) Annotate(ctx context.Context, in AnnotateInput) (*AnnotateResult, 
 			if name == "" {
 				name = "AI確認"
 			}
-			baseTitle := fmt.Sprintf("reviewer: %s %s %s", a.Proj.Name(), id, name)
+			baseTitle := sessionTitle
+			attempts := 1
+			if baseTitle == "" {
+				baseTitle = fmt.Sprintf("reviewer: %s %s %s", a.Proj.Name(), id, name)
+				attempts = 5
+			}
 			var session agent.Session
-			for attempt := 1; attempt <= 5; attempt++ {
-				title := baseTitle
+			title := baseTitle
+			for attempt := 1; attempt <= attempts; attempt++ {
 				if attempt > 1 {
 					title = fmt.Sprintf("%s (%d)", baseTitle, attempt)
 				}
@@ -119,11 +136,18 @@ func (a *App) Annotate(ctx context.Context, in AnnotateInput) (*AnnotateResult, 
 			}
 			if err != nil {
 				a.deleteFailedAnnotationRequest(id)
+				if sessionTitle != "" && errors.Is(err, agent.ErrTitleInUse) {
+					return nil, conflict("セッション名「%s」はすでに使われています。別の名前を入力してください", sessionTitle)
+				}
 				return nil, &Error{Code: http.StatusBadGateway, Msg: "新しいセッションを作成できませんでした: " + err.Error()}
 			}
 			sessionID = session.ID
 			a.mu.Lock()
 			req.SessionID = sessionID
+			req.SessionTitle = title
+			if session.Title != "" {
+				req.SessionTitle = session.Title
+			}
 			err = a.Store.PutRequest(req)
 			a.mu.Unlock()
 			if err != nil {
@@ -154,6 +178,34 @@ func (a *App) Annotate(ctx context.Context, in AnnotateInput) (*AnnotateResult, 
 		go a.sendNotice(rec, msg)
 	}
 	return &AnnotateResult{Request: req, AgentRun: rec}, nil
+}
+
+// Hermes' hermes_state_titles.py sanitize_title removes controls and invisible
+// characters and collapses whitespace; hermes_state.py caps titles at 100 code
+// points. Reject input that would change after trimming so custom titles are
+// sent and stored verbatim. CR/LF/NUL are rejected even at the edges.
+func validateAnnotationSessionTitle(title string) (string, error) {
+	if strings.ContainsAny(title, "\r\n\x00") {
+		return "", badRequest("セッション名に改行やNUL文字は使えません")
+	}
+	// Hermes collapses runs of whitespace into one space, so do the same
+	// here; the title shown in reviewer then matches the stored one.
+	title = strings.Join(strings.Fields(title), " ")
+	if !utf8.ValidString(title) {
+		return "", badRequest("セッション名に不正な文字が含まれています")
+	}
+	if utf8.RuneCountInString(title) > 100 {
+		return "", badRequest("セッション名は100文字以内で入力してください")
+	}
+	for _, r := range title {
+		if r < 0x20 || r == 0x7f ||
+			(r >= 0x200b && r <= 0x200f) || (r >= 0x2028 && r <= 0x202e) ||
+			(r >= 0x2060 && r <= 0x2069) || r == 0xfeff || r == 0xfffc ||
+			(r >= 0xfff9 && r <= 0xfffb) {
+			return "", badRequest("セッション名に制御文字や不可視文字は使えません")
+		}
+	}
+	return title, nil
 }
 
 func (a *App) deleteFailedAnnotationRequest(id string) {

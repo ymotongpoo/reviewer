@@ -71,6 +71,7 @@ type AnnotationRequest struct {
 	Files        map[string]string `json:"files"`
 	Target       string            `json:"target"`
 	SessionID    string            `json:"sessionId,omitempty"`
+	SessionTitle string            `json:"sessionTitle,omitempty"`
 	Hidden       bool              `json:"hidden,omitempty"`
 	CreatedAt    time.Time         `json:"createdAt"`
 	CompletedAt  *time.Time        `json:"completedAt,omitempty"`

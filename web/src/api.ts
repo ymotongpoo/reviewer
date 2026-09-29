@@ -103,6 +103,7 @@ export const api = {
     paths?: string[]
     target: AnnotationRequest['target']
     sessionId?: string
+    sessionTitle?: string
   }) => request<AnnotateResult>('POST', '/api/annotate', input),
   annotationRequests: () => request<{ requests: AnnotationRequest[] }>('GET', '/api/annotate/requests').then((r) => r.requests),
   annotationRequest: (id: string) => request<AnnotationRequestView>('GET', `/api/annotate/requests/${q(id)}`),

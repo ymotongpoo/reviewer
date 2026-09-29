@@ -12,6 +12,9 @@ import (
 	"testing"
 	"time"
 
+	"github.com/ymotongpoo/reviewer/internal/agent/hermes"
+	"github.com/ymotongpoo/reviewer/internal/agent/hermes/hermestest"
+	"github.com/ymotongpoo/reviewer/internal/app"
 	"github.com/ymotongpoo/reviewer/internal/store"
 )
 
@@ -190,6 +193,63 @@ func TestEventsAreScoped(t *testing.T) {
 	case <-lines:
 	case <-time.After(2 * time.Second):
 		t.Error("project b did not receive its own event")
+	}
+}
+
+func TestAnnotateSessionTitleAPI(t *testing.T) {
+	fake := &hermestest.Fake{Key: "k", Sessions: []map[string]any{{"id": "existing", "title": "使用中"}}}
+	ts := httptest.NewServer(fake)
+	defer ts.Close()
+	e := newEnv(t)
+	id := e.open(t, filepath.Join(e.root, "a"))
+	p, err := e.reg.Get(id)
+	if err != nil {
+		t.Fatal(err)
+	}
+	p.App.ConfigureAgent(hermes.New(hermes.Options{URL: ts.URL, APIKey: "k"}), "", nil, "test", "")
+	base := e.ts.URL + "/p/" + id + "/api/annotate"
+	for _, tc := range []struct {
+		body string
+		code int
+	}{
+		{`{"target":"new","sessionTitle":"使用中"}`, http.StatusConflict},
+		{`{"target":"new","sessionTitle":"改\n行"}`, http.StatusBadRequest},
+		{`{"target":"bound","sessionTitle":""}`, http.StatusBadRequest},
+		{`{"target":"session","sessionTitle":"名前"}`, http.StatusBadRequest},
+	} {
+		res, body := do(t, "POST", base, tc.body, bearer)
+		if res.StatusCode != tc.code {
+			t.Fatalf("annotate %s: %d %s, want %d", tc.body, res.StatusCode, body, tc.code)
+		}
+	}
+	res, body := do(t, "GET", base+"/requests", "", bearer)
+	if res.StatusCode != http.StatusOK || !strings.Contains(body, `"requests":[]`) {
+		t.Fatalf("failed requests: %d %s", res.StatusCode, body)
+	}
+	res, body = do(t, "POST", base, `{"target":"new","sessionTitle":"指定名"}`, bearer)
+	if res.StatusCode != http.StatusOK {
+		t.Fatalf("annotate: %d %s", res.StatusCode, body)
+	}
+	var result app.AnnotateResult
+	if err := json.Unmarshal([]byte(body), &result); err != nil {
+		t.Fatal(err)
+	}
+	if result.Request == nil || result.Request.SessionTitle != "指定名" {
+		t.Fatalf("annotate response: %s", body)
+	}
+	for _, path := range []string{"/requests", "/requests/" + result.Request.ID} {
+		res, body = do(t, "GET", base+path, "", bearer)
+		if res.StatusCode != http.StatusOK || !strings.Contains(body, `"sessionTitle":"指定名"`) {
+			t.Fatalf("GET %s: %d %s", path, res.StatusCode, body)
+		}
+	}
+	// Let the run finish writing into the temporary directory before cleanup.
+	deadline := time.Now().Add(10 * time.Second)
+	for len(p.App.AgentInfo().Active) > 0 {
+		if time.Now().After(deadline) {
+			t.Fatal("annotation run did not finish")
+		}
+		time.Sleep(20 * time.Millisecond)
 	}
 }
 

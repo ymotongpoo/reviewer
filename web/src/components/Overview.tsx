@@ -247,7 +247,7 @@ function AnnotationRequestCard({ request: r }: { request: AnnotationRequestView 
           未採用 {count('pending')} · 採用 {count('adopted')} · 却下 {count('dismissed')}
         </span>
       </div>
-      <div class="muted small">送信先: {target}</div>
+      <div class="muted small">送信先: {target}{r.sessionTitle && `（${r.sessionTitle}）`}</div>
       <details class="request-prompt">
         <summary>確認内容</summary>
         <pre>{r.prompt}</pre>
