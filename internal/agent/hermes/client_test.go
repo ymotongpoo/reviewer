@@ -99,6 +99,21 @@ func TestSessions(t *testing.T) {
 	}
 }
 
+func TestCreateSession(t *testing.T) {
+	f := &hermestest.Fake{Key: "k"}
+	c := newClient(t, f)
+	session, err := c.CreateSession(context.Background(), "reviewer: Q-1 test")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if session.ID == "" || session.Title != "reviewer: Q-1 test" || session.Source != "api_server" {
+		t.Fatalf("session = %+v", session)
+	}
+	if len(f.SessionRequests) != 1 || f.SessionRequests[0].Source != "api_server" {
+		t.Fatalf("requests = %+v", f.SessionRequests)
+	}
+}
+
 func TestRunEvents(t *testing.T) {
 	f := &hermestest.Fake{
 		Key:       "k",

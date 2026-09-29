@@ -1,13 +1,17 @@
 package app
 
 import (
+	"context"
 	"encoding/json"
+	"net/http/httptest"
 	"os"
 	"path/filepath"
 	"strings"
 	"testing"
 	"time"
 
+	"github.com/ymotongpoo/reviewer/internal/agent/hermes"
+	"github.com/ymotongpoo/reviewer/internal/agent/hermes/hermestest"
 	"github.com/ymotongpoo/reviewer/internal/anchor"
 	"github.com/ymotongpoo/reviewer/internal/config"
 	"github.com/ymotongpoo/reviewer/internal/store"
@@ -153,5 +157,56 @@ func TestPresetMergingAndSaving(t *testing.T) {
 	}
 	if _, err := os.Stat(filepath.Join(a.DataDir, "presets.toml")); err != nil {
 		t.Fatal(err)
+	}
+}
+
+func TestAnnotateWithFakeHermes(t *testing.T) {
+	a, _ := setup(t)
+	fake := &hermestest.Fake{Key: "k", ModifyAnnotationTarget: true}
+	ts := httptest.NewServer(fake)
+	defer ts.Close()
+	notifier := &recNotifier{}
+	a.ConfigureAgent(hermes.New(hermes.Options{URL: ts.URL, APIKey: "k"}), "", notifier, "test", "http://reviewer/")
+
+	result, err := a.Annotate(context.Background(), AnnotateInput{
+		Preset: "技術的な誤りの検出", Paths: []string{"ch1.md"}, Target: AnnotationTargetNew,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	waitFor(t, "annotation run", func() bool { return len(a.AgentInfo().Active) == 0 })
+	req, err := a.Store.Request(result.Request.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if req.Import == nil || req.Import.Count != 2 || len(req.ChangedPaths) != 1 || req.ChangedPaths[0] != "ch1.md" {
+		t.Fatalf("request = %+v", req)
+	}
+	if len(fake.SessionRequests) != 1 || !strings.Contains(fake.SessionRequests[0].Title, "reviewer: "+req.ID+" 技術的な誤りの検出") {
+		t.Fatalf("session requests = %+v", fake.SessionRequests)
+	}
+	if len(fake.Requests) != 1 || fake.Requests[0].SessionID == "" || !strings.Contains(fake.Requests[0].Input, "instructions.md") {
+		t.Fatalf("run requests = %+v", fake.Requests)
+	}
+	if len(notifier.all()) != 0 {
+		t.Fatalf("new-session notices = %v", notifier.all())
+	}
+	annotations := a.Annotations()
+	if len(annotations) != 2 {
+		t.Fatalf("annotations = %+v", annotations)
+	}
+	if _, err := a.AdoptAnnotation(annotations[0].ID, AnnotationAdoptPatch{}); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := a.SetAnnotationState(annotations[1].ID, store.AnnotationDismissed); err != nil {
+		t.Fatal(err)
+	}
+	submitted, err := a.Submit()
+	if err != nil {
+		t.Fatal(err)
+	}
+	feedback, _ := os.ReadFile(submitted.FeedbackPath)
+	if !strings.Contains(string(feedback), "（fakehermes）技術的な記述を確認してください") {
+		t.Fatalf("feedback = %s", feedback)
 	}
 }
