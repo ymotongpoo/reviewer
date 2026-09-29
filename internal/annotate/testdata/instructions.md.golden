@@ -1,0 +1,56 @@
+# AI review request Q-3
+
+## 確認内容
+
+技術的な誤りを確認してください。
+
+## 対象ファイル
+
+- `/work/docs/ch1.md`
+- `/work/docs/ch2.md`
+
+## 作業規則
+
+- 対象ファイルを読み、指摘だけを作成してください。対象ファイルや reviewer の管理ファイルは変更しないでください。
+- 行番号は対象ファイルの現在の内容を基準にした、1から始まる番号です。
+- `quote` には指摘対象の行を改変せず、行ごとの文字列として必ず入れてください。行番号より `quote` を優先して位置を確認します。
+- 事実や技術仕様に関する指摘には、根拠となる URL を `evidence` に必ず入れてください。可能なら根拠箇所の引用も添えてください。
+- 同じ問題を重複して報告しないでください。判断できない項目は無理に指摘せず、必要な場合は `confidence` を `low` にしてください。
+
+## 値の定義
+
+`severity` は次のいずれかです。
+
+- `critical`: 内容が成り立たない重大な事実誤り、動作しない手順、または重大な危険がある
+- `major`: 公開前に修正すべき誤りがある
+- `minor`: 読者の理解や正確さに影響する軽微な誤りがある
+- `info`: 誤りとは断定できないが、著者による確認が必要である
+
+`confidence` は `high`、`medium`、`low` のいずれかです。`label` は `must`、`suggestion`、`question`、`nit` のいずれかを提案できます。
+
+## 出力形式
+
+確認後、次の形式の JSON を `/work/docs/.reviewer/requests/Q-3/annotations.json` に書いてください。コードフェンスは付けないでください。
+
+```json
+{
+  "request": "Q-3",
+  "annotations": [
+    {
+      "path": "docs/ch1.md",
+      "startLine": 12,
+      "endLine": 14,
+      "quote": ["指摘対象の原文"],
+      "severity": "major",
+      "confidence": "high",
+      "label": "must",
+      "body": "何が誤っているかと影響を説明します",
+      "evidence": [
+        {"url": "https://example.com/source", "quote": "根拠となる記述", "note": "確認方法"}
+      ],
+      "suggestion": "置換案（任意）"
+    }
+  ],
+  "summary": "全体の所見（任意）"
+}
+```
