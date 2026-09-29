@@ -446,8 +446,9 @@ func (a *App) changedRequestPaths(req *store.AnnotationRequest) []string {
 	return changed
 }
 
-// Annotations returns pending annotations whose requests are visible.
-func (a *App) Annotations() []*store.Annotation {
+// Annotations returns pending annotations whose requests are visible. Passing
+// true includes every state and hidden request for management UIs.
+func (a *App) Annotations(all ...bool) []*store.Annotation {
 	a.mu.Lock()
 	defer a.mu.Unlock()
 	hidden := map[string]bool{}
@@ -456,7 +457,7 @@ func (a *App) Annotations() []*store.Annotation {
 	}
 	out := []*store.Annotation{}
 	for _, ann := range a.Store.Annotations() {
-		if ann.State == store.AnnotationPending && !hidden[ann.Request] {
+		if (len(all) > 0 && all[0]) || (ann.State == store.AnnotationPending && !hidden[ann.Request]) {
 			out = append(out, ann)
 		}
 	}

@@ -253,6 +253,10 @@ func TestAnnotationAPI(t *testing.T) {
 	if !strings.Contains(body, `"annotations":[]`) {
 		t.Fatalf("dismissed annotations: %s", body)
 	}
+	res, body = do(t, "GET", base+"/api/annotations?all=1", "", bearer)
+	if res.StatusCode != 200 || !strings.Contains(body, `"state":"dismissed"`) {
+		t.Fatalf("all annotations: %d %s", res.StatusCode, body)
+	}
 	do(t, "PATCH", base+"/api/annotations/"+annotationID, `{"state":"pending"}`, bearer)
 	res, body = do(t, "POST", base+"/api/annotations/"+annotationID+"/adopt", `{"label":"question","body":"override"}`, bearer)
 	if res.StatusCode != 200 || !strings.Contains(body, `"label":"question"`) || !strings.Contains(body, `"body":"override"`) {
