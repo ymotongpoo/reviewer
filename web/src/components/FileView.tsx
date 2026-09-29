@@ -22,7 +22,15 @@ interface Selection {
 export function FileView({ path, line }: { path: string; line?: number }) {
   const [file, setFile] = useState<FileData | null>(null)
   const [diff, setDiff] = useState<DiffView | null>(null)
-  const [showDiff, setShowDiff] = useState(true)
+  // Off by default: the current file is shown with changed lines marked, and
+  // the full diff (including deleted lines) only on request.
+  const [showDiff, setShowDiff] = useState(() => {
+    try {
+      return localStorage.getItem('reviewer.diff') === '1'
+    } catch {
+      return false
+    }
+  })
   const [wrap, setWrap] = useState(() => {
     try {
       return localStorage.getItem('reviewer.wrap') !== '0'
@@ -87,6 +95,30 @@ export function FileView({ path, line }: { path: string; line?: number }) {
     }
     return lines.map((text, i) => ({ kind: 'eq', no: i + 1, text }))
   }, [lines, diff, showDiff])
+
+  // Change markers for the plain view: lines added or modified since the
+  // base snapshot, and lines right after a deletion.
+  const changes = useMemo(() => {
+    const added = new Set<number>()
+    const deletedBefore = new Map<number, number>()
+    let ins = 0
+    let del = 0
+    if (diff) {
+      let no = 1
+      for (const op of diff.ops) {
+        if (op.kind === 'ins') {
+          for (let k = 0; k < op.lines.length; k++) added.add(no++)
+          ins += op.lines.length
+        } else if (op.kind === 'del') {
+          deletedBefore.set(no, (deletedBefore.get(no) ?? 0) + op.lines.length)
+          del += op.lines.length
+        } else {
+          no += op.lines.length
+        }
+      }
+    }
+    return { added, deletedBefore, ins, del }
+  }, [diff])
 
   const fileComments = comments.value.filter((c) => c.path === path)
   const ed = editing.value
@@ -156,11 +188,27 @@ export function FileView({ path, line }: { path: string; line?: number }) {
       <div class="file-head">
         <span class="file-path">{path}</span>
         {diff?.new && <span class="chip new">新規</span>}
-        {changed && !diff?.new && <span class="chip changed">ラウンド{diff!.baseRound}提出後に変更</span>}
+        {changed && !diff?.new && (
+          <span class="chip changed" title="緑の印は追加・変更された行、赤の印はその位置で行が削除されたことを示します">
+            ラウンド{diff!.baseRound}提出後に変更（+{changes.ins} −{changes.del}行）
+          </span>
+        )}
         <span class="spacer" />
-        {changed && (
+        {changed && !diff?.new && (
           <label class="toggle">
-            <input type="checkbox" checked={showDiff} onChange={(e) => setShowDiff(e.currentTarget.checked)} /> 差分を表示
+            <input
+              type="checkbox"
+              checked={showDiff}
+              onChange={(e) => {
+                setShowDiff(e.currentTarget.checked)
+                try {
+                  localStorage.setItem('reviewer.diff', e.currentTarget.checked ? '1' : '0')
+                } catch {
+                  // storage unavailable
+                }
+              }}
+            />{' '}
+            削除行も含めた差分を表示
           </label>
         )}
         <label class="toggle">
@@ -207,12 +255,16 @@ export function FileView({ path, line }: { path: string; line?: number }) {
           const threads = no !== undefined ? byEnd.get(no) : undefined
           const composerHere = newLine && no === newLine.end
           const cov = no !== undefined ? covered.get(no) : undefined
+          const plain = !(diff && showDiff)
+          const mark = plain && no !== undefined ? (changes.added.has(no) ? 'mark-add' : '') : ''
+          const delMark = plain && no !== undefined ? changes.deletedBefore.get(no) : undefined
           return (
             <>
               <div
                 key={`r${i}`}
                 id={no !== undefined && r.kind !== 'del' ? `L${no}` : undefined}
-                class={`row ${r.kind} ${selected ? 'selected' : ''} ${cov ? 'covered' : ''} ${line !== undefined && line === no ? 'target' : ''}`}
+                class={`row ${r.kind} ${mark} ${delMark ? 'mark-del' : ''} ${selected ? 'selected' : ''} ${cov ? 'covered' : ''} ${line !== undefined && line === no ? 'target' : ''}`}
+                title={delMark ? `この行の前で${delMark}行削除されました` : undefined}
                 onMouseEnter={() => onRowEnter(no)}
               >
                 {changed && showDiff && <span class="ln old">{r.oldNo ?? ''}</span>}
