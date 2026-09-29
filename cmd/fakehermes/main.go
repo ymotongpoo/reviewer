@@ -14,6 +14,7 @@ import (
 	"os"
 	"path/filepath"
 	"regexp"
+	"strings"
 	"time"
 
 	"github.com/ymotongpoo/reviewer/internal/agent/hermes/hermestest"
@@ -26,6 +27,8 @@ func main() {
 	key := flag.String("key", "0123456789abcdef0123", "API key")
 	approval := flag.Bool("approval", true, "ask for an approval during each run")
 	writeEnv := flag.Bool("write-env", true, "write $HERMES_HOME/.env so that reviewer detects this server")
+	modifyDefault := os.Getenv("FAKEHERMES_MODIFY_TARGET") == "1" || strings.EqualFold(os.Getenv("FAKEHERMES_MODIFY_TARGET"), "true")
+	modifyAnnotationTarget := flag.Bool("modify-annotation-target", modifyDefault, "modify one target file after an annotation request")
 	flag.Parse()
 
 	if home := os.Getenv("HERMES_HOME"); home != "" && *writeEnv {
@@ -39,8 +42,9 @@ func main() {
 
 	now := float64(time.Now().Unix())
 	f := &hermestest.Fake{
-		Key:       *key,
-		Keepalive: time.Second,
+		Key:                    *key,
+		Keepalive:              time.Second,
+		ModifyAnnotationTarget: *modifyAnnotationTarget,
 		Sessions: []map[string]any{
 			{"id": "20260922_021", "source": "discord", "title": "執筆候補1〜3番目をzenn.dev記事化", "last_active": now - 600, "preview": "記事の構成を…"},
 			{"id": "20260918_054", "source": "discord", "title": "サイトの登壇履歴を確認", "last_active": now - 86400},
@@ -64,6 +68,9 @@ func main() {
 			return steps
 		},
 		OnRun: func(input, _ string) {
+			if strings.Contains(input, "/instructions.md`") {
+				return
+			}
 			m := feedbackRe.FindStringSubmatch(input)
 			if m == nil {
 				log.Printf("no feedback path in prompt")
