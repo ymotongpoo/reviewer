@@ -3,6 +3,7 @@ package app
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"net/http/httptest"
 	"os"
 	"path/filepath"
@@ -357,5 +358,60 @@ func TestAnnotateWithFakeHermes(t *testing.T) {
 	feedback, _ := os.ReadFile(submitted.FeedbackPath)
 	if !strings.Contains(string(feedback), "（fakehermes）技術的な記述を確認してください") {
 		t.Fatalf("feedback = %s", feedback)
+	}
+}
+
+func TestAnnotateDeletesRequestWhenHermesSetupFails(t *testing.T) {
+	tests := []struct {
+		name              string
+		failCreateSession bool
+		failStart         bool
+	}{
+		{name: "create session", failCreateSession: true},
+		{name: "start run", failStart: true},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			a, _ := setup(t)
+			var events []Event
+			a.notify = func(event Event) { events = append(events, event) }
+			fake := &hermestest.Fake{
+				Key:               "k",
+				FailCreateSession: tt.failCreateSession,
+				FailStart:         tt.failStart,
+			}
+			ts := httptest.NewServer(fake)
+			defer ts.Close()
+			a.ConfigureAgent(hermes.New(hermes.Options{URL: ts.URL, APIKey: "k"}), "", nil, "test", "")
+
+			_, err := a.Annotate(context.Background(), AnnotateInput{
+				Preset: "技術的な誤りの検出", Paths: []string{"ch1.md"}, Target: AnnotationTargetNew,
+			})
+			var appErr *Error
+			if !errors.As(err, &appErr) || appErr.Code != 502 {
+				t.Fatalf("Annotate error = %v", err)
+			}
+			if requests := a.AnnotationRequests(); len(requests) != 0 {
+				t.Fatalf("requests = %+v", requests)
+			}
+			if _, err := os.Stat(a.Store.RequestDir("Q-1")); !os.IsNotExist(err) {
+				t.Fatalf("request directory still exists: %v", err)
+			}
+			for _, event := range events {
+				if event.Type == "annotate" {
+					t.Fatalf("annotate event emitted for deleted request: %+v", event)
+				}
+			}
+			if len(fake.SessionRequests) != 1 {
+				t.Fatalf("session requests = %+v", fake.SessionRequests)
+			}
+			wantRunRequests := 0
+			if tt.failStart {
+				wantRunRequests = 1
+			}
+			if len(fake.Requests) != wantRunRequests {
+				t.Fatalf("run requests = %+v", fake.Requests)
+			}
+		})
 	}
 }

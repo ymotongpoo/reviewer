@@ -7,6 +7,7 @@ import (
 	"errors"
 	"fmt"
 	"io/fs"
+	"log"
 	"net/http"
 	"os"
 	"path/filepath"
@@ -106,6 +107,7 @@ func (a *App) Annotate(ctx context.Context, in AnnotateInput) (*AnnotateResult, 
 			}
 			session, err := creator.CreateSession(ctx, fmt.Sprintf("reviewer: %s %s", id, name))
 			if err != nil {
+				a.deleteFailedAnnotationRequest(id)
 				return nil, &Error{Code: http.StatusBadGateway, Msg: "新しいセッションを作成できませんでした: " + err.Error()}
 			}
 			sessionID = session.ID
@@ -123,6 +125,7 @@ func (a *App) Annotate(ctx context.Context, in AnnotateInput) (*AnnotateResult, 
 	key := fmt.Sprintf("reviewer-%s-%s", hex.EncodeToString(sum[:6]), strings.ToLower(id))
 	run, err := ag.Start(ctx, agent.Request{SessionID: sessionID, Prompt: promptText, IdempotencyKey: key})
 	if err != nil {
+		a.deleteFailedAnnotationRequest(id)
 		return nil, &Error{Code: http.StatusBadGateway, Msg: "エージェントに送信できませんでした: " + err.Error()}
 	}
 	rec := &store.AgentRun{
@@ -139,6 +142,14 @@ func (a *App) Annotate(ctx context.Context, in AnnotateInput) (*AnnotateResult, 
 		go a.sendNotice(rec, msg)
 	}
 	return &AnnotateResult{Request: req, AgentRun: rec}, nil
+}
+
+func (a *App) deleteFailedAnnotationRequest(id string) {
+	a.mu.Lock()
+	defer a.mu.Unlock()
+	if err := a.Store.DeleteRequest(id); err != nil {
+		log.Printf("delete failed annotation request %s: %v", id, err)
+	}
 }
 
 func (a *App) annotationPrompt(name, prompt string) (string, string, error) {
