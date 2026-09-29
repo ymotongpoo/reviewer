@@ -133,7 +133,8 @@ func (a *App) Annotate(ctx context.Context, in AnnotateInput) (*AnnotateResult, 
 	}
 	promptText := autoSentHeader + fmt.Sprintf("`%s` の確認依頼を読み、指示に従って annotations.json を書いてください。", instructionsPath)
 	sum := sha256.Sum256([]byte(a.Proj.Root))
-	key := fmt.Sprintf("reviewer-%s-%s", hex.EncodeToString(sum[:6]), strings.ToLower(id))
+	// Request numbers start over when the data directory is recreated.
+	key := fmt.Sprintf("reviewer-%s-%s-%d", hex.EncodeToString(sum[:6]), strings.ToLower(id), req.CreatedAt.UnixNano())
 	run, err := ag.Start(ctx, agent.Request{SessionID: sessionID, Prompt: promptText, IdempotencyKey: key})
 	if err != nil {
 		a.deleteFailedAnnotationRequest(id)

@@ -277,7 +277,9 @@ func (a *App) SendToAgent(ctx context.Context, n int) (*store.AgentRun, error) {
 	a.agents.mu.Unlock()
 
 	sum := sha256.Sum256([]byte(a.Proj.Root))
-	key := fmt.Sprintf("reviewer-%s-r%d-%d", hex.EncodeToString(sum[:6]), n, attempts+1)
+	// The submission time keeps keys unique when a data directory is recreated
+	// and round numbers start over.
+	key := fmt.Sprintf("reviewer-%s-r%d-%d-%d", hex.EncodeToString(sum[:6]), n, m.SubmittedAt.UnixNano(), attempts+1)
 	run, err := ag.Start(ctx, agent.Request{SessionID: binding.SessionID, Prompt: prompt, IdempotencyKey: key})
 	if err != nil {
 		return nil, &Error{Code: http.StatusBadGateway, Msg: "エージェントに送信できませんでした: " + err.Error()}
