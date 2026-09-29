@@ -4,6 +4,7 @@ import (
 	"os"
 	"path/filepath"
 	"reflect"
+	"strings"
 	"testing"
 	"time"
 
@@ -115,6 +116,44 @@ func TestAnnotationPersistence(t *testing.T) {
 	gotPresets, err := s2.ProjectPresets()
 	if err != nil || !reflect.DeepEqual(gotPresets, presets) {
 		t.Fatalf("presets = %+v, %v", gotPresets, err)
+	}
+}
+
+func TestDeleteAnnotationPersists(t *testing.T) {
+	dir := t.TempDir()
+	s, err := Open(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	a1 := &Annotation{ID: s.NewAnnotationID(), Request: "Q-1", State: AnnotationPending}
+	a2 := &Annotation{ID: s.NewAnnotationID(), Request: "Q-1", State: AnnotationPending}
+	if err := s.PutAnnotation(a1); err != nil {
+		t.Fatal(err)
+	}
+	if err := s.PutAnnotation(a2); err != nil {
+		t.Fatal(err)
+	}
+	if err := s.DeleteAnnotation(a1.ID); err != nil {
+		t.Fatal(err)
+	}
+
+	s2, err := Open(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	annotations := s2.Annotations()
+	if len(annotations) != 1 || annotations[0].ID != a2.ID {
+		t.Fatalf("annotations = %+v", annotations)
+	}
+	if s2.State.NextAnnotation != 3 {
+		t.Fatalf("NextAnnotation = %d", s2.State.NextAnnotation)
+	}
+	b, err := os.ReadFile(s.annotationLogPath())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(string(b), `{"op":"del","id":"A-1"}`) {
+		t.Fatalf("annotation log = %s", b)
 	}
 }
 

@@ -214,6 +214,12 @@ func (s *Store) PutAnnotation(a *Annotation) error {
 	return s.SaveState()
 }
 
+// DeleteAnnotation removes an annotation.
+func (s *Store) DeleteAnnotation(id string) error {
+	delete(s.annotations, id)
+	return appendJSONL(s.annotationLogPath(), annotationLogRecord{Op: "del", ID: id})
+}
+
 // ProjectPresets reads presets.toml. A missing file yields an empty slice.
 func (s *Store) ProjectPresets() ([]config.Preset, error) {
 	var doc struct {

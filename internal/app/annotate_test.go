@@ -56,6 +56,155 @@ func annotationFixture(t *testing.T, a *App) *store.AnnotationRequest {
 	return req
 }
 
+type annotationResponseFixture struct {
+	Request     string           `json:"request"`
+	Annotations []map[string]any `json:"annotations"`
+	Summary     string           `json:"summary"`
+}
+
+func readAnnotationResponse(t *testing.T, a *App, requestID string) annotationResponseFixture {
+	t.Helper()
+	b, err := os.ReadFile(filepath.Join(a.Store.RequestDir(requestID), "annotations.json"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	var response annotationResponseFixture
+	if err := json.Unmarshal(b, &response); err != nil {
+		t.Fatal(err)
+	}
+	return response
+}
+
+func writeAnnotationResponse(t *testing.T, a *App, requestID string, response annotationResponseFixture) {
+	t.Helper()
+	b, err := json.Marshal(response)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(a.Store.RequestDir(requestID), "annotations.json"), b, 0o644); err != nil {
+		t.Fatal(err)
+	}
+}
+
+func TestReimportIdenticalAnnotationsKeepsIDs(t *testing.T) {
+	a, _ := setup(t)
+	req := annotationFixture(t, a)
+	responsePath := filepath.Join(a.Store.RequestDir(req.ID), "annotations.json")
+	b, err := os.ReadFile(responsePath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if imported, err := a.ImportAnnotations(req.ID); err != nil || !imported {
+		t.Fatalf("first import = %v, %v", imported, err)
+	}
+
+	if err := os.WriteFile(responsePath, b, 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if imported, err := a.ImportAnnotations(req.ID); err != nil || imported {
+		t.Fatalf("second import = %v, %v", imported, err)
+	}
+	annotations := a.Annotations(true)
+	if len(annotations) != 2 || annotations[0].ID != "A-1" || annotations[1].ID != "A-2" {
+		t.Fatalf("annotations = %+v", annotations)
+	}
+	for _, ann := range annotations {
+		if ann.State != store.AnnotationPending {
+			t.Errorf("annotation %s state = %s", ann.ID, ann.State)
+		}
+	}
+}
+
+func TestReimportReplacesPendingAnnotationsAndReusesIDs(t *testing.T) {
+	a, _ := setup(t)
+	req := annotationFixture(t, a)
+	if _, err := a.ImportAnnotations(req.ID); err != nil {
+		t.Fatal(err)
+	}
+
+	response := readAnnotationResponse(t, a, req.ID)
+	response.Annotations = response.Annotations[:1]
+	response.Annotations[0]["body"] = "更新された指摘"
+	response.Summary = "1件確認しました"
+	writeAnnotationResponse(t, a, req.ID, response)
+	if imported, err := a.ImportAnnotations(req.ID); err != nil || !imported {
+		t.Fatalf("reimport = %v, %v", imported, err)
+	}
+
+	annotations := a.Annotations(true)
+	if len(annotations) != 1 || annotations[0].ID != "A-1" || annotations[0].Body != "更新された指摘" || annotations[0].State != store.AnnotationPending {
+		t.Fatalf("annotations = %+v", annotations)
+	}
+	gotReq, err := a.Store.Request(req.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if gotReq.Import.Count != 1 {
+		t.Fatalf("import = %+v", gotReq.Import)
+	}
+	if next := a.Store.NewAnnotationID(); next != "A-3" {
+		t.Fatalf("next annotation ID = %s", next)
+	}
+}
+
+func TestReimportPreservesReviewedAnnotationsWithoutIDCollision(t *testing.T) {
+	a, _ := setup(t)
+	req := annotationFixture(t, a)
+	response := readAnnotationResponse(t, a, req.ID)
+	response.Annotations = append(response.Annotations, map[string]any{
+		"path": "ch1.md", "startLine": 7, "endLine": 7,
+		"quote": []string{"end"}, "severity": "minor", "confidence": "medium",
+		"body": "末尾を確認してください",
+	})
+	response.Summary = "3件確認しました"
+	writeAnnotationResponse(t, a, req.ID, response)
+	if _, err := a.ImportAnnotations(req.ID); err != nil {
+		t.Fatal(err)
+	}
+
+	annotations := a.Annotations()
+	if _, err := a.AdoptAnnotation(annotations[0].ID, AnnotationAdoptPatch{}); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := a.SetAnnotationState(annotations[1].ID, store.AnnotationDismissed); err != nil {
+		t.Fatal(err)
+	}
+
+	response.Annotations = response.Annotations[:2]
+	response.Annotations[0]["body"] = "差し替え後の指摘1"
+	response.Annotations[1]["body"] = "差し替え後の指摘2"
+	response.Summary = "2件確認しました"
+	writeAnnotationResponse(t, a, req.ID, response)
+	if imported, err := a.ImportAnnotations(req.ID); err != nil || !imported {
+		t.Fatalf("reimport = %v, %v", imported, err)
+	}
+
+	all := a.Annotations(true)
+	if len(all) != 4 {
+		t.Fatalf("annotations = %+v", all)
+	}
+	wantStates := map[string]string{
+		"A-1": store.AnnotationAdopted,
+		"A-2": store.AnnotationDismissed,
+		"A-3": store.AnnotationPending,
+		"A-4": store.AnnotationPending,
+	}
+	for _, ann := range all {
+		if ann.State != wantStates[ann.ID] {
+			t.Errorf("annotation %s state = %s, want %s", ann.ID, ann.State, wantStates[ann.ID])
+		}
+	}
+	if all[0].Body != "技術的に誤っています" || all[1].Body != "確認してください" {
+		t.Fatalf("reviewed annotations changed = %+v", all[:2])
+	}
+	if all[2].Body != "差し替え後の指摘1" || all[3].Body != "差し替え後の指摘2" {
+		t.Fatalf("replacement annotations = %+v", all[2:])
+	}
+	if next := a.Store.NewAnnotationID(); next != "A-5" {
+		t.Fatalf("next annotation ID = %s", next)
+	}
+}
+
 func TestImportAdoptDismissAndReanchorAnnotations(t *testing.T) {
 	a, root := setup(t)
 	req := annotationFixture(t, a)
