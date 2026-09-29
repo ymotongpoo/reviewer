@@ -1,0 +1,27 @@
+internal/store/store_test.go
+  s_029fbd8448b4e9::t_bd9c9423e06c6c 7
+  s_029fbd8448b4e9::t_f41975f007f2a3 122-159
+internal/store/annotation.go
+  s_029fbd8448b4e9::t_24832a1fe69a4e 217-222
+internal/app/annotate.go
+  s_029fbd8448b4e9::t_24832a1fe69a4e 332,335-336,342-349,368,371
+internal/app/annotate_test.go
+  s_029fbd8448b4e9::t_f41975f007f2a3 59-196,200-207
+  s_029fbd8448b4e9::t_ba8595a215e998 197-199
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "cf140257ea1571f39e3c06f0358eb287e7bb12e3",
+  "prompts": {},
+  "sessions": {
+    "s_029fbd8448b4e9": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a0ed7c-3640-7201-a757-14d7034e5775",
+        "model": "gpt-5.6-sol"
+      },
+      "human_author": "Yoshi Yamaguchi <ymotongpoo@gmail.com>"
+    }
+  }
+}
