@@ -260,6 +260,7 @@ export interface AnnotationRequest {
   files: Record<string, string>
   target: 'new' | 'bound' | 'session'
   sessionId?: string
+  sessionTitle?: string
   hidden?: boolean
   createdAt: string
   completedAt?: string

@@ -1,7 +1,8 @@
-import { useEffect, useMemo, useState } from 'preact/hooks'
-import { api } from '../api'
+import { useEffect, useMemo, useRef, useState } from 'preact/hooks'
+import { api, ApiError } from '../api'
 import {
   agentInfo,
+  info,
   presets,
   refreshAnnotationRequests,
   refreshAnnotations,
@@ -40,6 +41,8 @@ function AnnotateDialog({ onClose }: { onClose: () => void }) {
   const [fileFilter, setFileFilter] = useState('')
   const [saveName, setSaveName] = useState(first?.name ?? '')
   const [target, setTarget] = useState<AnnotationRequest['target']>('new')
+  const [sessionTitle, setSessionTitle] = useState('')
+  const sessionTitleInput = useRef<HTMLInputElement>(null)
   const [session, setSession] = useState<AgentSession | null>(null)
   const [picking, setPicking] = useState(false)
   const [busy, setBusy] = useState(false)
@@ -117,6 +120,7 @@ function AnnotateDialog({ onClose }: { onClose: () => void }) {
         paths,
         target,
         sessionId: target === 'session' ? session!.id : undefined,
+        sessionTitle: target === 'new' ? sessionTitle.trim() || undefined : undefined,
       })
       await Promise.all([refreshAnnotationRequests(), refreshAnnotations()])
       toast(`${result.request.id} を ${agentInfo.value?.name ?? 'エージェント'} に送りました`, 'success')
@@ -124,6 +128,7 @@ function AnnotateDialog({ onClose }: { onClose: () => void }) {
       location.hash = '#/'
     } catch (e) {
       toast((e as Error).message, 'error')
+      if (e instanceof ApiError && e.status === 409) sessionTitleInput.current?.focus()
     } finally {
       setBusy(false)
     }
@@ -198,6 +203,18 @@ function AnnotateDialog({ onClose }: { onClose: () => void }) {
           <label>
             <input type="radio" name="annotation-target" checked={target === 'new'} onChange={() => setTarget('new')} /> 新規セッション
           </label>
+          {target === 'new' && (
+            <label class="field">
+              <span>セッション名（空欄なら自動）</span>
+              <input
+                type="text"
+                ref={sessionTitleInput}
+                value={sessionTitle}
+                placeholder={`reviewer: ${info.value?.name ?? ''} Q-… ${presetName.trim() || 'AI確認'}`}
+                onInput={(e) => setSessionTitle(e.currentTarget.value)}
+              />
+            </label>
+          )}
           <label>
             <input
               type="radio"
