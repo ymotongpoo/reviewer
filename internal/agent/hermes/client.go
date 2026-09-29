@@ -46,11 +46,18 @@ func (c *Client) Options() Options { return c.opts }
 // APIError is an error response of the API server.
 type APIError struct {
 	Status  int
+	Code    string
 	Message string
 }
 
 func (e *APIError) Error() string {
 	return fmt.Sprintf("Hermes API %d: %s", e.Status, e.Message)
+}
+
+// Is identifies title conflicts while preserving the API error details.
+func (e *APIError) Is(target error) bool {
+	return target == agent.ErrTitleInUse && e.Status == http.StatusBadRequest &&
+		(e.Code == "invalid_title" || strings.Contains(e.Message, "Title already in use"))
 }
 
 func (c *Client) do(ctx context.Context, method, path string, body any, out any, hdr map[string]string) error {
@@ -83,7 +90,8 @@ func (c *Client) do(ctx context.Context, method, path string, body any, out any,
 		return err
 	}
 	if res.StatusCode/100 != 2 {
-		return &APIError{Status: res.StatusCode, Message: errorMessage(b)}
+		message, code := errorMessage(b)
+		return &APIError{Status: res.StatusCode, Code: code, Message: message}
 	}
 	if out != nil {
 		if err := json.Unmarshal(b, out); err != nil {
@@ -93,17 +101,18 @@ func (c *Client) do(ctx context.Context, method, path string, body any, out any,
 	return nil
 }
 
-func errorMessage(b []byte) string {
+func errorMessage(b []byte) (message, code string) {
 	var e struct {
 		Error any `json:"error"`
 	}
 	if json.Unmarshal(b, &e) == nil && e.Error != nil {
 		switch v := e.Error.(type) {
 		case string:
-			return v
+			return v, ""
 		case map[string]any:
+			code, _ = v["code"].(string)
 			if m, ok := v["message"].(string); ok {
-				return m
+				return m, code
 			}
 		}
 	}
@@ -111,7 +120,7 @@ func errorMessage(b []byte) string {
 	if len(s) > 300 {
 		s = s[:300]
 	}
-	return s
+	return s, code
 }
 
 type apiSession struct {
@@ -361,7 +370,8 @@ func (r *Run) stream(ctx context.Context, co *coalescer) (*agent.Event, error) {
 	defer res.Body.Close()
 	if res.StatusCode/100 != 2 {
 		b, _ := io.ReadAll(io.LimitReader(res.Body, 4096))
-		return nil, &APIError{Status: res.StatusCode, Message: errorMessage(b)}
+		message, code := errorMessage(b)
+		return nil, &APIError{Status: res.StatusCode, Code: code, Message: message}
 	}
 	var done *agent.Event
 	err = readSSE(res.Body, func(data []byte) bool {

@@ -4,6 +4,7 @@ package agent
 
 import (
 	"context"
+	"errors"
 	"time"
 )
 
@@ -77,6 +78,9 @@ type Agent interface {
 type SessionCreator interface {
 	CreateSession(ctx context.Context, title string) (Session, error)
 }
+
+// ErrTitleInUse indicates that a session title is already taken.
+var ErrTitleInUse = errors.New("session title already in use")
 
 // Run is a turn in progress.
 type Run interface {

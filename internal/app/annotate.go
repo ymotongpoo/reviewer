@@ -105,7 +105,18 @@ func (a *App) Annotate(ctx context.Context, in AnnotateInput) (*AnnotateResult, 
 			if name == "" {
 				name = "AI確認"
 			}
-			session, err := creator.CreateSession(ctx, fmt.Sprintf("reviewer: %s %s", id, name))
+			baseTitle := fmt.Sprintf("reviewer: %s %s %s", a.Proj.Name(), id, name)
+			var session agent.Session
+			for attempt := 1; attempt <= 5; attempt++ {
+				title := baseTitle
+				if attempt > 1 {
+					title = fmt.Sprintf("%s (%d)", baseTitle, attempt)
+				}
+				session, err = creator.CreateSession(ctx, title)
+				if !errors.Is(err, agent.ErrTitleInUse) {
+					break
+				}
+			}
 			if err != nil {
 				a.deleteFailedAnnotationRequest(id)
 				return nil, &Error{Code: http.StatusBadGateway, Msg: "新しいセッションを作成できませんでした: " + err.Error()}
