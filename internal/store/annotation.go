@@ -155,6 +155,14 @@ func (s *Store) Request(id string) (*AnnotationRequest, error) {
 	return &r, nil
 }
 
+// DeleteRequest removes an annotation request and all of its files.
+func (s *Store) DeleteRequest(id string) error {
+	if !validRequestID(id) {
+		return fmt.Errorf("invalid request id %q", id)
+	}
+	return os.RemoveAll(s.RequestDir(id))
+}
+
 // Requests returns all annotation requests in numeric order.
 func (s *Store) Requests() []*AnnotationRequest {
 	entries, _ := os.ReadDir(filepath.Join(s.Dir, "requests"))

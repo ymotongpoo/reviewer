@@ -52,6 +52,8 @@ type Fake struct {
 	// ModifyAnnotationTarget appends a line to one target file after writing
 	// annotations.json, for edit-detection tests.
 	ModifyAnnotationTarget bool
+	FailCreateSession      bool
+	FailStart              bool
 
 	mu              sync.Mutex
 	runs            map[string]*run
@@ -153,11 +155,17 @@ func (f *Fake) handleCreateSession(w http.ResponseWriter, r *http.Request) {
 		body.Source = "api_server"
 	}
 	f.mu.Lock()
+	f.SessionRequests = append(f.SessionRequests, SessionRequest{Title: body.Title, Source: body.Source})
+	if f.FailCreateSession {
+		f.mu.Unlock()
+		w.WriteHeader(http.StatusInternalServerError)
+		json.NewEncoder(w).Encode(map[string]any{"error": map[string]any{"message": "session creation failed"}})
+		return
+	}
 	f.sessionSeq++
 	id := fmt.Sprintf("api_fake_%04d", f.sessionSeq)
 	session := map[string]any{"id": id, "source": body.Source, "title": body.Title, "last_active": float64(time.Now().Unix())}
 	f.Sessions = append(f.Sessions, session)
-	f.SessionRequests = append(f.SessionRequests, SessionRequest{Title: body.Title, Source: body.Source})
 	f.mu.Unlock()
 	w.WriteHeader(http.StatusCreated)
 	json.NewEncoder(w).Encode(map[string]any{"object": "hermes.session", "session": session})
@@ -176,6 +184,12 @@ func (f *Fake) handleStart(w http.ResponseWriter, r *http.Request) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	f.init()
+	f.Requests = append(f.Requests, Request{Input: body.Input, SessionID: body.SessionID, IdempotencyKey: r.Header.Get("Idempotency-Key")})
+	if f.FailStart {
+		w.WriteHeader(http.StatusInternalServerError)
+		json.NewEncoder(w).Encode(map[string]any{"error": map[string]any{"message": "run start failed"}})
+		return
+	}
 	f.seq++
 	id := fmt.Sprintf("run_%04d", f.seq)
 	session := body.SessionID
@@ -185,7 +199,6 @@ func (f *Fake) handleStart(w http.ResponseWriter, r *http.Request) {
 	if session == "" {
 		session = id
 	}
-	f.Requests = append(f.Requests, Request{Input: body.Input, SessionID: body.SessionID, IdempotencyKey: r.Header.Get("Idempotency-Key")})
 	f.runs[id] = &run{id: id, session: session, input: body.Input, status: "queued", approval: make(chan string), stop: make(chan struct{})}
 	w.WriteHeader(http.StatusAccepted)
 	json.NewEncoder(w).Encode(map[string]any{"run_id": id, "status": "queued", "replayed": false})
