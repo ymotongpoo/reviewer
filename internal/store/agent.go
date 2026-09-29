@@ -32,6 +32,8 @@ type AgentRun struct {
 	ID          string          `json:"id"`
 	Kind        string          `json:"kind"`
 	Round       int             `json:"round"`
+	Purpose     string          `json:"purpose,omitempty"`
+	Request     string          `json:"request,omitempty"`
 	SessionID   string          `json:"sessionId"`
 	Status      string          `json:"status"`
 	StartedAt   time.Time       `json:"startedAt"`
@@ -102,16 +104,22 @@ func readJSONL(p string, fn func([]byte)) error {
 	return sc.Err()
 }
 
-// PutAgentRun appends the current state of r to rounds/<N>/agent-runs.jsonl.
-func (s *Store) PutAgentRun(r *AgentRun) error {
-	return appendJSONL(filepath.Join(s.RoundDir(r.Round), "agent-runs.jsonl"), r)
+func (s *Store) agentRunDir(r *AgentRun) string {
+	if r.Purpose == "annotate" && r.Request != "" {
+		return s.RequestDir(r.Request)
+	}
+	return s.RoundDir(r.Round)
 }
 
-// AgentRuns returns the latest state of each run of round n, oldest first.
-func (s *Store) AgentRuns(n int) []*AgentRun {
+// PutAgentRun appends the current state of r to its round or request log.
+func (s *Store) PutAgentRun(r *AgentRun) error {
+	return appendJSONL(filepath.Join(s.agentRunDir(r), "agent-runs.jsonl"), r)
+}
+
+func (s *Store) agentRuns(dir string) []*AgentRun {
 	byID := map[string]*AgentRun{}
 	var order []string
-	readJSONL(filepath.Join(s.RoundDir(n), "agent-runs.jsonl"), func(b []byte) {
+	readJSONL(filepath.Join(dir, "agent-runs.jsonl"), func(b []byte) {
 		var r AgentRun
 		if json.Unmarshal(b, &r) != nil || r.ID == "" {
 			return
@@ -128,22 +136,29 @@ func (s *Store) AgentRuns(n int) []*AgentRun {
 	return out
 }
 
+// AgentRuns returns feedback runs of round n, oldest first. Runs saved before
+// Purpose was added have an empty purpose and are treated as feedback runs.
+func (s *Store) AgentRuns(n int) []*AgentRun { return s.agentRuns(s.RoundDir(n)) }
+
+// RequestAgentRuns returns annotation runs of request id, oldest first.
+func (s *Store) RequestAgentRuns(id string) []*AgentRun { return s.agentRuns(s.RequestDir(id)) }
+
 type eventRecord struct {
 	Run   string      `json:"run"`
 	Event agent.Event `json:"event"`
 }
 
-// AppendAgentEvent appends an event of a run of round n.
-func (s *Store) AppendAgentEvent(n int, runID string, ev agent.Event) error {
-	return appendJSONL(filepath.Join(s.RoundDir(n), "agent-events.jsonl"), eventRecord{Run: runID, Event: ev})
+// AppendAgentEvent appends an event to the log selected by r's purpose.
+func (s *Store) AppendAgentEvent(r *AgentRun, ev agent.Event) error {
+	return appendJSONL(filepath.Join(s.agentRunDir(r), "agent-events.jsonl"), eventRecord{Run: r.ID, Event: ev})
 }
 
-// AgentEvents returns the events of a run of round n.
-func (s *Store) AgentEvents(n int, runID string) []agent.Event {
+// AgentEvents returns the events of r.
+func (s *Store) AgentEvents(rec *AgentRun) []agent.Event {
 	var out []agent.Event
-	readJSONL(filepath.Join(s.RoundDir(n), "agent-events.jsonl"), func(b []byte) {
+	readJSONL(filepath.Join(s.agentRunDir(rec), "agent-events.jsonl"), func(b []byte) {
 		var r eventRecord
-		if json.Unmarshal(b, &r) == nil && r.Run == runID {
+		if json.Unmarshal(b, &r) == nil && r.Run == rec.ID {
 			out = append(out, r.Event)
 		}
 	})

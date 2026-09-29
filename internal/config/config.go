@@ -20,6 +20,25 @@ type Label struct {
 	Description string `toml:"description" json:"description"`
 }
 
+// Preset is a reusable instruction for an annotation request.
+type Preset struct {
+	Name   string `toml:"name" json:"name"`
+	Prompt string `toml:"prompt" json:"prompt"`
+	Scope  string `toml:"scope" json:"scope"`
+}
+
+// DefaultAnnotationPrompt asks the agent to find factual and technical errors.
+const DefaultAnnotationPrompt = `文書に含まれる事実上または技術上の誤りを確認してください。
+仕様、API、コマンド、コード例、バージョン依存の説明、数値、固有名詞を対象にし、好みだけに基づく表現上の指摘は除外してください。
+誤りだと判断した箇所ごとに、何が誤っているかと、読者や実装に生じる影響を具体的に説明してください。
+事実に関する指摘には、確認に使った一次情報または信頼できる出典の URL と、判断を裏付ける該当箇所の引用を必ず付けてください。
+根拠を確認できない推測は指摘として提出せず、確認が必要な事項として confidence を low にしてください。`
+
+// BuiltinPresets returns a copy of the built-in annotation presets.
+func BuiltinPresets() []Preset {
+	return []Preset{{Name: "技術的な誤りの検出", Prompt: DefaultAnnotationPrompt, Scope: "all"}}
+}
+
 // Config is the merged configuration.
 type Config struct {
 	// DataDir is where review data is stored. Relative paths are resolved
@@ -32,6 +51,7 @@ type Config struct {
 	Roots          []string `toml:"roots"`
 	Exclude        []string `toml:"exclude"`
 	Labels         []Label  `toml:"labels"`
+	Presets        []Preset `toml:"presets"`
 	PromptTemplate string   `toml:"prompt_template"`
 	Anchor         struct {
 		FuzzyThreshold float64 `toml:"fuzzy_threshold"`
@@ -78,6 +98,7 @@ func Default() Config {
 			{Name: "question", Description: "質問"},
 			{Name: "nit", Description: "細かい指摘"},
 		},
+		Presets: BuiltinPresets(),
 	}
 	c.Roots = []string{"~"}
 	c.Anchor.FuzzyThreshold = 0.7
@@ -140,7 +161,20 @@ func Load(root, projectPath string) (Config, error) {
 	if projectPath == "" {
 		projectPath = ProjectPath(root)
 	}
-	for _, p := range []string{GlobalPath(), projectPath} {
+	globalPath := GlobalPath()
+	if globalPath != "" {
+		if _, err := toml.DecodeFile(globalPath, &c); err != nil && !errors.Is(err, fs.ErrNotExist) {
+			return c, fmt.Errorf("config %s: %w", globalPath, err)
+		}
+		var global struct {
+			Presets []Preset `toml:"presets"`
+		}
+		if _, err := toml.DecodeFile(globalPath, &global); err == nil {
+			c.Presets = append(BuiltinPresets(), global.Presets...)
+		}
+	}
+	globalPresets := append([]Preset(nil), c.Presets...)
+	for _, p := range []string{projectPath} {
 		if p == "" {
 			continue
 		}
@@ -151,6 +185,8 @@ func Load(root, projectPath string) (Config, error) {
 			return c, fmt.Errorf("config %s: %w", p, err)
 		}
 	}
+	// Project presets live in <data>/presets.toml, not config.toml.
+	c.Presets = globalPresets
 	if len(c.Labels) == 0 {
 		c.Labels = Default().Labels
 	}
@@ -170,6 +206,12 @@ func LoadGlobal(path string) (Config, error) {
 	if path != "" {
 		if _, err := toml.DecodeFile(path, &c); err != nil && !errors.Is(err, fs.ErrNotExist) {
 			return c, fmt.Errorf("config %s: %w", path, err)
+		}
+		var global struct {
+			Presets []Preset `toml:"presets"`
+		}
+		if _, err := toml.DecodeFile(path, &global); err == nil {
+			c.Presets = append(BuiltinPresets(), global.Presets...)
 		}
 	}
 	if len(c.Roots) == 0 {

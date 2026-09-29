@@ -82,11 +82,13 @@ type Comment struct {
 
 // State is the global review state.
 type State struct {
-	Version     int    `json:"version"`
-	Round       int    `json:"round"`
-	RoundStatus string `json:"roundStatus"`
-	NextComment int    `json:"nextComment"`
-	NextReply   int    `json:"nextReply"`
+	Version        int    `json:"version"`
+	Round          int    `json:"round"`
+	RoundStatus    string `json:"roundStatus"`
+	NextComment    int    `json:"nextComment"`
+	NextReply      int    `json:"nextReply"`
+	NextRequest    int    `json:"nextRequest"`
+	NextAnnotation int    `json:"nextAnnotation"`
 }
 
 // Manifest records a round.
