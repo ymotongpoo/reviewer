@@ -1,0 +1,44 @@
+internal/agent/hermes/client_test.go
+  s_d43659208b4d56::t_14ebdf8dbb295a 5-7,118-163
+SPEC.md
+  s_23640a0ace3330::t_644f3bbcbe2648 150
+README.md
+  s_23640a0ace3330::t_644f3bbcbe2648 175
+internal/app/annotate_test.go
+  s_d43659208b4d56::t_8991698ddb16a0 365-456
+  s_d43659208b4d56::t_14ebdf8dbb295a 7,336
+internal/agent/agent.go
+  s_d43659208b4d56::t_8140109874281a 7,82-83
+  s_23640a0ace3330::t_b01d23c3efeb5b 84
+internal/agent/hermes/client.go
+  s_d43659208b4d56::t_8140109874281a 49,57-62,93-94,104,111,113,115,123,373-374
+internal/app/annotate.go
+  s_d43659208b4d56::t_8140109874281a 108-119
+internal/agent/hermes/hermestest/fake.go
+  s_d43659208b4d56::t_8140109874281a 165-171,173-176
+  s_d43659208b4d56::t_7e42b5ea5754b2 172
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "066305d69581265ee3c06583edc16a896c7dedc6",
+  "prompts": {},
+  "sessions": {
+    "s_23640a0ace3330": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "c6e5a3ec-b05c-4fe7-a44f-50980ddbcba3",
+        "model": "claude-opus-5-5"
+      },
+      "human_author": "Yoshi Yamaguchi <ymotongpoo@gmail.com>"
+    },
+    "s_d43659208b4d56": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a0edaa-0298-7df1-a54a-b709a0980ab5",
+        "model": "gpt-6-astra"
+      },
+      "human_author": "Yoshi Yamaguchi <ymotongpoo@gmail.com>"
+    }
+  }
+}
