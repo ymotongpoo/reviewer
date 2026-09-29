@@ -153,9 +153,10 @@ export interface SubmitResult extends RoundPaths {
 }
 
 export interface ServerEvent {
-  type: 'files' | 'tree' | 'comments' | 'round' | 'response' | 'agent'
+  type: 'files' | 'tree' | 'comments' | 'round' | 'response' | 'agent' | 'annotate' | 'annotations'
   paths?: string[]
   round?: number
+  request?: string
   run?: string
   agent?: AgentEvent
 }
@@ -189,6 +190,8 @@ export interface AgentRun {
   id: string
   kind: string
   round: number
+  purpose?: 'feedback' | 'annotate'
+  request?: string
   sessionId: string
   status: 'running' | 'completed' | 'failed' | 'cancelled' | 'error'
   startedAt: string
@@ -198,6 +201,86 @@ export interface AgentRun {
   pending?: AgentApproval
   noResponse?: boolean
   notifyError?: string
+}
+
+export type PresetScope = 'all' | 'current' | 'selected'
+export type PresetOrigin = 'builtin' | 'global' | 'project'
+
+export interface Preset {
+  name: string
+  prompt: string
+  scope: PresetScope
+  origin: PresetOrigin
+}
+
+export type AnnotationSeverity = 'critical' | 'major' | 'minor' | 'info'
+export type AnnotationConfidence = 'high' | 'medium' | 'low'
+export type AnnotationState = 'pending' | 'adopted' | 'dismissed'
+
+export interface AnnotationEvidence {
+  url?: string
+  quote?: string
+  note?: string
+}
+
+export interface Annotation {
+  id: string
+  request: string
+  path: string
+  origStart?: number
+  origEnd?: number
+  origBlob?: string
+  anchor?: Anchor
+  loc?: Location
+  severity: AnnotationSeverity
+  confidence: AnnotationConfidence
+  label?: string
+  body: string
+  evidence: AnnotationEvidence[]
+  suggestion?: string
+  state: AnnotationState
+  adoptedAs?: string
+  createdAt: string
+  updatedAt: string
+}
+
+export interface AnnotationImport {
+  hash: string
+  importedAt: string
+  summary?: string
+  count: number
+  warnings?: string[]
+  error?: string
+}
+
+export interface AnnotationRequest {
+  id: string
+  preset?: string
+  prompt: string
+  files: Record<string, string>
+  target: 'new' | 'bound' | 'session'
+  sessionId?: string
+  hidden?: boolean
+  createdAt: string
+  completedAt?: string
+  changedPaths?: string[]
+  import?: AnnotationImport
+}
+
+export interface AnnotationRequestView extends AnnotationRequest {
+  runs: AgentRunView[]
+}
+
+export interface AnnotateResult {
+  request: AnnotationRequest
+  agentRun: AgentRun
+}
+
+export interface RequestDiff {
+  request: string
+  path: string
+  kind: ChangeKind
+  ops: DiffOp[]
 }
 
 export interface AgentRunView extends AgentRun {

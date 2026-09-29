@@ -48,11 +48,23 @@ export function AgentChip() {
   )
 }
 
-export function SessionPicker({ onClose }: { onClose: () => void }) {
+export function SessionPicker({
+  onClose,
+  onSelect,
+  selected,
+  title = '送信先のセッション',
+  description,
+}: {
+  onClose: () => void
+  onSelect?: (session: AgentSession) => void
+  selected?: string
+  title?: string
+  description?: string
+}) {
   const [sessions, setSessions] = useState<AgentSession[] | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [filter, setFilter] = useState('')
-  const current = agentInfo.value?.binding?.sessionId
+  const current = selected ?? agentInfo.value?.binding?.sessionId
 
   useEffect(() => {
     api
@@ -72,22 +84,32 @@ export function SessionPicker({ onClose }: { onClose: () => void }) {
     }
   }
 
+  function choose(session: AgentSession) {
+    if (onSelect) {
+      onSelect(session)
+      onClose()
+    } else {
+      void bind(session.id)
+    }
+  }
+
   const shown = (sessions ?? []).filter(
     (s) => !filter || s.title.toLowerCase().includes(filter.toLowerCase()) || (s.preview ?? '').toLowerCase().includes(filter.toLowerCase()),
   )
   return (
     <div class="modal-backdrop" onClick={(e) => e.target === e.currentTarget && onClose()}>
       <div class="modal" role="dialog" aria-modal="true">
-        <h2>送信先のセッション</h2>
+        <h2>{title}</h2>
         <p class="muted">
-          提出したフィードバックを、このセッションの会話の続きとして {agentInfo.value?.name} に送ります。文書を書いたときのセッションを選んでください。
+          {description ??
+            `提出したフィードバックを、このセッションの会話の続きとして ${agentInfo.value?.name} に送ります。文書を書いたときのセッションを選んでください。`}
         </p>
         <input type="search" class="search" placeholder="タイトルで絞り込む" value={filter} onInput={(e) => setFilter(e.currentTarget.value)} />
         {error && <div class="banner error">{error}</div>}
         {!sessions && !error && <div class="empty small">読み込み中…</div>}
         <div class="session-list">
           {shown.map((s) => (
-            <button class={`session-row ${s.id === current ? 'on' : ''}`} onClick={() => bind(s.id)}>
+            <button class={`session-row ${s.id === current ? 'on' : ''}`} onClick={() => choose(s)}>
               <span class={`chip src-${s.source}`}>{sourceText[s.source] ?? s.source}</span>
               <span class="session-title">{s.title}</span>
               <span class="muted small">{fmt(s.updatedAt)}</span>
@@ -97,7 +119,7 @@ export function SessionPicker({ onClose }: { onClose: () => void }) {
           {sessions && shown.length === 0 && <div class="empty small">セッションがありません</div>}
         </div>
         <div class="modal-actions">
-          {current && (
+          {!onSelect && current && (
             <button class="btn danger-text" onClick={() => bind('')}>
               解除
             </button>
@@ -156,7 +178,7 @@ export function AgentPanel({ round }: { round: number }) {
   )
 }
 
-function RunView({ run: r, defaultOpen }: { run: AgentRunView; defaultOpen: boolean }) {
+export function RunView({ run: r, defaultOpen }: { run: AgentRunView; defaultOpen: boolean }) {
   const [open, setOpen] = useState(defaultOpen)
   const [busy, setBusy] = useState(false)
   const tools = r.events.filter((e) => e.type === 'tool' && e.toolState !== 'started')
@@ -224,7 +246,12 @@ function RunView({ run: r, defaultOpen }: { run: AgentRunView; defaultOpen: bool
         </div>
       )}
       {r.error && <div class="banner error">{r.error}</div>}
-      {r.noResponse && <div class="banner warn">エージェントは完了しましたが、response.json が書かれていません。コメントごとの返答はありません。</div>}
+      {r.noResponse && (
+        <div class="banner warn">
+          エージェントは完了しましたが、{r.purpose === 'annotate' ? 'annotations.json' : 'response.json'} が書かれていません。
+          {r.purpose === 'annotate' ? 'AI指摘はありません。' : 'コメントごとの返答はありません。'}
+        </div>
+      )}
       {r.notifyError && <div class="banner warn">通知を送れませんでした: {r.notifyError}</div>}
       {denied > 0 && <div class="muted small">承認を{denied}回拒否しました</div>}
       {open && (

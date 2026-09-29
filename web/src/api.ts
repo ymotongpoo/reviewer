@@ -1,5 +1,24 @@
 import type { DirListing, ProjectSummary, ServerInfo } from './types'
-import type { AgentBinding, AgentInfo, AgentRun, AgentRunView, AgentSession, Comment, FileView, Info, RoundChanges, RoundDiff, SubmitResult, TreeFile } from './types'
+import type {
+  AgentBinding,
+  AgentInfo,
+  AgentRun,
+  AgentRunView,
+  AgentSession,
+  AnnotateResult,
+  Annotation,
+  AnnotationRequest,
+  AnnotationRequestView,
+  Comment,
+  FileView,
+  Info,
+  Preset,
+  RequestDiff,
+  RoundChanges,
+  RoundDiff,
+  SubmitResult,
+  TreeFile,
+} from './types'
 
 export class ApiError extends Error {
   constructor(message: string, public status: number) {
@@ -75,6 +94,29 @@ export const api = {
   agentStop: (id: string) => request<{ ok: boolean }>('POST', `/api/agent/runs/${q(id)}/stop`),
   agentAnswer: (id: string, choice: string, approvalId?: string) =>
     request<{ ok: boolean }>('POST', `/api/agent/runs/${q(id)}/approval`, { choice, approvalId }),
+  presets: () => request<{ presets: Preset[] }>('GET', '/api/presets').then((r) => r.presets),
+  savePresets: (presets: Omit<Preset, 'origin'>[]) =>
+    request<{ presets: Preset[] }>('PUT', '/api/presets', { presets }).then((r) => r.presets),
+  annotate: (input: {
+    preset?: string
+    prompt: string
+    paths?: string[]
+    target: AnnotationRequest['target']
+    sessionId?: string
+  }) => request<AnnotateResult>('POST', '/api/annotate', input),
+  annotationRequests: () => request<{ requests: AnnotationRequest[] }>('GET', '/api/annotate/requests').then((r) => r.requests),
+  annotationRequest: (id: string) => request<AnnotationRequestView>('GET', `/api/annotate/requests/${q(id)}`),
+  updateAnnotationRequest: (id: string, hidden: boolean) =>
+    request<AnnotationRequest>('PATCH', `/api/annotate/requests/${q(id)}`, { hidden }),
+  discardAnnotationRequest: (id: string) => request<{ ok: boolean }>('POST', `/api/annotate/requests/${q(id)}/discard`),
+  annotationRequestDiff: (id: string, path: string) =>
+    request<RequestDiff>('GET', `/api/annotate/requests/${q(id)}/diff?path=${q(path)}`),
+  annotations: (all = false) =>
+    request<{ annotations: Annotation[] }>('GET', `/api/annotations${all ? '?all=1' : ''}`).then((r) => r.annotations),
+  adoptAnnotation: (id: string, patch?: { label?: string; body?: string }) =>
+    request<Comment>('POST', `/api/annotations/${q(id)}/adopt`, patch),
+  updateAnnotation: (id: string, state: 'pending' | 'dismissed') =>
+    request<Annotation>('PATCH', `/api/annotations/${q(id)}`, { state }),
 
   server: () => request<ServerInfo>('GET', '/api/server'),
   projects: () => request<{ projects: ProjectSummary[] }>('GET', '/api/projects').then((r) => r.projects),
