@@ -108,8 +108,12 @@ func TestRoundTrip(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if rc.ToRound != 0 || len(rc.Files) != 1 || rc.Files[0].Path != "ch1.md" || rc.Files[0].Insert != 1 || rc.Files[0].Delete != 1 {
+	if rc.ToRound != 0 || len(rc.Files) != 1 || rc.Files[0].Path != "ch1.md" || rc.Files[0].Insert != 1 || rc.Files[0].Delete != 1 || rc.Files[0].Comments != 1 {
 		t.Errorf("changes = %+v", rc)
+	}
+	// Comments of the round point at the submitted snapshot (the old side).
+	if len(rc.Comments) != 2 || rc.Comments[1].ID != lc.ID || rc.Comments[1].StartLine != 7 {
+		t.Errorf("round comments = %+v", rc.Comments)
 	}
 	if d, err := a.RoundDiff(1, "ch1.md"); err != nil || len(d.Ops) < 2 {
 		t.Errorf("diff = %+v %v", d, err)

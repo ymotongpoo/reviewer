@@ -1301,3 +1301,21 @@ input.search {
   background: var(--bg-subtle);
   flex: 1;
 }
+
+.round-summary {
+  padding: 16px 24px;
+  max-width: 900px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.round-summary h3 {
+  margin: 0;
+  font-size: 15px;
+}
+.inline-threads.history {
+  padding-left: 120px;
+}
+.chip.kind-unchanged {
+  color: var(--fg-muted);
+}

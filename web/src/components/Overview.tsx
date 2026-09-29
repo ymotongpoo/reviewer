@@ -17,7 +17,9 @@ export function Overview() {
   const ed = editing.value
   const newProject = ed?.kind === 'new' && ed.scope === 'project' ? ed : null
   const hiddenId = newProject?.createdId
-  const project = comments.value.filter((c) => c.scope === 'project' && c.id !== hiddenId)
+  const allProject = comments.value.filter((c) => c.scope === 'project' && c.id !== hiddenId)
+  const project = allProject.filter((c) => c.status !== 'resolved')
+  const resolvedProject = allProject.length - project.length
   const others = comments.value.filter((c) => c.scope !== 'project')
   const shown = others.filter((c) =>
     filter === 'all' ? true : filter === 'draft' ? c.status === 'draft' || c.replies.some((r) => r.draft) : c.status !== 'resolved',
@@ -77,7 +79,8 @@ export function Overview() {
             </button>
           )}
         </div>
-        {project.length === 0 && !newProject && <p class="muted">プロジェクト全体に対するコメントはまだありません。</p>}
+        {project.length === 0 && !newProject && <p class="muted">未解決の全体コメントはありません。</p>}
+        {resolvedProject > 0 && <p class="muted small">解決済みの全体コメント{resolvedProject}件は、ラウンド履歴の「差分を見る」で確認できます。</p>}
         {project.map((c) => (
           <Thread key={c.id} comment={c} />
         ))}

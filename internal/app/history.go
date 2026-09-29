@@ -1,24 +1,42 @@
 package app
 
 import (
+	"encoding/json"
+	"os"
+	"path/filepath"
 	"sort"
 
+	"github.com/ymotongpoo/reviewer/internal/feedback"
 	"github.com/ymotongpoo/reviewer/internal/textutil"
 )
 
 // Change kinds of a file between two snapshots.
 const (
-	ChangeModified = "modified"
-	ChangeAdded    = "added"
-	ChangeDeleted  = "deleted"
+	ChangeModified  = "modified"
+	ChangeAdded     = "added"
+	ChangeDeleted   = "deleted"
+	ChangeUnchanged = "unchanged" // listed because it has comments
 )
 
 // RoundChange is a file changed in response to a round.
 type RoundChange struct {
-	Path   string `json:"path"`
-	Kind   string `json:"kind"`
-	Insert int    `json:"insert"`
-	Delete int    `json:"delete"`
+	Path     string `json:"path"`
+	Kind     string `json:"kind"`
+	Insert   int    `json:"insert"`
+	Delete   int    `json:"delete"`
+	Comments int    `json:"comments"`
+}
+
+// RoundComment is where a comment pointed when round n was submitted; line
+// numbers refer to the submitted snapshot, i.e. the old side of the diff.
+type RoundComment struct {
+	ID        string `json:"id"`
+	Scope     string `json:"scope"`
+	Path      string `json:"path,omitempty"`
+	StartLine int    `json:"startLine,omitempty"`
+	EndLine   int    `json:"endLine,omitempty"`
+	Located   bool   `json:"located"`
+	Carried   bool   `json:"carriedOver"`
 }
 
 // RoundChanges lists what changed in response to round n: from its
@@ -27,8 +45,29 @@ type RoundChange struct {
 type RoundChanges struct {
 	Round int `json:"round"`
 	// ToRound is n+1, or 0 when compared with the current files.
-	ToRound int           `json:"toRound"`
-	Files   []RoundChange `json:"files"`
+	ToRound  int            `json:"toRound"`
+	Files    []RoundChange  `json:"files"`
+	Comments []RoundComment `json:"comments"`
+}
+
+// roundComments reads the comments sent in round n from its feedback.json.
+func (a *App) roundComments(n int) []RoundComment {
+	out := []RoundComment{}
+	b, err := os.ReadFile(filepath.Join(a.Store.RoundDir(n), "feedback.json"))
+	if err != nil {
+		return out
+	}
+	var doc feedback.Doc
+	if json.Unmarshal(b, &doc) != nil {
+		return out
+	}
+	for _, it := range doc.Items {
+		out = append(out, RoundComment{
+			ID: it.ID, Scope: it.Scope, Path: it.Path, StartLine: it.StartLine, EndLine: it.EndLine,
+			Located: it.Located, Carried: it.CarriedOver,
+		})
+	}
+	return out
 }
 
 // snapshotPair returns the before and after snapshots of round n. The after
@@ -83,7 +122,13 @@ func (a *App) RoundChanges(n int) (*RoundChanges, error) {
 	if err != nil {
 		return nil, err
 	}
-	rc := &RoundChanges{Round: n, ToRound: toRound, Files: []RoundChange{}}
+	rc := &RoundChanges{Round: n, ToRound: toRound, Files: []RoundChange{}, Comments: a.roundComments(n)}
+	commented := map[string]int{}
+	for _, c := range rc.Comments {
+		if c.Path != "" {
+			commented[c.Path]++
+		}
+	}
 	paths := map[string]bool{}
 	for p := range from {
 		paths[p] = true
@@ -94,9 +139,12 @@ func (a *App) RoundChanges(n int) (*RoundChanges, error) {
 	for p := range paths {
 		hf, ht := from[p], to[p]
 		if hf == ht {
+			if commented[p] > 0 {
+				rc.Files = append(rc.Files, RoundChange{Path: p, Kind: ChangeUnchanged, Comments: commented[p]})
+			}
 			continue
 		}
-		c := RoundChange{Path: p, Kind: ChangeModified}
+		c := RoundChange{Path: p, Kind: ChangeModified, Comments: commented[p]}
 		switch {
 		case hf == "":
 			c.Kind = ChangeAdded
@@ -141,6 +189,8 @@ func (a *App) RoundDiff(n int, path string) (*RoundDiff, error) {
 	}
 	d := &RoundDiff{Round: n, ToRound: toRound, Path: path, Kind: ChangeModified}
 	switch {
+	case hf == ht:
+		d.Kind = ChangeUnchanged
 	case !okf:
 		d.Kind = ChangeAdded
 	case !okt:

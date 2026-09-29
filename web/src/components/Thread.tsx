@@ -11,9 +11,11 @@ interface Props {
   comment: Comment
   /** Show the file and line (used outside of the file view). */
   showLocation?: boolean
+  /** Shown in a round's history diff, where the current position is irrelevant. */
+  historic?: boolean
 }
 
-export function Thread({ comment: c, showLocation }: Props) {
+export function Thread({ comment: c, showLocation, historic }: Props) {
   const [open, setOpen] = useState(c.status !== 'resolved')
   const [replying, setReplying] = useState(false)
   const isEditing = editing.value?.kind === 'comment' && editing.value.id === c.id
@@ -27,7 +29,7 @@ export function Thread({ comment: c, showLocation }: Props) {
     }
   }
 
-  const locState = c.scope === 'line' && c.loc ? c.loc.state : 'exact'
+  const locState = c.scope === 'line' && c.loc && !historic ? c.loc.state : 'exact'
   const where =
     c.scope === 'project'
       ? '全体'
@@ -108,7 +110,13 @@ export function Thread({ comment: c, showLocation }: Props) {
                       再オープン
                     </button>
                   ) : (
-                    <button class="btn small success" onClick={() => act(api.updateComment(c.id, { status: 'resolved' }))}>
+                    <button
+                      class="btn small success"
+                      onClick={async () => {
+                        await act(api.updateComment(c.id, { status: 'resolved' }))
+                        if (!showLocation && !historic) toast(`${c.id} を解決済みにしました。ラウンド${c.round}の履歴から確認できます`, 'success')
+                      }}
+                    >
                       ✓ 解決
                     </button>
                   )}

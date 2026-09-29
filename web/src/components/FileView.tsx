@@ -65,7 +65,8 @@ export function FileView({ path, line }: { path: string; line?: number }) {
 
   const rows: Row[] = useMemo(() => lines.map((text, i) => ({ no: i + 1, text })), [lines])
 
-  const fileComments = comments.value.filter((c) => c.path === path)
+  // Resolved comments stay in the round history only.
+  const fileComments = comments.value.filter((c) => c.path === path && c.status !== 'resolved')
   const ed = editing.value
   const hiddenId = ed?.kind === 'new' ? ed.createdId : undefined
   const visible = (c: Comment) => c.id !== hiddenId

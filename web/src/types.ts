@@ -109,13 +109,25 @@ export interface DiffOp {
   lines: string[]
 }
 
-export type ChangeKind = 'modified' | 'added' | 'deleted'
+export type ChangeKind = 'modified' | 'added' | 'deleted' | 'unchanged'
 
 export interface RoundChange {
   path: string
   kind: ChangeKind
   insert: number
   delete: number
+  comments: number
+}
+
+/** A comment of a round; lines refer to the submitted snapshot (old side). */
+export interface RoundComment {
+  id: string
+  scope: Scope
+  path?: string
+  startLine?: number
+  endLine?: number
+  located: boolean
+  carriedOver: boolean
 }
 
 export interface RoundChanges {
@@ -123,6 +135,7 @@ export interface RoundChanges {
   /** The next round, or 0 when compared with the current files. */
   toRound: number
   files: RoundChange[]
+  comments: RoundComment[]
 }
 
 export interface RoundDiff {

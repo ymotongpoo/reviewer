@@ -1,10 +1,20 @@
 import { useEffect, useMemo, useState } from 'preact/hooks'
 import { api, ApiError } from '../api'
-import { fileVersion } from '../state'
+import { comments, fileVersion } from '../state'
 import { fileHref, roundHref } from '../router'
-import type { RoundChanges, RoundDiff } from '../types'
+import type { Comment, RoundChanges, RoundComment, RoundDiff } from '../types'
+import { Thread } from './Thread'
 
-const kindText = { modified: '変更', added: '追加', deleted: '削除' }
+const kindText = { modified: '変更', added: '追加', deleted: '削除', unchanged: '変更なし' }
+
+/** Pairs a round's comment positions with the live comment objects. */
+function withComments(list: RoundComment[]): { at: RoundComment; c: Comment }[] {
+  const byId = new Map(comments.value.map((c) => [c.id, c]))
+  return list.flatMap((at) => {
+    const c = byId.get(at.id)
+    return c ? [{ at, c }] : []
+  })
+}
 
 function rangeText(c: { round: number; toRound: number }) {
   return c.toRound ? `ラウンド${c.round}の提出 → ラウンド${c.toRound}の開始` : `ラウンド${c.round}の提出 → 現在`
@@ -40,24 +50,42 @@ export function RoundHistory({ round, path }: { round: number; path?: string }) 
           <a class={`history-file ${f.path === path ? 'active' : ''}`} href={roundHref(round, f.path)}>
             <span class={`chip kind-${f.kind}`}>{kindText[f.kind]}</span>
             <span class="name">{f.path}</span>
-            <span class="stat">
-              <span class="ins">+{f.insert}</span> <span class="del">−{f.delete}</span>
-            </span>
+            {f.comments > 0 && <span class="muted small">💬{f.comments}</span>}
+            {f.kind !== 'unchanged' && (
+              <span class="stat">
+                <span class="ins">+{f.insert}</span> <span class="del">−{f.delete}</span>
+              </span>
+            )}
           </a>
         ))}
       </div>
       <div class="history-main">
         {path ? (
-          <DiffPane round={round} path={path} />
+          <DiffPane round={round} path={path} notes={changes.comments.filter((c) => c.path === path)} />
         ) : (
-          <div class="empty">左の一覧からファイルを選ぶと差分を表示します。</div>
+          <RoundSummary changes={changes} />
         )}
       </div>
     </div>
   )
 }
 
-function DiffPane({ round, path }: { round: number; path: string }) {
+function RoundSummary({ changes }: { changes: RoundChanges }) {
+  const project = withComments(changes.comments.filter((c) => c.scope === 'project'))
+  return (
+    <div class="round-summary">
+      <h3>ラウンド{changes.round}の全体コメント</h3>
+      {project.length === 0 ? (
+        <p class="muted">このラウンドの全体コメントはありません。</p>
+      ) : (
+        project.map(({ c }) => <Thread key={c.id} comment={c} historic />)
+      )}
+      <p class="muted small">左の一覧からファイルを選ぶと、差分とそのファイルへのコメントを表示します。</p>
+    </div>
+  )
+}
+
+function DiffPane({ round, path, notes }: { round: number; path: string; notes: RoundComment[] }) {
   const [diff, setDiff] = useState<RoundDiff | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [context, setContext] = useState(true)
@@ -88,8 +116,9 @@ function DiffPane({ round, path }: { round: number; path: string }) {
     }
     if (context) return all
     const keep = new Set<number>()
+    const noted = new Set(notes.flatMap((n) => (n.located && n.endLine ? [n.endLine] : [])))
     all.forEach((r, i) => {
-      if (r.kind !== 'eq') for (let k = i - 3; k <= i + 3; k++) keep.add(k)
+      if (r.kind !== 'eq' || (r.oldNo !== undefined && noted.has(r.oldNo))) for (let k = i - 3; k <= i + 3; k++) keep.add(k)
     })
     const out: R[] = []
     let skipped = 0
@@ -102,7 +131,19 @@ function DiffPane({ round, path }: { round: number; path: string }) {
     })
     if (skipped) out.push({ kind: 'fold', text: `… ${skipped}行 変更なし` })
     return out
-  }, [diff, context])
+  }, [diff, context, notes])
+
+  const threads = withComments(notes)
+  const top = threads.filter(({ at }) => at.scope === 'file' || !at.located || !at.endLine)
+  const byOldEnd = new Map<number, Comment[]>()
+  for (const { at, c } of threads) {
+    if (at.scope === 'line' && at.located && at.endLine) byOldEnd.set(at.endLine, [...(byOldEnd.get(at.endLine) ?? []), c])
+  }
+  const commentedOld = new Set<number>()
+  for (const { at } of threads) {
+    if (at.scope === 'line' && at.located && at.startLine && at.endLine)
+      for (let l = at.startLine; l <= at.endLine; l++) commentedOld.add(l)
+  }
 
   if (error) return <div class="empty error">{error}</div>
   if (!diff) return <div class="empty">読み込み中…</div>
@@ -122,6 +163,13 @@ function DiffPane({ round, path }: { round: number; path: string }) {
           </a>
         )}
       </div>
+      {top.length > 0 && (
+        <div class="file-comments">
+          {top.map(({ c }) => (
+            <Thread key={c.id} comment={c} historic />
+          ))}
+        </div>
+      )}
       <div class="code">
         {rows.map((r) =>
           r.kind === 'fold' ? (
@@ -131,12 +179,21 @@ function DiffPane({ round, path }: { round: number; path: string }) {
               <span class="text">{r.text}</span>
             </div>
           ) : (
-            <div class={`row ${r.kind}`}>
-              <span class="ln old">{r.oldNo ?? ''}</span>
-              <span class="ln">{r.no ?? ''}</span>
-              <span class="sign">{r.kind === 'ins' ? '+' : r.kind === 'del' ? '-' : ''}</span>
-              <span class="text">{r.text || ' '}</span>
-            </div>
+            <>
+              <div class={`row ${r.kind} ${r.oldNo && commentedOld.has(r.oldNo) ? 'covered' : ''}`}>
+                <span class="ln old">{r.oldNo ?? ''}</span>
+                <span class="ln">{r.no ?? ''}</span>
+                <span class="sign">{r.kind === 'ins' ? '+' : r.kind === 'del' ? '-' : ''}</span>
+                <span class="text">{r.text || ' '}</span>
+              </div>
+              {r.oldNo !== undefined && byOldEnd.has(r.oldNo) && (
+                <div class="inline-threads history">
+                  {byOldEnd.get(r.oldNo)!.map((c) => (
+                    <Thread key={c.id} comment={c} historic />
+                  ))}
+                </div>
+              )}
+            </>
           ),
         )}
       </div>
