@@ -1,0 +1,21 @@
+internal/app/annotate.go
+  s_23640a0ace3330::t_7334b99c5a8427 136-137
+internal/app/agent.go
+  s_23640a0ace3330::t_7334b99c5a8427 280-282
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "1d8c6b0e7f5d70eb0724acef0495cf0bcf9e81c1",
+  "prompts": {},
+  "sessions": {
+    "s_23640a0ace3330": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "c6e5a3ec-b05c-4fe7-a44f-50980ddbcba3",
+        "model": "claude-opus-5-5"
+      },
+      "human_author": "Yoshi Yamaguchi <ymotongpoo@gmail.com>"
+    }
+  }
+}
