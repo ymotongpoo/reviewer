@@ -1,5 +1,5 @@
 import { useMemo, useState } from 'preact/hooks'
-import { comments, info, tree } from '../state'
+import { comments, info, tree, visibleAnnotations } from '../state'
 import { fileHref, route } from '../router'
 import type { TreeFile } from '../types'
 import type { JSX } from 'preact'
@@ -39,12 +39,16 @@ export function Tree() {
   const [collapsed, setCollapsed] = useState<Set<string>>(new Set())
   // Change markers only while the submitted round waits for the agent.
   const hasBase = info.value?.roundStatus === 'submitted' && (info.value?.baseRound ?? 0) > 0
+  const annotationCounts = new Map<string, number>()
+  for (const a of visibleAnnotations.value) {
+    if (a.state === 'pending') annotationCounts.set(a.path, (annotationCounts.get(a.path) ?? 0) + 1)
+  }
 
   const files = tree.value.filter(
     (f) =>
       (!filter || f.path.toLowerCase().includes(filter.toLowerCase())) &&
       (!onlyChanged || !hasBase || f.changed || f.new) &&
-      (!onlyCommented || f.unresolved > 0),
+      (!onlyCommented || f.unresolved > 0 || (annotationCounts.get(f.path) ?? 0) > 0),
   )
   const root = useMemo(() => build(files), [files.map((f) => `${f.path}${f.unresolved}${f.changed}${f.new}`).join('|')])
   const projectCount = comments.value.filter((c) => c.scope === 'project' && c.status !== 'resolved').length
@@ -85,6 +89,11 @@ export function Tree() {
             {f.new && <span class="mark new" title="前回の提出後に追加されたファイル">新規</span>}
             {f.changed && <span class="mark changed" title="前回の提出後に変更されたファイル">●</span>}
             {f.unresolved > 0 && <span class="count">{f.unresolved}</span>}
+            {(annotationCounts.get(f.path) ?? 0) > 0 && (
+              <span class="annotation-count" title="表示中の未採用AI指摘">
+                ◆{annotationCounts.get(f.path)}
+              </span>
+            )}
           </a>
         ))}
       </>

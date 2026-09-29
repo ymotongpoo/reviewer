@@ -1,12 +1,23 @@
 import { useEffect, useMemo, useRef, useState } from 'preact/hooks'
 import { api, ApiError } from '../api'
-import { comments, editing, fileVersion, toast } from '../state'
+import {
+  annotationSeverity,
+  comments,
+  editing,
+  fileVersion,
+  setAnnotationSeverity,
+  setShowDismissedAnnotations,
+  showDismissedAnnotations,
+  toast,
+  visibleAnnotations,
+} from '../state'
 import { tokenize, type Token } from '../highlight'
-import type { Comment, FileView as FileData } from '../types'
+import type { Annotation, Comment, FileView as FileData } from '../types'
 import { Composer } from './Composer'
 import { Thread } from './Thread'
 import { Preview } from './Preview'
 import { isMarkdown } from '../preview/render'
+import { AnnotationCard } from './AnnotationCard'
 
 interface Row {
   no: number
@@ -38,6 +49,7 @@ export function FileView({ path, line }: { path: string; line?: number }) {
   const [tokens, setTokens] = useState<Token[][] | undefined>()
   const [error, setError] = useState<string | null>(null)
   const [sel, setSel] = useState<Selection | null>(null)
+  const [openAnnotationLine, setOpenAnnotationLine] = useState<number | null>(null)
   const dragging = useRef(false)
   const lastPath = useRef(path)
   const fv = fileVersion.value
@@ -84,6 +96,17 @@ export function FileView({ path, line }: { path: string; line?: number }) {
   const lineComments = fileComments.filter((c) => c.scope === 'line' && c.loc && visible(c))
   const located = lineComments.filter((c) => c.loc!.state !== 'outdated' && c.loc!.end <= lines.length)
   const lost = lineComments.filter((c) => !located.includes(c))
+
+  const fileAnnotations = visibleAnnotations.value.filter((a) => a.path === path)
+  const locatedAnnotations = fileAnnotations.filter((a) => a.loc && a.loc.state !== 'outdated' && a.loc.end <= lines.length)
+  const lostAnnotations = fileAnnotations.filter((a) => !locatedAnnotations.includes(a))
+  const annotationsByEnd = new Map<number, Annotation[]>()
+  const annotationCovered = new Set<number>()
+  for (const a of locatedAnnotations) {
+    const end = a.loc!.end
+    annotationsByEnd.set(end, [...(annotationsByEnd.get(end) ?? []), a])
+    for (let l = a.loc!.start; l <= end; l++) annotationCovered.add(l)
+  }
 
   const byEnd = new Map<number, Comment[]>()
   const covered = new Map<number, number>()
@@ -157,6 +180,26 @@ export function FileView({ path, line }: { path: string; line?: number }) {
       <div class="file-head">
         <span class="file-path">{path}</span>
         <span class="spacer" />
+        <select
+          class="compact-select"
+          aria-label="AI指摘の重要度"
+          value={annotationSeverity.value}
+          onChange={(e) => setAnnotationSeverity(e.currentTarget.value as typeof annotationSeverity.value)}
+        >
+          <option value="all">AI指摘: すべて</option>
+          <option value="critical">重大</option>
+          <option value="major">要修正</option>
+          <option value="minor">軽微</option>
+          <option value="info">確認推奨</option>
+        </select>
+        <label class="toggle">
+          <input
+            type="checkbox"
+            checked={showDismissedAnnotations.value}
+            onChange={(e) => setShowDismissedAnnotations(e.currentTarget.checked)}
+          />{' '}
+          却下済みも表示
+        </label>
         {isMarkdown(path) && (
           <button
             class={`btn small ${showPreview ? 'primary' : ''}`}
@@ -195,7 +238,7 @@ export function FileView({ path, line }: { path: string; line?: number }) {
 
       <div class="file-body">
       <div class="file-src">
-      {(scopeFile.length > 0 || newFile || lost.length > 0) && (
+      {(scopeFile.length > 0 || newFile || lost.length > 0 || lostAnnotations.length > 0) && (
         <div class="file-comments">
           {scopeFile.map((c) => (
             <Thread key={c.id} comment={c} />
@@ -209,6 +252,16 @@ export function FileView({ path, line }: { path: string; line?: number }) {
               ))}
             </div>
           )}
+          {lostAnnotations.length > 0 && (
+            <details class="lost annotations-lost">
+              <summary class="lost-title">位置を特定できないAI指摘（{lostAnnotations.length}件）</summary>
+              <div class="lost-list">
+                {lostAnnotations.map((a) => (
+                  <AnnotationCard key={a.id} annotation={a} original={a.anchor?.lines} />
+                ))}
+              </div>
+            </details>
+          )}
         </div>
       )}
 
@@ -219,20 +272,35 @@ export function FileView({ path, line }: { path: string; line?: number }) {
           const threads = no !== undefined ? byEnd.get(no) : undefined
           const composerHere = newLine && no === newLine.end
           const cov = no !== undefined ? covered.get(no) : undefined
+          const lineAnnotations = no !== undefined ? annotationsByEnd.get(no) : undefined
+          const annotationOpen = openAnnotationLine === no && !!lineAnnotations
           return (
             <>
               <div
                 key={`r${i}`}
                 id={`L${no}`}
-                class={`row ${selected ? 'selected' : ''} ${cov ? 'covered' : ''} ${line !== undefined && line === no ? 'target' : ''}`}
+                class={`row ${selected ? 'selected' : ''} ${cov ? 'covered' : ''} ${annotationCovered.has(no) ? 'annotation-covered' : ''} ${line !== undefined && line === no ? 'target' : ''}`}
                 onMouseEnter={() => onRowEnter(no)}
               >
                 <span
-                  class={`ln ${no !== undefined ? 'clickable' : ''}`}
+                  class={`ln ${no !== undefined ? 'clickable' : ''} ${lineAnnotations ? 'has-annotation' : ''}`}
                   onMouseDown={no !== undefined ? (e) => onGutterDown(e, no) : undefined}
                   title={no !== undefined ? 'クリックでコメント（Shift+クリックかドラッグで範囲選択）' : undefined}
                 >
                   {no ?? ''}
+                  {lineAnnotations && (
+                    <button
+                      class={`annotation-marker severity-${highestSeverity(lineAnnotations)} ${confidenceClass(lineAnnotations)} ${annotationOpen ? 'open' : ''}`}
+                      title={`AI指摘 ${lineAnnotations.length}件`}
+                      onMouseDown={(e) => e.stopPropagation()}
+                      onClick={(e) => {
+                        e.stopPropagation()
+                        setOpenAnnotationLine(annotationOpen ? null : no)
+                      }}
+                    >
+                      ◆{lineAnnotations.length > 1 ? lineAnnotations.length : ''}
+                    </button>
+                  )}
                   {no !== undefined && <span class="plus">+</span>}
                 </span>
                 <span class="text">
@@ -260,6 +328,13 @@ export function FileView({ path, line }: { path: string; line?: number }) {
                   )}
                 </div>
               )}
+              {annotationOpen && (
+                <div class="inline-threads annotation-inline" key={`a${i}`}>
+                  {lineAnnotations!.map((a) => (
+                    <AnnotationCard key={a.id} annotation={a} original={lines.slice(a.loc!.start - 1, a.loc!.end)} />
+                  ))}
+                </div>
+              )}
             </>
           )
         })}
@@ -270,6 +345,17 @@ export function FileView({ path, line }: { path: string; line?: number }) {
       </div>
     </div>
   )
+}
+
+const severityOrder = { critical: 4, major: 3, minor: 2, info: 1 }
+function highestSeverity(list: Annotation[]): Annotation['severity'] {
+  return [...list].sort((a, b) => severityOrder[b.severity] - severityOrder[a.severity])[0].severity
+}
+
+function confidenceClass(list: Annotation[]): string {
+  const rank = { high: 3, medium: 2, low: 1 }
+  const confidence = [...list].sort((a, b) => rank[b.confidence] - rank[a.confidence])[0].confidence
+  return `confidence-${confidence}`
 }
 
 function splitLines(s: string): string[] {
