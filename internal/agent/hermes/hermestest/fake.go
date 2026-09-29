@@ -162,6 +162,18 @@ func (f *Fake) handleCreateSession(w http.ResponseWriter, r *http.Request) {
 		json.NewEncoder(w).Encode(map[string]any{"error": map[string]any{"message": "session creation failed"}})
 		return
 	}
+	for _, session := range f.Sessions {
+		if body.Title != "" && session["title"] == body.Title {
+			f.mu.Unlock()
+			w.Header().Set("Content-Type", "application/json")
+			w.WriteHeader(http.StatusBadRequest)
+			json.NewEncoder(w).Encode(map[string]any{"error": map[string]any{
+				"message": fmt.Sprintf("Title already in use by session %v", session["id"]),
+				"type":    "invalid_request_error", "param": nil, "code": "invalid_title",
+			}})
+			return
+		}
+	}
 	f.sessionSeq++
 	id := fmt.Sprintf("api_fake_%04d", f.sessionSeq)
 	session := map[string]any{"id": id, "source": body.Source, "title": body.Title, "last_active": float64(time.Now().Unix())}

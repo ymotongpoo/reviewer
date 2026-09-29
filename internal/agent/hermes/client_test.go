@@ -2,6 +2,9 @@ package hermes
 
 import (
 	"context"
+	"errors"
+	"fmt"
+	"net/http"
 	"net/http/httptest"
 	"os"
 	"path/filepath"
@@ -111,6 +114,52 @@ func TestCreateSession(t *testing.T) {
 	}
 	if len(f.SessionRequests) != 1 || f.SessionRequests[0].Source != "api_server" {
 		t.Fatalf("requests = %+v", f.SessionRequests)
+	}
+	_, err = c.CreateSession(context.Background(), session.Title)
+	var apiErr *APIError
+	if !errors.Is(err, agent.ErrTitleInUse) || !errors.As(err, &apiErr) {
+		t.Fatalf("duplicate title error = %v", err)
+	}
+	if apiErr.Status != http.StatusBadRequest || apiErr.Code != "invalid_title" || apiErr.Message != "Title already in use by session "+session.ID {
+		t.Fatalf("API error = %+v", apiErr)
+	}
+	if len(f.Sessions) != 1 {
+		t.Fatalf("sessions = %+v", f.Sessions)
+	}
+}
+
+func TestCreateSessionTitleConflictErrors(t *testing.T) {
+	tests := []struct {
+		name     string
+		status   int
+		body     string
+		code     string
+		conflict bool
+	}{
+		{"code", 400, `{"error":{"message":"conflict","code":"invalid_title"}}`, "invalid_title", true},
+		{"message", 400, `{"error":{"message":"Title already in use by session s1"}}`, "", true},
+		{"legacy string", 400, `{"error":"Title already in use by session s1"}`, "", true},
+		{"other error", 400, `{"error":{"message":"Invalid session ID","code":"invalid_session_id"}}`, "invalid_session_id", false},
+		{"other status", 500, `{"error":{"message":"Title already in use by session s1","code":"invalid_title"}}`, "invalid_title", false},
+		{"plain text", 502, "Bad gateway", "", false},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				w.WriteHeader(tt.status)
+				fmt.Fprint(w, tt.body)
+			}))
+			defer ts.Close()
+			c := New(Options{URL: ts.URL})
+			_, err := c.CreateSession(context.Background(), "title")
+			if errors.Is(fmt.Errorf("create session: %w", err), agent.ErrTitleInUse) != tt.conflict {
+				t.Fatalf("title conflict = %v, error = %v", tt.conflict, err)
+			}
+			var apiErr *APIError
+			if !errors.As(err, &apiErr) || apiErr.Status != tt.status || apiErr.Code != tt.code || apiErr.Message == "" {
+				t.Fatalf("API error = %+v", err)
+			}
+		})
 	}
 }
 

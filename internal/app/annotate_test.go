@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"net/http/httptest"
 	"os"
 	"path/filepath"
@@ -332,7 +333,7 @@ func TestAnnotateWithFakeHermes(t *testing.T) {
 	if req.Import == nil || req.Import.Count != 2 || len(req.ChangedPaths) != 1 || req.ChangedPaths[0] != "ch1.md" {
 		t.Fatalf("request = %+v", req)
 	}
-	if len(fake.SessionRequests) != 1 || !strings.Contains(fake.SessionRequests[0].Title, "reviewer: "+req.ID+" 技術的な誤りの検出") {
+	if len(fake.SessionRequests) != 1 || fake.SessionRequests[0].Title != "reviewer: "+a.Info().Name+" "+req.ID+" 技術的な誤りの検出" {
 		t.Fatalf("session requests = %+v", fake.SessionRequests)
 	}
 	if len(fake.Requests) != 1 || fake.Requests[0].SessionID == "" || !strings.Contains(fake.Requests[0].Input, "instructions.md") {
@@ -358,6 +359,98 @@ func TestAnnotateWithFakeHermes(t *testing.T) {
 	feedback, _ := os.ReadFile(submitted.FeedbackPath)
 	if !strings.Contains(string(feedback), "（fakehermes）技術的な記述を確認してください") {
 		t.Fatalf("feedback = %s", feedback)
+	}
+}
+
+func TestAnnotateRetriesSessionTitleConflicts(t *testing.T) {
+	for _, conflicts := range []int{1, 4, 5} {
+		t.Run(fmt.Sprintf("%d conflicts", conflicts), func(t *testing.T) {
+			a, _ := setup(t)
+			baseTitle := "reviewer: " + a.Info().Name + " Q-1 test"
+			titles := []string{baseTitle}
+			for i := 2; i <= 5; i++ {
+				titles = append(titles, fmt.Sprintf("%s (%d)", baseTitle, i))
+			}
+			fake := &hermestest.Fake{Key: "k"}
+			for i := 0; i < conflicts; i++ {
+				fake.Sessions = append(fake.Sessions, map[string]any{
+					"id": fmt.Sprintf("existing-%d", i), "title": titles[i],
+				})
+			}
+			ts := httptest.NewServer(fake)
+			defer ts.Close()
+			a.ConfigureAgent(hermes.New(hermes.Options{URL: ts.URL, APIKey: "k"}), "", nil, "test", "")
+
+			result, err := a.Annotate(context.Background(), AnnotateInput{
+				Preset: "test", Prompt: "確認", Paths: []string{"ch1.md"},
+			})
+			if conflicts == 5 {
+				var appErr *Error
+				if !errors.As(err, &appErr) || appErr.Code != 502 || !strings.Contains(appErr.Msg, "Title already in use") {
+					t.Fatalf("Annotate error = %v", err)
+				}
+				if requests := a.AnnotationRequests(); len(requests) != 0 {
+					t.Fatalf("requests = %+v", requests)
+				}
+				if _, err := os.Stat(a.Store.RequestDir("Q-1")); !os.IsNotExist(err) {
+					t.Fatalf("request directory still exists: %v", err)
+				}
+				if len(fake.Requests) != 0 || len(fake.Sessions) != conflicts {
+					t.Fatalf("runs = %+v, sessions = %+v", fake.Requests, fake.Sessions)
+				}
+			} else {
+				if err != nil {
+					t.Fatal(err)
+				}
+				waitFor(t, "annotation run", func() bool { return len(a.AgentInfo().Active) == 0 })
+				created := fake.Sessions[len(fake.Sessions)-1]
+				if created["title"] != titles[conflicts] || created["id"] != result.Request.SessionID {
+					t.Fatalf("created session = %+v, request = %+v", created, result.Request)
+				}
+				if len(fake.Requests) != 1 || fake.Requests[0].SessionID != result.Request.SessionID {
+					t.Fatalf("run requests = %+v", fake.Requests)
+				}
+			}
+			if len(fake.SessionRequests) != min(conflicts+1, 5) {
+				t.Fatalf("session requests = %+v", fake.SessionRequests)
+			}
+			for i, req := range fake.SessionRequests {
+				if req.Title != titles[i] {
+					t.Errorf("attempt %d title = %q, want %q", i+1, req.Title, titles[i])
+				}
+			}
+		})
+	}
+}
+
+func TestAnnotateSessionTitlesIncludeProjectName(t *testing.T) {
+	fake := &hermestest.Fake{Key: "k"}
+	ts := httptest.NewServer(fake)
+	defer ts.Close()
+	parent := t.TempDir()
+	for i, name := range []string{"project-one", "project-two"} {
+		root := filepath.Join(parent, name)
+		write(t, root, "ch1.md", "# Chapter 1\n")
+		a, err := New(root, config.Default(), nil)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if err := a.Init(); err != nil {
+			t.Fatal(err)
+		}
+		a.ConfigureAgent(hermes.New(hermes.Options{URL: ts.URL, APIKey: "k"}), "", nil, "test", "")
+		result, err := a.Annotate(context.Background(), AnnotateInput{Prompt: "確認"})
+		if err != nil {
+			t.Fatal(err)
+		}
+		waitFor(t, "annotation run", func() bool { return len(a.AgentInfo().Active) == 0 })
+		if result.Request.ID != "Q-1" || a.Info().Name != name {
+			t.Fatalf("request ID = %q, project name = %q", result.Request.ID, a.Info().Name)
+		}
+		wantTitle := "reviewer: " + name + " Q-1 AI確認"
+		if len(fake.SessionRequests) != i+1 || fake.SessionRequests[i].Title != wantTitle {
+			t.Fatalf("session requests = %+v, want title %q", fake.SessionRequests, wantTitle)
+		}
 	}
 }
 
