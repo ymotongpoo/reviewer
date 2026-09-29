@@ -102,7 +102,6 @@ export interface FileView {
   path: string
   content: string
   hash: string
-  baseHash?: string
 }
 
 export interface DiffOp {
@@ -110,10 +109,27 @@ export interface DiffOp {
   lines: string[]
 }
 
-export interface DiffView {
+export type ChangeKind = 'modified' | 'added' | 'deleted'
+
+export interface RoundChange {
   path: string
-  baseRound: number
-  new: boolean
+  kind: ChangeKind
+  insert: number
+  delete: number
+}
+
+export interface RoundChanges {
+  round: number
+  /** The next round, or 0 when compared with the current files. */
+  toRound: number
+  files: RoundChange[]
+}
+
+export interface RoundDiff {
+  round: number
+  toRound: number
+  path: string
+  kind: ChangeKind
   ops: DiffOp[]
 }
 

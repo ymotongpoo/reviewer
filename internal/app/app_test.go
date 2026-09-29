@@ -99,22 +99,23 @@ func TestRoundTrip(t *testing.T) {
 		t.Fatalf("response info = %+v", info.Response)
 	}
 
-	// Tree and diff show the change since the submission.
-	var ch1 TreeFile
-	for _, f := range a.Tree() {
-		if f.Path == "ch1.md" {
-			ch1 = f
-		}
-	}
-	if !ch1.Changed {
+	// While waiting for the agent, the tree marks changed files and the
+	// round history compares the submission with the current files.
+	if !treeChanged(a, "ch1.md") {
 		t.Error("ch1.md not marked changed")
 	}
-	dv, err := a.Diff("ch1.md")
+	rc, err := a.RoundChanges(1)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(dv.Ops) < 2 {
-		t.Errorf("diff ops = %+v", dv.Ops)
+	if rc.ToRound != 0 || len(rc.Files) != 1 || rc.Files[0].Path != "ch1.md" || rc.Files[0].Insert != 1 || rc.Files[0].Delete != 1 {
+		t.Errorf("changes = %+v", rc)
+	}
+	if d, err := a.RoundDiff(1, "ch1.md"); err != nil || len(d.Ops) < 2 {
+		t.Errorf("diff = %+v %v", d, err)
+	}
+	if _, err := a.RoundChanges(2); err == nil {
+		t.Error("changes of an unsubmitted round")
 	}
 
 	// Next round: resolve one, reply to the other; it is carried over.
@@ -127,6 +128,15 @@ func TestRoundTrip(t *testing.T) {
 	}
 	if a.Store.State.Round != 2 || a.Store.State.RoundStatus != store.RoundOpen {
 		t.Fatalf("round not auto-opened: %+v", a.Store.State)
+	}
+	// In the new round, no change markers; history compares with round 2's start.
+	if treeChanged(a, "ch1.md") {
+		t.Error("change marker shown in a new round")
+	}
+	write(t, root, "ch1.md", "# Chapter 1\n\nnew para\n\nintro\n\nThis is short.\n\nend\nmore\n")
+	a.HandleChanges([]string{"ch1.md"}, false)
+	if rc, _ := a.RoundChanges(1); rc.ToRound != 2 || len(rc.Files) != 1 || rc.Files[0].Insert != 1 {
+		t.Errorf("round 1 changes after round 2 opened = %+v", rc)
 	}
 	res2, err := a.Submit()
 	if err != nil {
@@ -143,6 +153,15 @@ func TestRoundTrip(t *testing.T) {
 	if c.Status != store.StatusOpen || c.Loc.State != anchor.Fuzzy && c.Loc.State != anchor.Outdated {
 		t.Errorf("carried comment = status %s loc %+v", c.Status, c.Loc)
 	}
+}
+
+func treeChanged(a *App, path string) bool {
+	for _, f := range a.Tree() {
+		if f.Path == path {
+			return f.Changed || f.New
+		}
+	}
+	return false
 }
 
 func TestDraftRules(t *testing.T) {

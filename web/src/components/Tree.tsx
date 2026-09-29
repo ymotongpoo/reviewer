@@ -37,12 +37,13 @@ export function Tree() {
   const [onlyChanged, setOnlyChanged] = useState(false)
   const [onlyCommented, setOnlyCommented] = useState(false)
   const [collapsed, setCollapsed] = useState<Set<string>>(new Set())
-  const hasBase = (info.value?.baseRound ?? 0) > 0
+  // Change markers only while the submitted round waits for the agent.
+  const hasBase = info.value?.roundStatus === 'submitted' && (info.value?.baseRound ?? 0) > 0
 
   const files = tree.value.filter(
     (f) =>
       (!filter || f.path.toLowerCase().includes(filter.toLowerCase())) &&
-      (!onlyChanged || f.changed || f.new) &&
+      (!onlyChanged || !hasBase || f.changed || f.new) &&
       (!onlyCommented || f.unresolved > 0),
   )
   const root = useMemo(() => build(files), [files.map((f) => `${f.path}${f.unresolved}${f.changed}${f.new}`).join('|')])

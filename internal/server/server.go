@@ -60,7 +60,8 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("GET /api/project", s.handleProject)
 	mux.HandleFunc("GET /api/tree", s.handleTree)
 	mux.HandleFunc("GET /api/file", s.handleFile)
-	mux.HandleFunc("GET /api/diff", s.handleDiff)
+	mux.HandleFunc("GET /api/rounds/{n}/changes", s.handleRoundChanges)
+	mux.HandleFunc("GET /api/rounds/{n}/diff", s.handleRoundDiff)
 	mux.HandleFunc("GET /api/blob/{hash}", s.handleBlob)
 	mux.HandleFunc("GET /api/comments", s.handleComments)
 	mux.HandleFunc("POST /api/comments", s.handleCreateComment)
@@ -225,9 +226,20 @@ func (s *Server) handleFile(w http.ResponseWriter, r *http.Request) {
 	respond(w, fv, err)
 }
 
-func (s *Server) handleDiff(w http.ResponseWriter, r *http.Request) {
-	dv, err := s.App.Diff(r.URL.Query().Get("path"))
-	respond(w, dv, err)
+func roundParam(r *http.Request) int {
+	var n int
+	fmt.Sscan(r.PathValue("n"), &n)
+	return n
+}
+
+func (s *Server) handleRoundChanges(w http.ResponseWriter, r *http.Request) {
+	rc, err := s.App.RoundChanges(roundParam(r))
+	respond(w, rc, err)
+}
+
+func (s *Server) handleRoundDiff(w http.ResponseWriter, r *http.Request) {
+	d, err := s.App.RoundDiff(roundParam(r), r.URL.Query().Get("path"))
+	respond(w, d, err)
 }
 
 func (s *Server) handleBlob(w http.ResponseWriter, r *http.Request) {

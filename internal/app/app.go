@@ -260,11 +260,16 @@ type TreeFile struct {
 	New        bool   `json:"new"`
 }
 
-// Tree lists reviewable files with comment counts and change markers.
+// Tree lists reviewable files with comment counts. Change markers (against
+// the submission) are only set while the round waits for the agent; once
+// the next round opens, changes are reviewed from the round history.
 func (a *App) Tree() []TreeFile {
 	a.mu.Lock()
 	defer a.mu.Unlock()
-	baseRound, base := a.baseFiles()
+	baseRound, base := 0, map[string]string(nil)
+	if a.Store.State.RoundStatus == store.RoundSubmitted {
+		baseRound, base = a.baseFiles()
+	}
 	counts := map[string]int{}
 	for _, c := range a.Store.Comments() {
 		if c.Path != "" && c.Status != store.StatusResolved {
@@ -286,10 +291,9 @@ func (a *App) Tree() []TreeFile {
 
 // FileView is the content of a file.
 type FileView struct {
-	Path     string `json:"path"`
-	Content  string `json:"content"`
-	Hash     string `json:"hash"`
-	BaseHash string `json:"baseHash,omitempty"`
+	Path    string `json:"path"`
+	Content string `json:"content"`
+	Hash    string `json:"hash"`
 }
 
 // File returns the current content of path. The content is also stored as a
@@ -305,8 +309,7 @@ func (a *App) File(path string) (*FileView, error) {
 	if err != nil {
 		return nil, err
 	}
-	_, base := a.baseFiles()
-	return &FileView{Path: path, Content: string(b), Hash: h, BaseHash: base[path]}, nil
+	return &FileView{Path: path, Content: string(b), Hash: h}, nil
 }
 
 func (a *App) readFile(path string) ([]byte, error) {
@@ -323,41 +326,6 @@ func (a *App) readFile(path string) ([]byte, error) {
 	default:
 		return nil, err
 	}
-}
-
-// DiffView is the diff of a file against the latest submitted snapshot.
-type DiffView struct {
-	Path      string        `json:"path"`
-	BaseRound int           `json:"baseRound"`
-	New       bool          `json:"new"`
-	Ops       []textutil.Op `json:"ops"`
-}
-
-// Diff compares path with the latest submitted snapshot.
-func (a *App) Diff(path string) (*DiffView, error) {
-	a.mu.Lock()
-	defer a.mu.Unlock()
-	baseRound, base := a.baseFiles()
-	if baseRound == 0 {
-		return nil, notFound("比較できる提出済みラウンドがありません")
-	}
-	cur, err := a.readFile(path)
-	if err != nil {
-		return nil, err
-	}
-	dv := &DiffView{Path: path, BaseRound: baseRound}
-	var old []string
-	if h, ok := base[path]; ok {
-		b, err := a.Store.Blob(h)
-		if err != nil {
-			return nil, err
-		}
-		old = textutil.SplitLines(string(b))
-	} else {
-		dv.New = true
-	}
-	dv.Ops = textutil.LineDiff(old, textutil.SplitLines(string(cur)))
-	return dv, nil
 }
 
 // Blob returns stored content by hash.

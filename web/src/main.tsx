@@ -7,6 +7,7 @@ import { Header } from './components/Header'
 import { Tree } from './components/Tree'
 import { FileView } from './components/FileView'
 import { Overview } from './components/Overview'
+import { RoundHistory } from './components/RoundHistory'
 
 function App() {
   useEffect(() => {
@@ -25,7 +26,15 @@ function App() {
         <aside class="sidebar">
           <Tree />
         </aside>
-        <main class="main">{r.page === 'file' ? <FileView key="file" path={r.path} line={r.line} /> : <Overview />}</main>
+        <main class="main">
+          {r.page === 'file' ? (
+            <FileView key="file" path={r.path} line={r.line} />
+          ) : r.page === 'round' ? (
+            <RoundHistory round={r.round} path={r.path} />
+          ) : (
+            <Overview />
+          )}
+        </main>
       </div>
       <div class="toasts">
         {toasts.value.map((t) => (

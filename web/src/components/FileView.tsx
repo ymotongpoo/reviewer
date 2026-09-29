@@ -1,16 +1,13 @@
 import { useEffect, useMemo, useRef, useState } from 'preact/hooks'
 import { api, ApiError } from '../api'
-import { comments, editing, fileVersion, info, toast } from '../state'
+import { comments, editing, fileVersion, toast } from '../state'
 import { tokenize, type Token } from '../highlight'
-import type { Comment, DiffView, FileView as FileData } from '../types'
+import type { Comment, FileView as FileData } from '../types'
 import { Composer } from './Composer'
 import { Thread } from './Thread'
 
 interface Row {
-  kind: 'eq' | 'ins' | 'del'
-  /** Line number in the current file; undefined for deleted lines. */
-  no?: number
-  oldNo?: number
+  no: number
   text: string
 }
 
@@ -21,16 +18,6 @@ interface Selection {
 
 export function FileView({ path, line }: { path: string; line?: number }) {
   const [file, setFile] = useState<FileData | null>(null)
-  const [diff, setDiff] = useState<DiffView | null>(null)
-  // Off by default: the current file is shown with changed lines marked, and
-  // the full diff (including deleted lines) only on request.
-  const [showDiff, setShowDiff] = useState(() => {
-    try {
-      return localStorage.getItem('reviewer.diff') === '1'
-    } catch {
-      return false
-    }
-  })
   const [wrap, setWrap] = useState(() => {
     try {
       return localStorage.getItem('reviewer.wrap') !== '0'
@@ -45,7 +32,7 @@ export function FileView({ path, line }: { path: string; line?: number }) {
   const lastPath = useRef(path)
   const fv = fileVersion.value
 
-  // Load the file and, when it changed since the last submission, its diff.
+  // Load the file. Diffs are reviewed per round from the round history.
   useEffect(() => {
     let cancelled = false
     const pathChanged = lastPath.current !== path
@@ -59,12 +46,9 @@ export function FileView({ path, line }: { path: string; line?: number }) {
     ;(async () => {
       try {
         const f = await api.file(path)
-        let d: DiffView | null = null
-        if ((info.value?.baseRound ?? 0) > 0 && f.baseHash !== f.hash) d = await api.diff(path)
         if (cancelled) return
         if (file && file.hash !== f.hash && !pathChanged) toast(`${path} が更新されました`)
         setFile(f)
-        setDiff(d)
         setError(null)
         const t = await tokenize(f.content, path)
         if (!cancelled) setTokens(t)
@@ -75,50 +59,11 @@ export function FileView({ path, line }: { path: string; line?: number }) {
     return () => {
       cancelled = true
     }
-  }, [path, fv.n, info.value?.baseRound])
+  }, [path, fv.n])
 
   const lines = useMemo(() => (file ? splitLines(file.content) : []), [file])
 
-  const rows: Row[] = useMemo(() => {
-    if (diff && showDiff) {
-      const out: Row[] = []
-      let no = 1
-      let oldNo = 1
-      for (const op of diff.ops) {
-        for (const text of op.lines) {
-          if (op.kind === 'del') out.push({ kind: 'del', oldNo: oldNo++, text })
-          else if (op.kind === 'ins') out.push({ kind: 'ins', no: no++, text })
-          else out.push({ kind: 'eq', no: no++, oldNo: oldNo++, text })
-        }
-      }
-      return out
-    }
-    return lines.map((text, i) => ({ kind: 'eq', no: i + 1, text }))
-  }, [lines, diff, showDiff])
-
-  // Change markers for the plain view: lines added or modified since the
-  // base snapshot, and lines right after a deletion.
-  const changes = useMemo(() => {
-    const added = new Set<number>()
-    const deletedBefore = new Map<number, number>()
-    let ins = 0
-    let del = 0
-    if (diff) {
-      let no = 1
-      for (const op of diff.ops) {
-        if (op.kind === 'ins') {
-          for (let k = 0; k < op.lines.length; k++) added.add(no++)
-          ins += op.lines.length
-        } else if (op.kind === 'del') {
-          deletedBefore.set(no, (deletedBefore.get(no) ?? 0) + op.lines.length)
-          del += op.lines.length
-        } else {
-          no += op.lines.length
-        }
-      }
-    }
-    return { added, deletedBefore, ins, del }
-  }, [diff])
+  const rows: Row[] = useMemo(() => lines.map((text, i) => ({ no: i + 1, text })), [lines])
 
   const fileComments = comments.value.filter((c) => c.path === path)
   const ed = editing.value
@@ -182,35 +127,11 @@ export function FileView({ path, line }: { path: string; line?: number }) {
   if (error) return <div class="empty error">{error}</div>
   if (!file) return <div class="empty">読み込み中…</div>
 
-  const changed = diff !== null
   return (
     <div class={`file-view ${wrap ? 'wrap' : ''}`}>
       <div class="file-head">
         <span class="file-path">{path}</span>
-        {diff?.new && <span class="chip new">新規</span>}
-        {changed && !diff?.new && (
-          <span class="chip changed" title="緑の印は追加・変更された行、赤の印はその位置で行が削除されたことを示します">
-            ラウンド{diff!.baseRound}提出後に変更（+{changes.ins} −{changes.del}行）
-          </span>
-        )}
         <span class="spacer" />
-        {changed && !diff?.new && (
-          <label class="toggle">
-            <input
-              type="checkbox"
-              checked={showDiff}
-              onChange={(e) => {
-                setShowDiff(e.currentTarget.checked)
-                try {
-                  localStorage.setItem('reviewer.diff', e.currentTarget.checked ? '1' : '0')
-                } catch {
-                  // storage unavailable
-                }
-              }}
-            />{' '}
-            削除行も含めた差分を表示
-          </label>
-        )}
         <label class="toggle">
           <input
             type="checkbox"
@@ -255,19 +176,14 @@ export function FileView({ path, line }: { path: string; line?: number }) {
           const threads = no !== undefined ? byEnd.get(no) : undefined
           const composerHere = newLine && no === newLine.end
           const cov = no !== undefined ? covered.get(no) : undefined
-          const plain = !(diff && showDiff)
-          const mark = plain && no !== undefined ? (changes.added.has(no) ? 'mark-add' : '') : ''
-          const delMark = plain && no !== undefined ? changes.deletedBefore.get(no) : undefined
           return (
             <>
               <div
                 key={`r${i}`}
-                id={no !== undefined && r.kind !== 'del' ? `L${no}` : undefined}
-                class={`row ${r.kind} ${mark} ${delMark ? 'mark-del' : ''} ${selected ? 'selected' : ''} ${cov ? 'covered' : ''} ${line !== undefined && line === no ? 'target' : ''}`}
-                title={delMark ? `この行の前で${delMark}行削除されました` : undefined}
+                id={`L${no}`}
+                class={`row ${selected ? 'selected' : ''} ${cov ? 'covered' : ''} ${line !== undefined && line === no ? 'target' : ''}`}
                 onMouseEnter={() => onRowEnter(no)}
               >
-                {changed && showDiff && <span class="ln old">{r.oldNo ?? ''}</span>}
                 <span
                   class={`ln ${no !== undefined ? 'clickable' : ''}`}
                   onMouseDown={no !== undefined ? (e) => onGutterDown(e, no) : undefined}
@@ -276,9 +192,8 @@ export function FileView({ path, line }: { path: string; line?: number }) {
                   {no ?? ''}
                   {no !== undefined && <span class="plus">+</span>}
                 </span>
-                <span class="sign">{r.kind === 'ins' ? '+' : r.kind === 'del' ? '-' : ''}</span>
                 <span class="text">
-                  {r.kind !== 'del' && tokens && no !== undefined && tokens[no - 1]
+                  {tokens && tokens[no - 1]
                     ? tokens[no - 1].map((t) => (
                         <span class="tok" style={t.style}>
                           {t.content}

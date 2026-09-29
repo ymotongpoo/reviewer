@@ -1,7 +1,7 @@
 import { useState } from 'preact/hooks'
 import { comments, editing, info } from '../state'
 import { statusText, lineRange } from '../labels'
-import { fileHref } from '../router'
+import { fileHref, roundHref } from '../router'
 import type { Comment } from '../types'
 import { Composer } from './Composer'
 import { Thread } from './Thread'
@@ -130,6 +130,7 @@ export function Overview() {
                 <th>提出</th>
                 <th>コメント</th>
                 <th>返答</th>
+                <th>修正の差分</th>
               </tr>
             </thead>
             <tbody>
@@ -140,6 +141,7 @@ export function Overview() {
                   <td>{r.submittedAt ? fmt(r.submittedAt) : '—'}</td>
                   <td>{r.submittedAt ? r.comments : '—'}</td>
                   <td>{r.response ? (r.response.error ? 'エラー' : `${r.response.count}件`) : r.submittedAt ? '未着' : '—'}</td>
+                  <td>{r.submittedAt ? <a href={roundHref(r.round)}>差分を見る</a> : '—'}</td>
                 </tr>
               ))}
             </tbody>

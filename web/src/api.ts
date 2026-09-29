@@ -1,4 +1,4 @@
-import type { AgentBinding, AgentInfo, AgentRun, AgentRunView, AgentSession, Comment, DiffView, FileView, Info, SubmitResult, TreeFile } from './types'
+import type { AgentBinding, AgentInfo, AgentRun, AgentRunView, AgentSession, Comment, FileView, Info, RoundChanges, RoundDiff, SubmitResult, TreeFile } from './types'
 
 export class ApiError extends Error {
   constructor(message: string, public status: number) {
@@ -34,7 +34,8 @@ export const api = {
   project: () => request<Info>('GET', '/api/project'),
   tree: () => request<{ files: TreeFile[] }>('GET', '/api/tree').then((r) => r.files),
   file: (path: string) => request<FileView>('GET', `/api/file?path=${q(path)}`),
-  diff: (path: string) => request<DiffView>('GET', `/api/diff?path=${q(path)}`),
+  roundChanges: (round: number) => request<RoundChanges>('GET', `/api/rounds/${round}/changes`),
+  roundDiff: (round: number, path: string) => request<RoundDiff>('GET', `/api/rounds/${round}/diff?path=${q(path)}`),
   comments: () => request<{ comments: Comment[] }>('GET', '/api/comments').then((r) => r.comments),
   createComment: (c: {
     scope: string
