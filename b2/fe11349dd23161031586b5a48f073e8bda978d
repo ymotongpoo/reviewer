@@ -1,0 +1,89 @@
+web/src/components/AnnotationCard.tsx
+  s_7494ec2db548fb::t_283358236ae74b 1-85
+web/src/components/Header.tsx
+  s_7494ec2db548fb::t_0601503a673bec 6,100
+web/src/components/Tree.tsx
+  s_7494ec2db548fb::t_029555b7f50516 2,42-45,51,92-96
+internal/server/dist/assets/index-CRbm1C-R.css
+  s_7494ec2db548fb::t_8d4acefef43283 1
+internal/server/dist/assets/html-BoPg765Y.js
+  s_7494ec2db548fb::t_8d4acefef43283 1
+web/src/components/Overview.tsx
+  s_7494ec2db548fb::t_fc298e71df4c79 234-242
+  s_7494ec2db548fb::t_3ffea62690a3c6 1-14,17,21,84-85,172-233,243-316
+  s_7494ec2db548fb::t_47369207840881 317
+web/src/api.ts
+  s_7494ec2db548fb::t_62f7022c2ffb10 2-21,97-119
+internal/server/dist/assets/vue-DUh6dhMR.js
+  s_7494ec2db548fb::t_8d4acefef43283 1
+internal/server/dist/index.html
+  s_7494ec2db548fb::t_8d4acefef43283 8-9
+web/src/components/Agent.tsx
+  s_7494ec2db548fb::t_b7b358f07a2d73 249-254
+  s_7494ec2db548fb::t_0d1341294b6795 51-63,67,87-95,102,104-105,112,122,181
+internal/server/dist/assets/css-C4_5_g01.js
+  s_7494ec2db548fb::t_8d4acefef43283 1
+internal/server/dist/assets/cpp-DasfCJfo.js
+  s_7494ec2db548fb::t_8d4acefef43283 1
+internal/server/dist/assets/tsx-C73wcHOn.js
+  s_7494ec2db548fb::t_8d4acefef43283 1
+internal/server/dist/assets/html-derivative-BDTWIf41.js
+  s_7494ec2db548fb::t_8d4acefef43283 1
+internal/server/dist/assets/dist-ahYk_FNr.js
+  s_7494ec2db548fb::t_8d4acefef43283 1-63
+internal/server/dist/assets/jsx-7pQUQWmL.js
+  s_7494ec2db548fb::t_8d4acefef43283 1
+web/src/components/Annotate.tsx
+  s_7494ec2db548fb::t_e2973ad15bcbe7 1-242
+internal/server/dist/assets/index-pyk-PuQL.js
+  s_7494ec2db548fb::t_8d4acefef43283 1-236
+internal/server/dist/assets/typescript-Bjelkomv.js
+  s_7494ec2db548fb::t_8d4acefef43283 1
+internal/server/dist/assets/sql-DOROQ9J8.js
+  s_7494ec2db548fb::t_8d4acefef43283 1
+internal/server/dist/assets/lua-yLy6VzsN.js
+  s_7494ec2db548fb::t_8d4acefef43283 1
+internal/server/dist/assets/java-C-nIFT9R.js
+  s_7494ec2db548fb::t_8d4acefef43283 1
+internal/server/dist/assets/c-BUR-U1U1.js
+  s_7494ec2db548fb::t_8d4acefef43283 1
+internal/server/dist/assets/graphql-Dkb2tMec.js
+  s_7494ec2db548fb::t_8d4acefef43283 1
+web/src/components/FileView.tsx
+  s_7494ec2db548fb::t_b7b358f07a2d73 286
+  s_7494ec2db548fb::t_47bec0e9c3e1f5 3-13,15,20,52,100-110,183-202,241,255-264,275-276,282,291-303,331-337,350-359
+  s_7494ec2db548fb::t_0ef99715d8a6f4 360
+internal/server/dist/assets/ruby-BRSiB2UX.js
+  s_7494ec2db548fb::t_8d4acefef43283 1
+internal/server/dist/assets/xml-DEQpzRAA.js
+  s_7494ec2db548fb::t_8d4acefef43283 1
+web/src/types.ts
+  s_7494ec2db548fb::t_c4870152f20a2a 156,159,193-194,206-284
+  s_7494ec2db548fb::t_50cfd934d6e46b 285
+web/src/style.css
+  s_7494ec2db548fb::t_5056d34f35cc9c 28-31,65-68,1129-1140,1251-1458
+  s_7494ec2db548fb::t_b7b358f07a2d73 502-505
+  s_7494ec2db548fb::t_576560395ec63e 1459
+web/src/state.ts
+  s_7494ec2db548fb::t_1a45cebf8bf78d 3-14,24-68,129-147,154-162,181-199,221-223,262-274
+internal/server/dist/assets/php-DyaAn3Vp.js
+  s_7494ec2db548fb::t_8d4acefef43283 1
+internal/server/dist/assets/rst-Bc632Cvo.js
+  s_7494ec2db548fb::t_8d4acefef43283 1
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "b2fe11349dd23161031586b5a48f073e8bda978d",
+  "prompts": {},
+  "sessions": {
+    "s_7494ec2db548fb": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a0ed3a-6f31-7553-8e65-7d45571cc2eb",
+        "model": "gpt-5.6-sol"
+      },
+      "human_author": "Yoshi Yamaguchi <ymotongpoo@gmail.com>"
+    }
+  }
+}
