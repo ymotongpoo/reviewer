@@ -1,0 +1,20 @@
+docs/plans/ai-annotations.md
+  s_23640a0ace3330::t_b116053e10dfd6 89-93
+  s_23640a0ace3330::t_6ca8dcfe2431c2 1-88,94-132
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "ab3120b56eabd5a680692b76c2aa0fc2e8f17ece",
+  "prompts": {},
+  "sessions": {
+    "s_23640a0ace3330": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "c6e5a3ec-b05c-4fe7-a44f-50980ddbcba3",
+        "model": "claude-opus-5-5"
+      },
+      "human_author": "Yoshi Yamaguchi <ymotongpoo@gmail.com>"
+    }
+  }
+}
