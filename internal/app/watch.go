@@ -46,6 +46,15 @@ func (a *App) Watch(ctx context.Context) error {
 				}
 			}
 		}
+		requests := filepath.Join(a.DataDir, "requests")
+		add(requests)
+		if entries, err := os.ReadDir(requests); err == nil {
+			for _, e := range entries {
+				if e.IsDir() {
+					add(filepath.Join(requests, e.Name()))
+				}
+			}
+		}
 	}
 	sync()
 
@@ -67,7 +76,7 @@ func (a *App) Watch(ctx context.Context) error {
 				return nil
 			}
 			if a.inData(ev.Name) {
-				if strings.HasSuffix(ev.Name, "response.json") || ev.Has(fsnotify.Create) {
+				if strings.HasSuffix(ev.Name, "response.json") || strings.HasSuffix(ev.Name, "annotations.json") || ev.Has(fsnotify.Create) {
 					dataChanged = true
 				} else {
 					continue

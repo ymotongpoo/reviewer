@@ -46,9 +46,10 @@ func conflict(format string, a ...any) error {
 
 // Event is published to connected clients.
 type Event struct {
-	Type  string   `json:"type"` // files | tree | comments | round | response | agent
-	Paths []string `json:"paths,omitempty"`
-	Round int      `json:"round,omitempty"`
+	Type    string   `json:"type"` // files | tree | comments | round | response | agent | annotate | annotations
+	Paths   []string `json:"paths,omitempty"`
+	Round   int      `json:"round,omitempty"`
+	Request string   `json:"request,omitempty"`
 	// Run and Agent are set for agent events.
 	Run   string       `json:"run,omitempty"`
 	Agent *agent.Event `json:"agent,omitempty"`
@@ -376,6 +377,10 @@ func (a *App) ensureOpen() error {
 func (a *App) CreateComment(req NewComment) (*store.Comment, error) {
 	a.mu.Lock()
 	defer a.mu.Unlock()
+	return a.createComment(req)
+}
+
+func (a *App) createComment(req NewComment) (*store.Comment, error) {
 	if req.Label == "" {
 		req.Label = a.Cfg.Labels[0].Name
 	}

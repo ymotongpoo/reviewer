@@ -72,6 +72,12 @@ type Agent interface {
 	Start(ctx context.Context, r Request) (Run, error)
 }
 
+// SessionCreator is optionally implemented by agents that can create an empty
+// titled session before a run starts.
+type SessionCreator interface {
+	CreateSession(ctx context.Context, title string) (Session, error)
+}
+
 // Run is a turn in progress.
 type Run interface {
 	ID() string
