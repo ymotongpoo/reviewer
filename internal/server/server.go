@@ -507,8 +507,8 @@ func (p *Project) handleAnnotationRequestDiff(w http.ResponseWriter, r *http.Req
 	respond(w, diff, err)
 }
 
-func (p *Project) handleAnnotations(w http.ResponseWriter, _ *http.Request) {
-	writeJSON(w, map[string]any{"annotations": p.App.Annotations()})
+func (p *Project) handleAnnotations(w http.ResponseWriter, r *http.Request) {
+	writeJSON(w, map[string]any{"annotations": p.App.Annotations(r.URL.Query().Get("all") == "1")})
 }
 
 func (p *Project) handleAdoptAnnotation(w http.ResponseWriter, r *http.Request) {
