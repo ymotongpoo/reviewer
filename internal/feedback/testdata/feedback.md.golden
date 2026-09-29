@@ -1,0 +1,93 @@
+# Review round 2
+
+- 対象: `/work/docs`
+- 提出: 2026-09-29T10:30:00Z
+- 返答先: `/work/docs/.reviewer/rounds/2/response.json`（形式は末尾の「返答の書き方」を参照）
+
+行番号はこのラウンドを提出した時点のファイルのものです。引用（`>` の行）を手がかりに該当箇所を探してください。
+言語名が `suggestion` のコードブロックは、指定した行範囲をブロックの内容で置き換える提案です。
+
+## 全体コメント
+
+### [C-12][must]
+
+導入が長いので半分程度に削ってください
+
+## ch1.md
+
+### [C-15][question] ファイル全体
+
+章の目的は？
+
+### [C-13][suggestion] L12-14
+
+> 元の文章
+>
+> 続き
+
+言い換え
+
+```suggestion
+置換案
+```
+
+### [C-14][nit] L30
+
+> teh
+
+typo
+
+## 前ラウンドから持ち越した未解決コメント
+
+以前のラウンドで指摘し、まだ解決していないコメントです。これまでのやりとりを踏まえて対応してください。
+
+### [C-07][must] ch2.md L40（ラウンド1の指摘・現在の状態: addressed）
+
+> とても長い文
+
+冗長
+
+- ラウンド1 エージェント（addressed）: 短くしました
+- **今回のレビュアーの返信**: まだ冗長です
+
+## 返答の書き方
+
+修正が終わったら、次の形式の JSON を `/work/docs/.reviewer/rounds/2/response.json` に書いてください。上のすべてのコメントIDについて1件ずつ返答してください。このファイル（feedback.md）は編集しないでください。
+
+- `status`: `addressed`（対応した）/ `wontfix`（対応しない。理由を `message` に書く）/ `question`（確認したいことがある。質問を `message` に書く）
+- `message`: 何をどう直したか、または対応しない理由や質問
+- `summary`: 変更全体の概要（任意）
+
+```json
+{
+  "round": 2,
+  "responses": [
+    {
+      "id": "C-12",
+      "status": "addressed",
+      "message": "…"
+    },
+    {
+      "id": "C-14",
+      "status": "addressed",
+      "message": "…"
+    },
+    {
+      "id": "C-13",
+      "status": "addressed",
+      "message": "…"
+    },
+    {
+      "id": "C-15",
+      "status": "addressed",
+      "message": "…"
+    },
+    {
+      "id": "C-07",
+      "status": "addressed",
+      "message": "…"
+    }
+  ],
+  "summary": "変更全体の概要"
+}
+```

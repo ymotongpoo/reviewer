@@ -1,0 +1,26 @@
+{
+  "name": "reviewer-web",
+  "private": true,
+  "version": "0.0.0",
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "tsc --noEmit && vite build",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@preact/signals": "^2.11.2",
+    "@shikijs/langs": "^4.4.3",
+    "@shikijs/themes": "^4.4.3",
+    "diff": "^9.0.0",
+    "dompurify": "^3.4.16",
+    "marked": "^18.0.14",
+    "preact": "^10.29.8",
+    "shiki": "^4.4.3"
+  },
+  "devDependencies": {
+    "@preact/preset-vite": "^2.10.6",
+    "typescript": "^7.0.2",
+    "vite": "^8.3.1"
+  }
+}
