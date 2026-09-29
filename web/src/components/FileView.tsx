@@ -5,6 +5,8 @@ import { tokenize, type Token } from '../highlight'
 import type { Comment, FileView as FileData } from '../types'
 import { Composer } from './Composer'
 import { Thread } from './Thread'
+import { Preview } from './Preview'
+import { isMarkdown } from '../preview/render'
 
 interface Row {
   no: number
@@ -25,6 +27,14 @@ export function FileView({ path, line }: { path: string; line?: number }) {
       return true
     }
   })
+  const [preview, setPreview] = useState(() => {
+    try {
+      return localStorage.getItem('reviewer.preview') === '1'
+    } catch {
+      return false
+    }
+  })
+  const [scrollRatio, setScrollRatio] = useState(0)
   const [tokens, setTokens] = useState<Token[][] | undefined>()
   const [error, setError] = useState<string | null>(null)
   const [sel, setSel] = useState<Selection | null>(null)
@@ -93,6 +103,20 @@ export function FileView({ path, line }: { path: string; line?: number }) {
     document.getElementById(`L${line}`)?.scrollIntoView({ block: 'center' })
   }, [line, file?.path])
 
+  const showPreview = preview && isMarkdown(path)
+  useEffect(() => {
+    if (!showPreview) return
+    const main = document.querySelector('.main')
+    if (!main) return
+    const on = () => {
+      const max = main.scrollHeight - main.clientHeight
+      setScrollRatio(max > 0 ? main.scrollTop / max : 0)
+    }
+    main.addEventListener('scroll', on, { passive: true })
+    on()
+    return () => main.removeEventListener('scroll', on)
+  }, [showPreview])
+
   useEffect(() => {
     const up = () => {
       if (!dragging.current) return
@@ -129,10 +153,26 @@ export function FileView({ path, line }: { path: string; line?: number }) {
   if (!file) return <div class="empty">読み込み中…</div>
 
   return (
-    <div class={`file-view ${wrap ? 'wrap' : ''}`}>
+    <div class={`file-view ${wrap || showPreview ? 'wrap' : ''} ${showPreview ? 'split' : ''}`}>
       <div class="file-head">
         <span class="file-path">{path}</span>
         <span class="spacer" />
+        {isMarkdown(path) && (
+          <button
+            class={`btn small ${showPreview ? 'primary' : ''}`}
+            onClick={() => {
+              setPreview(!preview)
+              try {
+                localStorage.setItem('reviewer.preview', !preview ? '1' : '0')
+              } catch {
+                // storage unavailable
+              }
+            }}
+            title="右側にレンダリング結果を表示"
+          >
+            プレビュー
+          </button>
+        )}
         <label class="toggle">
           <input
             type="checkbox"
@@ -153,6 +193,8 @@ export function FileView({ path, line }: { path: string; line?: number }) {
         </button>
       </div>
 
+      <div class="file-body">
+      <div class="file-src">
       {(scopeFile.length > 0 || newFile || lost.length > 0) && (
         <div class="file-comments">
           {scopeFile.map((c) => (
@@ -222,6 +264,9 @@ export function FileView({ path, line }: { path: string; line?: number }) {
           )
         })}
         {rows.length === 0 && <div class="empty">（空のファイル）</div>}
+      </div>
+      </div>
+      {showPreview && file && <Preview path={path} content={file.content} scrollRatio={scrollRatio} />}
       </div>
     </div>
   )

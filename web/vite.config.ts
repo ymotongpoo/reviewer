@@ -7,6 +7,10 @@ const token = process.env.REVIEWER_TOKEN ?? 'dev'
 
 export default defineConfig({
   plugins: [preact()],
+  resolve: {
+    // zenn-markdown-html imports the full shiki bundle; use a curated subset.
+    alias: [{ find: /^shiki$/, replacement: new URL('./src/preview/zenn-shiki.ts', import.meta.url).pathname }],
+  },
   build: {
     outDir: '../internal/server/dist',
     emptyOutDir: true,

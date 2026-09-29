@@ -34,6 +34,9 @@ const byExt: Record<string, string> = {
   html: 'html', htm: 'html', xml: 'xml', svg: 'xml', json: 'json', css: 'css',
   js: 'javascript', mjs: 'javascript', ts: 'typescript', go: 'go', py: 'python',
   sh: 'shellscript', bash: 'shellscript', zsh: 'shellscript', vue: 'vue',
+  // Language names used in code fences.
+  python: 'python', javascript: 'javascript', typescript: 'typescript', golang: 'go',
+  shell: 'shellscript', shellscript: 'shellscript', console: 'shellscript', latex: 'latex',
 }
 
 export function languageOf(path: string): string | undefined {

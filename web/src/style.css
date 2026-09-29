@@ -1319,3 +1319,117 @@ input.search {
 .chip.kind-unchanged {
   color: var(--fg-muted);
 }
+
+/* Side-by-side preview */
+.file-view.split .file-body {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+}
+.file-view.split .file-src {
+  min-width: 0;
+  border-right: 1px solid var(--border);
+}
+.file-view.split .inline-threads {
+  padding-left: 72px;
+}
+.preview-pane {
+  position: sticky;
+  top: 45px;
+  height: calc(100vh - 45px - 46px);
+  overflow: auto;
+  padding: 0 28px 40vh;
+  background: var(--bg);
+  color: var(--fg);
+  font-family: var(--sans);
+}
+.preview-pane[data-theme='dark'] .znc {
+  color: #e6edf3;
+}
+.preview-bar {
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 0;
+  margin-bottom: 8px;
+  background: var(--bg);
+  border-bottom: 1px solid var(--border);
+}
+.preview-bar select {
+  font: inherit;
+  font-size: 12px;
+  padding: 1px 4px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--bg);
+  color: var(--fg);
+}
+.zenn-head {
+  text-align: center;
+  padding: 16px 0 24px;
+}
+.zenn-emoji {
+  font-size: 64px;
+  line-height: 1.2;
+}
+.zenn-head h1 {
+  font-size: 26px;
+  margin: 8px 0;
+}
+table.frontmatter {
+  font-size: 12px;
+  border-collapse: collapse;
+  margin-bottom: 16px;
+  color: var(--fg-muted);
+}
+table.frontmatter th,
+table.frontmatter td {
+  border: 1px solid var(--border);
+  padding: 2px 8px;
+  text-align: left;
+}
+.preview-md {
+  font-size: 15px;
+  line-height: 1.8;
+}
+.preview-md h1,
+.preview-md h2 {
+  border-bottom: 1px solid var(--border);
+  padding-bottom: 0.2em;
+}
+.preview-md table {
+  border-collapse: collapse;
+}
+.preview-md th,
+.preview-md td {
+  border: 1px solid var(--border);
+  padding: 4px 10px;
+}
+.preview-md img {
+  max-width: 100%;
+}
+.embed-placeholder {
+  margin: 1rem 0;
+  padding: 12px 14px;
+  border: 1px dashed var(--border);
+  border-radius: 8px;
+  color: var(--fg-muted);
+  font-size: 13px;
+  overflow-wrap: anywhere;
+}
+
+.zenn-topics {
+  display: flex;
+  gap: 6px;
+  justify-content: center;
+  flex-wrap: wrap;
+}
+.zenn-topic {
+  font-size: 12px;
+  padding: 1px 10px;
+  border-radius: 999px;
+  background: var(--bg-muted);
+  color: var(--fg-muted);
+}
