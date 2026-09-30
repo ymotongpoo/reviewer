@@ -1,4 +1,5 @@
-import { useMemo, useState } from 'preact/hooks'
+import { useEffect, useMemo, useState } from 'preact/hooks'
+import { projectId } from '../api'
 import { comments, info, tree, visibleAnnotations } from '../state'
 import { fileHref, route } from '../router'
 import type { TreeFile } from '../types'
@@ -32,11 +33,44 @@ function count(d: Dir): number {
   return n
 }
 
+function countAnnotations(d: Dir, counts: Map<string, number>): number {
+  let n = d.files.reduce((a, f) => a + (counts.get(f.path) ?? 0), 0)
+  for (const c of d.dirs.values()) n += countAnnotations(c, counts)
+  return n
+}
+
+// Directories the reviewer expanded, per project and browser. Everything
+// starts collapsed.
+const expandedKey = `reviewer.tree.${projectId ?? 'none'}`
+
+function loadExpanded(): Set<string> {
+  try {
+    const v = JSON.parse(localStorage.getItem(expandedKey) ?? '[]')
+    return new Set(Array.isArray(v) ? v : [])
+  } catch {
+    return new Set()
+  }
+}
+
+function saveExpanded(s: Set<string>) {
+  try {
+    localStorage.setItem(expandedKey, JSON.stringify([...s]))
+  } catch {
+    // storage unavailable
+  }
+}
+
+/** The directories containing path, outermost first. */
+function ancestors(path: string): string[] {
+  const parts = path.split('/').slice(0, -1)
+  return parts.map((_, i) => parts.slice(0, i + 1).join('/'))
+}
+
 export function Tree() {
   const [filter, setFilter] = useState('')
   const [onlyChanged, setOnlyChanged] = useState(false)
   const [onlyCommented, setOnlyCommented] = useState(false)
-  const [collapsed, setCollapsed] = useState<Set<string>>(new Set())
+  const [expanded, setExpanded] = useState<Set<string>>(loadExpanded)
   // Change markers only while the submitted round waits for the agent.
   const hasBase = info.value?.roundStatus === 'submitted' && (info.value?.baseRound ?? 0) > 0
   const annotationCounts = new Map<string, number>()
@@ -54,10 +88,24 @@ export function Tree() {
   const projectCount = comments.value.filter((c) => c.scope === 'project' && c.status !== 'resolved').length
   const current = route.value.page === 'file' ? route.value.path : null
 
+  // Reveal the open file.
+  useEffect(() => {
+    if (!current) return
+    const missing = ancestors(current).filter((d) => !expanded.has(d))
+    if (missing.length === 0) return
+    const next = new Set([...expanded, ...missing])
+    setExpanded(next)
+    saveExpanded(next)
+  }, [current])
+
+  // With a filter, show every match.
+  const filtering = !!filter || onlyChanged || onlyCommented
+
   function toggle(p: string) {
-    const next = new Set(collapsed)
+    const next = new Set(expanded)
     next.has(p) ? next.delete(p) : next.add(p)
-    setCollapsed(next)
+    setExpanded(next)
+    saveExpanded(next)
   }
 
   function renderDir(d: Dir, depth: number): JSX.Element {
@@ -65,13 +113,15 @@ export function Tree() {
     return (
       <>
         {dirs.map((sub): JSX.Element => {
-          const isCollapsed = collapsed.has(sub.path) && !filter
+          const isCollapsed = !expanded.has(sub.path) && !filtering
           const n = count(sub)
+          const pending = isCollapsed ? countAnnotations(sub, annotationCounts) : 0
           return (
             <>
               <button class="tree-row dir" style={{ paddingLeft: `${depth * 14 + 8}px` }} onClick={() => toggle(sub.path)}>
                 <span class="caret">{isCollapsed ? '▸' : '▾'}</span>
                 <span class="name">{sub.name}/</span>
+                {pending > 0 && <span class="annotation-count" title={`未確認のAI指摘 ${pending}件`}>◆{pending}</span>}
                 {n > 0 && isCollapsed && <span class="count">{n}</span>}
               </button>
               {!isCollapsed && renderDir(sub, depth + 1)}

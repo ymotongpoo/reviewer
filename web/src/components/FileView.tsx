@@ -18,6 +18,7 @@ import { Thread } from './Thread'
 import { Preview } from './Preview'
 import { isMarkdown } from '../preview/render'
 import { AnnotationCard } from './AnnotationCard'
+import { isSeen, markSeen } from '../seen'
 
 interface Row {
   no: number
@@ -49,7 +50,12 @@ export function FileView({ path, line }: { path: string; line?: number }) {
   const [tokens, setTokens] = useState<Token[][] | undefined>()
   const [error, setError] = useState<string | null>(null)
   const [sel, setSel] = useState<Selection | null>(null)
-  const [openAnnotationLine, setOpenAnnotationLine] = useState<number | null>(null)
+  // Lines whose AI annotations the reviewer opened or closed explicitly;
+  // other lines open when they carry annotations not seen before.
+  const [annotationToggles, setAnnotationToggles] = useState<Map<number, boolean>>(new Map())
+  // Annotations that were new when they first appeared in this view. They
+  // stay open for this visit even though they are marked seen right away.
+  const [freshAnnotations, setFreshAnnotations] = useState<Set<string>>(new Set())
   const dragging = useRef(false)
   const lastPath = useRef(path)
   const fv = fileVersion.value
@@ -98,6 +104,7 @@ export function FileView({ path, line }: { path: string; line?: number }) {
   const lost = lineComments.filter((c) => !located.includes(c))
 
   const fileAnnotations = visibleAnnotations.value.filter((a) => a.path === path)
+  const unseenIds = fileAnnotations.filter((a) => a.state === 'pending' && !isSeen(a.id) && !freshAnnotations.has(a.id)).map((a) => a.id)
   const locatedAnnotations = fileAnnotations.filter((a) => a.loc && a.loc.state !== 'outdated' && a.loc.end <= lines.length)
   const lostAnnotations = fileAnnotations.filter((a) => !locatedAnnotations.includes(a))
   const annotationsByEnd = new Map<number, Annotation[]>()
@@ -125,6 +132,17 @@ export function FileView({ path, line }: { path: string; line?: number }) {
     if (!line || !file) return
     document.getElementById(`L${line}`)?.scrollIntoView({ block: 'center' })
   }, [line, file?.path])
+
+  useEffect(() => {
+    setAnnotationToggles(new Map())
+    setFreshAnnotations(new Set())
+  }, [path])
+
+  useEffect(() => {
+    if (unseenIds.length === 0) return
+    setFreshAnnotations((prev) => new Set([...prev, ...unseenIds]))
+    markSeen(unseenIds)
+  }, [unseenIds.join(',')])
 
   const showPreview = preview && isMarkdown(path)
   useEffect(() => {
@@ -253,7 +271,7 @@ export function FileView({ path, line }: { path: string; line?: number }) {
             </div>
           )}
           {lostAnnotations.length > 0 && (
-            <details class="lost annotations-lost">
+            <details class="lost annotations-lost" open={lostAnnotations.some((a) => a.state === 'pending' && (freshAnnotations.has(a.id) || !isSeen(a.id)))}>
               <summary class="lost-title">位置を特定できないAI指摘（{lostAnnotations.length}件）</summary>
               <div class="lost-list">
                 {lostAnnotations.map((a) => (
@@ -273,7 +291,10 @@ export function FileView({ path, line }: { path: string; line?: number }) {
           const composerHere = newLine && no === newLine.end
           const cov = no !== undefined ? covered.get(no) : undefined
           const lineAnnotations = no !== undefined ? annotationsByEnd.get(no) : undefined
-          const annotationOpen = openAnnotationLine === no && !!lineAnnotations
+          const annotationOpen =
+            !!lineAnnotations &&
+            (annotationToggles.get(no) ??
+              lineAnnotations.some((a) => a.state === 'pending' && (freshAnnotations.has(a.id) || !isSeen(a.id))))
           return (
             <>
               <div
@@ -295,7 +316,7 @@ export function FileView({ path, line }: { path: string; line?: number }) {
                       onMouseDown={(e) => e.stopPropagation()}
                       onClick={(e) => {
                         e.stopPropagation()
-                        setOpenAnnotationLine(annotationOpen ? null : no)
+                        setAnnotationToggles((m) => new Map(m).set(no, !annotationOpen))
                       }}
                     >
                       ◆{lineAnnotations.length > 1 ? lineAnnotations.length : ''}
