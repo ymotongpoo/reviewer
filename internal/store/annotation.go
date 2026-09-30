@@ -47,10 +47,12 @@ type Annotation struct {
 	Body       string         `json:"body"`
 	Evidence   []Evidence     `json:"evidence"`
 	Suggestion string         `json:"suggestion,omitempty"`
-	State      string         `json:"state"`
-	AdoptedAs  string         `json:"adoptedAs,omitempty"`
-	CreatedAt  time.Time      `json:"createdAt"`
-	UpdatedAt  time.Time      `json:"updatedAt"`
+	// SuggestionNote explains how reviewer adjusted the agent's proposal.
+	SuggestionNote string    `json:"suggestionNote,omitempty"`
+	State          string    `json:"state"`
+	AdoptedAs      string    `json:"adoptedAs,omitempty"`
+	CreatedAt      time.Time `json:"createdAt"`
+	UpdatedAt      time.Time `json:"updatedAt"`
 }
 
 // AnnotationImport records the latest annotations.json import.

@@ -1921,3 +1921,12 @@ table.frontmatter td {
   margin-top: 4px;
   font-size: 12px;
 }
+
+.suggestion-note {
+  margin-top: 6px;
+  padding: 4px 10px;
+  border-radius: 6px;
+  background: var(--warn-subtle);
+  color: var(--warn);
+  font-size: 12px;
+}

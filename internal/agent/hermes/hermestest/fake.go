@@ -52,8 +52,11 @@ type Fake struct {
 	// ModifyAnnotationTarget appends a line to one target file after writing
 	// annotations.json, for edit-detection tests.
 	ModifyAnnotationTarget bool
-	FailCreateSession      bool
-	FailStart              bool
+	// PartialSuggestions adds annotations that fix one sentence of a line with
+	// several: one with edits and one whose suggestion is only that sentence.
+	PartialSuggestions bool
+	FailCreateSession  bool
+	FailStart          bool
 
 	mu              sync.Mutex
 	runs            map[string]*run
@@ -296,7 +299,9 @@ func (f *Fake) stream(w http.ResponseWriter, r *http.Request, rn *run) {
 }
 
 var instructionsPathRE = regexp.MustCompile("`([^`]+/instructions\\.md)`")
-var backtickPathRE = regexp.MustCompile("`([^`]+)`")
+// backtickPathRE matches absolute paths in backticks on one line, so that
+// code fences elsewhere in the instructions cannot shift the pairing.
+var backtickPathRE = regexp.MustCompile("`(/[^`\n]+)`")
 var requestIDRE = regexp.MustCompile(`(?m)^# AI review request (Q-[0-9]+)$`)
 
 func (f *Fake) writeAnnotations(input string) {
@@ -384,8 +389,11 @@ func (f *Fake) writeAnnotations(input string) {
 			"body": "（fakehermes）補足説明を確認してください。", "evidence": []map[string]string{},
 		},
 	}
+	if f.PartialSuggestions {
+		annotations = append(annotations, partialSuggestionAnnotations(readable[0].lines, rel(readable[0].path))...)
+	}
 	out, _ := json.MarshalIndent(map[string]any{
-		"request": requestID, "annotations": annotations, "summary": "fakehermes が2件の指摘を作成しました",
+		"request": requestID, "annotations": annotations, "summary": fmt.Sprintf("fakehermes が%d件の指摘を作成しました", len(annotations)),
 	}, "", "  ")
 	if err := os.WriteFile(output, append(out, '\n'), 0o644); err != nil {
 		return
@@ -397,6 +405,29 @@ func (f *Fake) writeAnnotations(input string) {
 			file.Close()
 		}
 	}
+}
+
+// partialSuggestionAnnotations fixes the second sentence of the first line
+// that has at least two Japanese sentences, once with edits and once with a
+// suggestion that restates only that sentence.
+func partialSuggestionAnnotations(lines []string, path string) []map[string]any {
+	for i, line := range lines {
+		parts := strings.SplitAfter(line, "。")
+		if len(parts) < 3 || strings.TrimSpace(parts[1]) == "" {
+			continue
+		}
+		second := parts[1]
+		fixed := strings.TrimSuffix(second, "。") + "（修正済み）。"
+		base := map[string]any{"path": path, "startLine": i + 1, "endLine": i + 1, "quote": []string{line},
+			"severity": "minor", "confidence": "high", "label": "suggestion", "evidence": []map[string]string{}}
+		withEdits := map[string]any{"body": "（fakehermes）2文目の訳を直してください（edits）。", "edits": []map[string]string{{"find": second, "replace": fixed}}}
+		partial := map[string]any{"body": "（fakehermes）2文目の訳を直してください（一部だけの suggestion）。", "suggestion": fixed}
+		for k, v := range base {
+			withEdits[k], partial[k] = v, v
+		}
+		return []map[string]any{withEdits, partial}
+	}
+	return nil
 }
 
 func firstNonEmpty(lines []string, start int) int {

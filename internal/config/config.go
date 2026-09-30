@@ -34,9 +34,32 @@ const DefaultAnnotationPrompt = `文書に含まれる事実上または技術�
 事実に関する指摘には、確認に使った一次情報または信頼できる出典の URL と、判断を裏付ける該当箇所の引用を必ず付けてください。
 根拠を確認できない推測は指摘として提出せず、確認が必要な事項として confidence を low にしてください。`
 
+// TranslationReviewPrompt asks the agent to find mistranslations against
+// the source text.
+const TranslationReviewPrompt = `対象ファイルは翻訳文です。原文と突き合わせて、誤訳を確認してください。
+
+原文は次のどちらかにあります。
+- 同じリポジトリにある翻訳元のファイル。パスの対応から探してください（例: content/ja/docs/foo.md に対する content/en/docs/foo.md、README.ja.md に対する README.md、docs/ja/ に対する docs/en/ や docs/）。
+- 文書の中に併記・引用されている原文。
+原文を特定できない場合は、推測で指摘せず、summary にその旨と探した場所を書いてください。原文の候補が複数ある場合は、使った原文を summary に書いてください。
+
+指摘するのは、原文と意味が食い違う箇所です。
+- 意味の取り違え、主語・目的語・修飾関係の誤り
+- 訳抜け（原文にある内容が無い）と、訳の追加（原文に無い内容がある）
+- 否定、条件、数量、数値、単位、固有名詞、コード・コマンド・設定値の誤り
+- 同じ原語に別の訳語を使っているなど、文書内の用語の不統一
+意味が同じで、文体や語順、好みだけが違うものは指摘しないでください。
+
+各指摘の body には、原文の該当箇所、何が誤っているか、正しい意味を書いてください。evidence には、url に原文のファイルパス（リポジトリ内なら対象ファイルと同じ形式のパス）か URL を、quote に原文の該当文を入れてください。
+
+置換案について：翻訳文の1行には複数の文があることがよくあります。直すのが行の一部の文や語だけなら、必ず edits を使い、find に誤訳の部分を quote のとおりに、replace に修正した訳を書いてください。suggestion は、行全体を訳し直す場合だけに使い、その場合は直さない文も含めて行全体を書いてください。`
+
 // BuiltinPresets returns a copy of the built-in annotation presets.
 func BuiltinPresets() []Preset {
-	return []Preset{{Name: "技術的な誤りの検出", Prompt: DefaultAnnotationPrompt, Scope: "all"}}
+	return []Preset{
+		{Name: "技術的な誤りの検出", Prompt: DefaultAnnotationPrompt, Scope: "all"},
+		{Name: "誤訳の修正", Prompt: TranslationReviewPrompt, Scope: "current"},
+	}
 }
 
 // Config is the merged configuration.

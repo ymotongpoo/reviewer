@@ -42,6 +42,7 @@ func main() {
 
 	now := float64(time.Now().Unix())
 	f := &hermestest.Fake{
+		PartialSuggestions:     true,
 		Key:                    *key,
 		Keepalive:              time.Second,
 		ModifyAnnotationTarget: *modifyAnnotationTarget,

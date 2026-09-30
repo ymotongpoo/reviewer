@@ -35,6 +35,7 @@ func Instructions(d InstructionData) []byte {
 	b.WriteString("- `quote` には指摘対象の行を改変せず、行ごとの文字列として必ず入れてください。行番号より `quote` を優先して位置を確認します。\n")
 	b.WriteString("- 事実や技術仕様に関する指摘には、根拠となる URL を `evidence` に必ず入れてください。可能なら根拠箇所の引用も添えてください。\n")
 	b.WriteString("- 同じ問題を重複して報告しないでください。判断できない項目は無理に指摘せず、必要な場合は `confidence` を `low` にしてください。\n\n")
+	b.WriteString(suggestionRules)
 	b.WriteString("## 値の定義\n\n")
 	b.WriteString("`severity` は次のいずれかです。\n\n")
 	b.WriteString("- `critical`: 内容が成り立たない重大な事実誤り、動作しない手順、または重大な危険がある\n")
@@ -44,9 +45,34 @@ func Instructions(d InstructionData) []byte {
 	b.WriteString("`confidence` は `high`、`medium`、`low` のいずれかです。`label` は `must`、`suggestion`、`question`、`nit` のいずれかを提案できます。\n\n")
 	b.WriteString("## 出力形式\n\n")
 	fmt.Fprintf(&b, "確認後、次の形式の JSON を `%s` に書いてください。コードフェンスは付けないでください。\n\n", d.OutputPath)
-	fmt.Fprintf(&b, "```json\n{\n  \"request\": %q,\n  \"annotations\": [\n    {\n      \"path\": \"docs/ch1.md\",\n      \"startLine\": 12,\n      \"endLine\": 14,\n      \"quote\": [\"指摘対象の原文\"],\n      \"severity\": \"major\",\n      \"confidence\": \"high\",\n      \"label\": \"must\",\n      \"body\": \"何が誤っているかと影響を説明します\",\n      \"evidence\": [\n        {\"url\": \"https://example.com/source\", \"quote\": \"根拠となる記述\", \"note\": \"確認方法\"}\n      ],\n      \"suggestion\": \"置換案（任意）\"\n    }\n  ],\n  \"summary\": \"全体の所見（任意）\"\n}\n```\n", d.RequestID)
+	fmt.Fprintf(&b, "```json\n{\n  \"request\": %q,\n  \"annotations\": [\n    {\n      \"path\": \"docs/ch1.md\",\n      \"startLine\": 12,\n      \"endLine\": 14,\n      \"quote\": [\"指摘対象の原文\"],\n      \"severity\": \"major\",\n      \"confidence\": \"high\",\n      \"label\": \"must\",\n      \"body\": \"何が誤っているかと影響を説明します\",\n      \"evidence\": [\n        {\"url\": \"https://example.com/source\", \"quote\": \"根拠となる記述\", \"note\": \"確認方法\"}\n      ],\n      \"edits\": [{\"find\": \"quote の中の直す前の文字列\", \"replace\": \"直した後の文字列\"}]\n    }\n  ],\n  \"summary\": \"全体の所見（任意）\"\n}\n```\n", d.RequestID)
 	return []byte(b.String())
 }
+
+// suggestionRules explains how replacement proposals are applied. Adopting
+// a proposal replaces every quoted line, so a proposal that restates only
+// the changed sentence deletes the rest of the line. "~" stands for a
+// backtick, which a raw string cannot contain.
+var suggestionRules = strings.ReplaceAll(`## 置換案の書き方
+
+置換案は、採用すると ~quote~ の行全体（~startLine~ から ~endLine~ まで）を置き換えます。置換案に書かれていない文や語は削除されます。次のどちらかで書いてください。
+
+- ~edits~（行の一部だけを直すとき。こちらを優先してください）: ~find~ に ~quote~ の中の直す前の文字列を一字一句そのまま、~replace~ に直した後の文字列を書きます。reviewer が ~quote~ に当てはめて行全体の置換案を作ります。複数書けます。~find~ は ~quote~ の中で1箇所に決まる長さにしてください。
+- ~suggestion~（行全体を書き直すとき）: ~quote~ の全行を置き換えた後の全文を書きます。直さない文や語も省略せずに含め、行数は原則として ~quote~ と同じにします。
+
+~edits~ と ~suggestion~ は同時に使わないでください。置換案が無い指摘ではどちらも省略します。
+
+例として、1行に3つの文がある次の行の、2文目だけを直す場合を示します。
+
+~~~text
+quote: ["OpenTelemetry はベンダー中立です。トレースは3種類のシグナルの1つです。詳しくは次の節で説明します。"]
+~~~
+
+- 誤り: ~"suggestion": "トレースは3種類のシグナルのうちの1つです。"~（1文目と3文目が消えます）
+- 正しい: ~"edits": [{"find": "3種類のシグナルの1つ", "replace": "3種類のシグナルのうちの1つ"}]~
+- 正しい: ~"suggestion": "OpenTelemetry はベンダー中立です。トレースは3種類のシグナルのうちの1つです。詳しくは次の節で説明します。"~
+
+`, "~", "`")
 
 // Snapshot is one target file at request time.
 type Snapshot struct {
@@ -77,7 +103,10 @@ type Annotation struct {
 	Body          string     `json:"body"`
 	Evidence      []Evidence `json:"evidence"`
 	Suggestion    string     `json:"suggestion,omitempty"`
+	Edits         []Edit     `json:"edits,omitempty"`
 	Located       bool       `json:"-"`
+	// SuggestionNote tells the reviewer how the proposal was adjusted.
+	SuggestionNote string `json:"-"`
 }
 
 // Response is the validated content of annotations.json.
@@ -157,6 +186,11 @@ func ParseResponse(b []byte, request string, snapshots map[string]Snapshot) (*Re
 		}
 		if entry.Evidence == nil {
 			entry.Evidence = []Evidence{}
+		}
+		note, warn := normalizeSuggestion(&entry)
+		entry.SuggestionNote = note
+		if warn != "" {
+			warnings = append(warnings, fmt.Sprintf("annotations[%d]: %s", i, warn))
 		}
 		valid = append(valid, entry)
 	}

@@ -446,7 +446,7 @@ func (a *App) storedAnnotation(id, request string, p annotationdoc.Annotation, s
 		ID: id, Request: request, Path: p.Path,
 		OrigStart: p.StartLine, OrigEnd: p.EndLine, OrigBlob: snap.Blob,
 		Severity: p.Severity, Confidence: p.Confidence, Label: p.Label,
-		Body: p.Body, Suggestion: p.Suggestion, State: store.AnnotationPending,
+		Body: p.Body, Suggestion: p.Suggestion, SuggestionNote: p.SuggestionNote, State: store.AnnotationPending,
 		Evidence: []store.Evidence{}, CreatedAt: now, UpdatedAt: now,
 	}
 	for _, e := range p.Evidence {

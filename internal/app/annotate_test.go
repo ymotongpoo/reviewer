@@ -304,7 +304,7 @@ func TestPresetMergingAndSaving(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(merged) != 3 || merged[0].Origin != "builtin" || merged[1].Origin != "project" || merged[1].Prompt != "プロジェクトの用語を確認" || merged[2].Origin != "project" {
+	if len(merged) != 4 || merged[0].Origin != "builtin" || merged[1].Origin != "builtin" || merged[2].Origin != "project" || merged[2].Prompt != "プロジェクトの用語を確認" || merged[3].Origin != "project" {
 		t.Fatalf("presets = %+v", merged)
 	}
 	if _, err := os.Stat(filepath.Join(a.DataDir, "presets.toml")); err != nil {
@@ -618,5 +618,47 @@ func TestAnnotateDeletesRequestWhenHermesSetupFails(t *testing.T) {
 				t.Fatalf("run requests = %+v", fake.Requests)
 			}
 		})
+	}
+}
+
+// A fix of one sentence in a line with several must not drop the others
+// when adopted, whether the agent sent edits or only the fixed sentence.
+func TestAdoptPartialSuggestionKeepsOtherSentences(t *testing.T) {
+	a, root := setup(t)
+	line := "OpenTelemetry はベンダー中立です。トレースは3種類のシグナルの1つです。詳しくは次の節で説明します。"
+	write(t, root, "ja.md", "# 翻訳\n\n"+line+"\n")
+	fake := &hermestest.Fake{Key: "k", PartialSuggestions: true}
+	ts := httptest.NewServer(fake)
+	defer ts.Close()
+	a.ConfigureAgent(hermes.New(hermes.Options{URL: ts.URL, APIKey: "k"}), "", &recNotifier{}, "test", "http://reviewer/")
+
+	result, err := a.Annotate(context.Background(), AnnotateInput{Preset: "誤訳の修正", Paths: []string{"ja.md"}, Target: AnnotationTargetNew})
+	if err != nil {
+		t.Fatal(err)
+	}
+	waitFor(t, "annotation run", func() bool { return len(a.AgentInfo().Active) == 0 })
+	want := "OpenTelemetry はベンダー中立です。トレースは3種類のシグナルの1つです（修正済み）。詳しくは次の節で説明します。"
+	var partial int
+	for _, ann := range a.Annotations() {
+		if ann.Request != result.Request.ID || !strings.Contains(ann.Body, "2文目") {
+			continue
+		}
+		partial++
+		if ann.Suggestion != want {
+			t.Errorf("%s suggestion = %q, want %q", ann.ID, ann.Suggestion, want)
+		}
+		if strings.Contains(ann.Body, "一部だけ") && ann.SuggestionNote == "" {
+			t.Errorf("%s has no note for the repaired suggestion", ann.ID)
+		}
+		c, err := a.AdoptAnnotation(ann.ID, AnnotationAdoptPatch{})
+		if err != nil {
+			t.Fatal(err)
+		}
+		if c.Scope != "line" || c.Loc.Start != 3 || !strings.Contains(c.Body, "```suggestion\n"+want+"\n```") {
+			t.Errorf("adopted comment = scope %s loc %+v body %q", c.Scope, c.Loc, c.Body)
+		}
+	}
+	if partial != 2 {
+		t.Fatalf("partial annotations = %d", partial)
 	}
 }

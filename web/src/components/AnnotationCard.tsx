@@ -69,6 +69,7 @@ export function AnnotationCard({ annotation: a, original }: { annotation: Annota
           ))}
         </div>
       )}
+      {a.suggestionNote && <div class="suggestion-note">⚠ {a.suggestionNote}</div>}
       {suggestion && <div class="md" dangerouslySetInnerHTML={{ __html: renderMarkdown(suggestion, original) }} />}
       <div class="annotation-actions">
         {a.state === 'pending' ? (

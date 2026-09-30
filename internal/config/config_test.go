@@ -36,10 +36,10 @@ prompt = "ignored"
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(cfg.Presets) != 2 {
+	if len(cfg.Presets) != 3 {
 		t.Fatalf("presets = %+v", cfg.Presets)
 	}
-	if cfg.Presets[0].Name != "技術的な誤りの検出" || cfg.Presets[1].Name != "全体確認" {
+	if cfg.Presets[0].Name != "技術的な誤りの検出" || cfg.Presets[1].Name != "誤訳の修正" || cfg.Presets[2].Name != "全体確認" {
 		t.Errorf("presets = %+v", cfg.Presets)
 	}
 }

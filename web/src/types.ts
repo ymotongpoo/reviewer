@@ -238,6 +238,8 @@ export interface Annotation {
   body: string
   evidence: AnnotationEvidence[]
   suggestion?: string
+  /** How reviewer adjusted the agent's proposal, if it did. */
+  suggestionNote?: string
   state: AnnotationState
   adoptedAs?: string
   createdAt: string
