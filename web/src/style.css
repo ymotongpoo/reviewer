@@ -759,6 +759,17 @@ button.chip {
 .sg-del {
   background: var(--del-bg);
 }
+.sg-inline-add {
+  background: var(--ins-gutter);
+  color: var(--success);
+  font-weight: 700;
+}
+.sg-inline-del {
+  background: var(--del-gutter);
+  color: var(--danger);
+  font-weight: 700;
+  text-decoration: line-through;
+}
 
 /* Composer */
 .composer {
