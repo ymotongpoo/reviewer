@@ -1,0 +1,22 @@
+web/src/components/CommentList.tsx
+  h_bf0ada3931f770 1-88
+web/src/components/FileView.tsx
+  h_bf0ada3931f770 21,53,244,263,285
+web/src/components/Tree.tsx
+  h_bf0ada3931f770 3,141-154,156-165
+web/src/state.ts
+  h_bf0ada3931f770 28-43
+web/src/style.css
+  h_bf0ada3931f770 469-534
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "e067b9d9c807776444d9f9e172c84778365f3157",
+  "prompts": {},
+  "humans": {
+    "h_bf0ada3931f770": {
+      "author": "Yoshi Yamaguchi <ymotongpoo@gmail.com>"
+    }
+  }
+}
