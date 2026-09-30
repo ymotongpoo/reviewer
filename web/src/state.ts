@@ -78,6 +78,7 @@ export const visibleAnnotations = computed(() => {
     (a) =>
       !hidden.has(a.request) &&
       a.state !== 'adopted' &&
+      !a.adoptedAs &&
       (a.state === 'pending' || showDismissedAnnotations.value) &&
       (annotationSeverity.value === 'all' || a.severity === annotationSeverity.value),
   )

@@ -538,7 +538,7 @@ func (a *App) Annotations(all ...bool) []*store.Annotation {
 	}
 	out := []*store.Annotation{}
 	for _, ann := range a.Store.Annotations() {
-		if (len(all) > 0 && all[0]) || (ann.State == store.AnnotationPending && !hidden[ann.Request]) {
+		if (len(all) > 0 && all[0]) || (ann.State == store.AnnotationPending && ann.AdoptedAs == "" && !hidden[ann.Request]) {
 			out = append(out, ann)
 		}
 	}

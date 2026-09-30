@@ -621,6 +621,50 @@ func TestAnnotateDeletesRequestWhenHermesSetupFails(t *testing.T) {
 	}
 }
 
+func TestAdoptedAnnotationStaysHiddenAfterReload(t *testing.T) {
+	a, root := setup(t)
+	req := annotationFixture(t, a)
+	if _, err := a.ImportAnnotations(req.ID); err != nil {
+		t.Fatal(err)
+	}
+	anns := a.Annotations()
+	if len(anns) == 0 {
+		t.Fatal("no annotations imported")
+	}
+	var adoptedIDs = map[string]string{}
+	for _, ann := range anns {
+		comment, err := a.AdoptAnnotation(ann.ID, AnnotationAdoptPatch{})
+		if err != nil {
+			t.Fatal(err)
+		}
+		adoptedIDs[ann.ID] = comment.ID
+	}
+	if got := a.Annotations(); len(got) != 0 {
+		t.Fatalf("adopted annotations are visible = %+v", got)
+	}
+
+	// A reload must not make adopted annotations visible again.
+	reloaded, err := New(root, config.Default(), nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := reloaded.Init(); err != nil {
+		t.Fatal(err)
+	}
+	if got := reloaded.Annotations(); len(got) != 0 {
+		t.Fatalf("adopted annotation visible after reload = %+v", got)
+	}
+	all := reloaded.Annotations(true)
+	if len(all) != len(adoptedIDs) {
+		t.Fatalf("adopted annotations after reload = %+v", all)
+	}
+	for _, ann := range all {
+		if ann.State != store.AnnotationAdopted || ann.AdoptedAs != adoptedIDs[ann.ID] {
+			t.Fatalf("adopted annotation state after reload = %+v", ann)
+		}
+	}
+}
+
 // A fix of one sentence in a line with several must not drop the others
 // when adopted, whether the agent sent edits or only the fixed sentence.
 func TestAdoptPartialSuggestionKeepsOtherSentences(t *testing.T) {
