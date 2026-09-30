@@ -183,14 +183,13 @@ func TestReimportPreservesReviewedAnnotationsWithoutIDCollision(t *testing.T) {
 	}
 
 	all := a.Annotations(true)
-	if len(all) != 4 {
+	if len(all) != 3 {
 		t.Fatalf("annotations = %+v", all)
 	}
 	wantStates := map[string]string{
 		"A-1": store.AnnotationAdopted,
 		"A-2": store.AnnotationDismissed,
 		"A-3": store.AnnotationPending,
-		"A-4": store.AnnotationPending,
 	}
 	for _, ann := range all {
 		if ann.State != wantStates[ann.ID] {
@@ -198,12 +197,12 @@ func TestReimportPreservesReviewedAnnotationsWithoutIDCollision(t *testing.T) {
 		}
 	}
 	if all[0].Body != "技術的に誤っています" || all[1].Body != "確認してください" {
-		t.Fatalf("reviewed annotations changed = %+v", all[:2])
+		t.Fatalf("reviewed annotations changed = %+v", all)
 	}
-	if all[2].Body != "差し替え後の指摘1" || all[3].Body != "差し替え後の指摘2" {
-		t.Fatalf("replacement annotations = %+v", all[2:])
+	if all[2].Body != "差し替え後の指摘2" {
+		t.Fatalf("replacement annotation = %+v", all[2])
 	}
-	if next := a.Store.NewAnnotationID(); next != "A-5" {
+	if next := a.Store.NewAnnotationID(); next != "A-4" {
 		t.Fatalf("next annotation ID = %s", next)
 	}
 }

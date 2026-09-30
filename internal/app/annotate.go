@@ -405,8 +405,16 @@ func (a *App) importAnnotations(id string) (bool, error) {
 		info.Error = parseErr.Error()
 	} else {
 		reusableIDs := []string{}
+		adopted := []*store.Annotation{}
 		for _, old := range a.Store.Annotations() {
-			if old.Request == id && old.State == store.AnnotationPending {
+			if old.Request != id {
+				continue
+			}
+			if old.State == store.AnnotationAdopted {
+				adopted = append(adopted, old)
+				continue
+			}
+			if old.State == store.AnnotationPending {
 				reusableIDs = append(reusableIDs, old.ID)
 				if err := a.Store.DeleteAnnotation(old.ID); err != nil {
 					return false, err
@@ -414,14 +422,20 @@ func (a *App) importAnnotations(id string) (bool, error) {
 			}
 		}
 		info.Summary, info.Warnings = resp.Summary, warnings
-		for i, parsed := range resp.Annotations {
+		for _, parsed := range resp.Annotations {
+			snap := snapshots[parsed.Path]
+			if hasAdoptedMatch(adopted, id, parsed, snap) {
+				info.Count++
+				changedPaths = append(changedPaths, parsed.Path)
+				continue
+			}
 			annotationID := ""
-			if i < len(reusableIDs) {
-				annotationID = reusableIDs[i]
+			if len(reusableIDs) > 0 {
+				annotationID, reusableIDs = reusableIDs[0], reusableIDs[1:]
 			} else {
 				annotationID = a.Store.NewAnnotationID()
 			}
-			ann := a.storedAnnotation(annotationID, id, parsed, snapshots[parsed.Path])
+			ann := a.storedAnnotation(annotationID, id, parsed, snap)
 			if err := a.Store.PutAnnotation(ann); err != nil {
 				return false, err
 			}
@@ -438,6 +452,20 @@ func (a *App) importAnnotations(id string) (bool, error) {
 	a.notify(Event{Type: "annotations", Paths: compactStrings(changedPaths), Request: id})
 	a.notify(Event{Type: "annotate", Request: id})
 	return true, nil
+}
+
+func annotationIdentityMatches(a, b *store.Annotation) bool {
+	return a.Request == b.Request && a.Path == b.Path && a.OrigStart == b.OrigStart && a.OrigEnd == b.OrigEnd && a.OrigBlob == b.OrigBlob
+}
+
+func hasAdoptedMatch(adopted []*store.Annotation, request string, parsed annotationdoc.Annotation, snap annotationdoc.Snapshot) bool {
+	candidate := &store.Annotation{Request: request, Path: parsed.Path, OrigStart: parsed.StartLine, OrigEnd: parsed.EndLine, OrigBlob: snap.Blob}
+	for _, old := range adopted {
+		if annotationIdentityMatches(old, candidate) {
+			return true
+		}
+	}
+	return false
 }
 
 func (a *App) storedAnnotation(id, request string, p annotationdoc.Annotation, snap annotationdoc.Snapshot) *store.Annotation {
@@ -537,7 +565,25 @@ func (a *App) Annotations(all ...bool) []*store.Annotation {
 		hidden[req.ID] = req.Hidden
 	}
 	out := []*store.Annotation{}
+	adopted := []*store.Annotation{}
 	for _, ann := range a.Store.Annotations() {
+		if ann.State == store.AnnotationAdopted {
+			adopted = append(adopted, ann)
+		}
+	}
+	for _, ann := range a.Store.Annotations() {
+		duplicate := false
+		if ann.State == store.AnnotationPending {
+			for _, old := range adopted {
+				if annotationIdentityMatches(old, ann) {
+					duplicate = true
+					break
+				}
+			}
+		}
+		if duplicate {
+			continue
+		}
 		if (len(all) > 0 && all[0]) || (ann.State == store.AnnotationPending && ann.AdoptedAs == "" && !hidden[ann.Request]) {
 			out = append(out, ann)
 		}
