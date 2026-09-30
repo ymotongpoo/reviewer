@@ -1,0 +1,16 @@
+internal/app/annotate.go
+  h_bf0ada3931f770 408,410-417,425-431,433-434,438,457-470,568,570-586
+internal/app/annotate_test.go
+  h_bf0ada3931f770 186,200,202-203,205
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "9aea2246be1e2e2e9e2335c417c3ac72abc8ce0b",
+  "prompts": {},
+  "humans": {
+    "h_bf0ada3931f770": {
+      "author": "Yoshi Yamaguchi <ymotongpoo@gmail.com>"
+    }
+  }
+}
