@@ -1,0 +1,16 @@
+web/src/markdown.ts
+  h_bf0ada3931f770 14,19
+web/src/style.css
+  h_bf0ada3931f770 737,740-741,744-748
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "bf849f21b7c03ef196034a3c42edf09ba7b7fb32",
+  "prompts": {},
+  "humans": {
+    "h_bf0ada3931f770": {
+      "author": "Yoshi Yamaguchi <ymotongpoo@gmail.com>"
+    }
+  }
+}
