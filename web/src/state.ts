@@ -25,6 +25,22 @@ export const presets = signal<Preset[]>([])
 export const annotations = signal<Annotation[]>([])
 export const annotationRequests = signal<AnnotationRequestView[]>([])
 
+export type CommentListKind = 'human' | 'ai'
+export interface CommentListSelection {
+  path: string
+  kind: CommentListKind
+}
+export const commentListSelection = signal<CommentListSelection | null>(null)
+
+export function showCommentList(path: string, kind: CommentListKind) {
+  const current = commentListSelection.value
+  commentListSelection.value = current?.path === path && current.kind === kind ? null : { path, kind }
+}
+
+export function closeCommentList() {
+  commentListSelection.value = null
+}
+
 function stored<T>(key: string, fallback: T): T {
   try {
     const value = localStorage.getItem(key)

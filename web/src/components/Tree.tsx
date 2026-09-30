@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'preact/hooks'
 import { projectId } from '../api'
-import { comments, info, tree, visibleAnnotations } from '../state'
+import { comments, info, showCommentList, tree, visibleAnnotations } from '../state'
 import { fileHref, route } from '../router'
 import type { TreeFile } from '../types'
 import type { JSX } from 'preact'
@@ -138,9 +138,31 @@ export function Tree() {
             <span class="name">{f.path.split('/').pop()}</span>
             {f.new && <span class="mark new" title="前回の提出後に追加されたファイル">新規</span>}
             {f.changed && <span class="mark changed" title="前回の提出後に変更されたファイル">●</span>}
-            {f.unresolved > 0 && <span class="count">{f.unresolved}</span>}
+            {f.unresolved > 0 && (
+              <span
+                class="count comment-list-trigger"
+                title="人間コメント一覧を表示"
+                onClick={(e) => {
+                  e.preventDefault()
+                  e.stopPropagation()
+                  showCommentList(f.path, 'human')
+                  location.hash = fileHref(f.path)
+                }}
+              >
+                {f.unresolved}
+              </span>
+            )}
             {(annotationCounts.get(f.path) ?? 0) > 0 && (
-              <span class="annotation-count" title="表示中の未採用AI指摘">
+              <span
+                class="annotation-count comment-list-trigger"
+                title="AIコメント一覧を表示"
+                onClick={(e) => {
+                  e.preventDefault()
+                  e.stopPropagation()
+                  showCommentList(f.path, 'ai')
+                  location.hash = fileHref(f.path)
+                }}
+              >
                 ◆{annotationCounts.get(f.path)}
               </span>
             )}
