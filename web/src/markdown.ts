@@ -11,12 +11,12 @@ export function suggestionHTML(original: string[] | undefined, suggestion: strin
   const next = suggestion === '' ? [] : suggestion.replace(/\n$/, '').split('\n')
   const rows: string[] = []
   if (!original) {
-    for (const l of next) rows.push(`<div class="sg-row sg-add"><span class="sg-sign">+</span>${escape(l) || ' '}</div>`)
+    for (const l of next) rows.push(`<div class="sg-row sg-add"><span class="sg-sign">+</span><span class="sg-content">${escape(l) || ' '}</span></div>`)
   } else {
     for (const part of diffArrays(original, next)) {
       const cls = part.added ? 'sg-add' : part.removed ? 'sg-del' : 'sg-eq'
       const sign = part.added ? '+' : part.removed ? '-' : ' '
-      for (const l of part.value) rows.push(`<div class="sg-row ${cls}"><span class="sg-sign">${sign}</span>${escape(l) || ' '}</div>`)
+      for (const l of part.value) rows.push(`<div class="sg-row ${cls}"><span class="sg-sign">${sign}</span><span class="sg-content">${escape(l) || ' '}</span></div>`)
     }
   }
   return `<div class="suggestion"><div class="sg-title">修正案</div><div class="sg-body">${rows.join('')}</div></div>`

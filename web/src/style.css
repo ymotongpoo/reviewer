@@ -734,11 +734,17 @@ button.chip {
   font-family: var(--mono);
   font-size: 12.5px;
   line-height: 20px;
-  overflow-x: auto;
+  overflow-x: hidden;
 }
 .sg-row {
-  white-space: pre;
+  display: grid;
+  grid-template-columns: 20px minmax(0, 1fr);
   padding-right: 8px;
+}
+.sg-content {
+  min-width: 0;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
 }
 .sg-sign {
   display: inline-block;
