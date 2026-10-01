@@ -1,0 +1,32 @@
+internal/app/app_test.go
+  h_bf0ada3931f770 121-123
+internal/app/history.go
+  h_bf0ada3931f770 49,118-119,122-135,139,182-186,193,197-208,211-224,233,245-249
+internal/server/server.go
+  h_bf0ada3931f770 279,284
+web/src/api.ts
+  h_bf0ada3931f770 67-70
+web/src/components/Overview.tsx
+  h_bf0ada3931f770 161-170
+web/src/components/RoundHistory.tsx
+  h_bf0ada3931f770 19-20,25,33,36,46-51,55,69,93,103,106
+web/src/main.tsx
+  h_bf0ada3931f770 36
+web/src/router.ts
+  h_bf0ada3931f770 6,12-13,24-26
+web/src/style.css
+  h_bf0ada3931f770 1599-1619
+web/src/types.ts
+  h_bf0ada3931f770 146
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "019b17cfcd89207c68e0b058fcd4f2ef8109c6bc",
+  "prompts": {},
+  "humans": {
+    "h_bf0ada3931f770": {
+      "author": "Yoshi Yamaguchi <ymotongpoo@gmail.com>"
+    }
+  }
+}
