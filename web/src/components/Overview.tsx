@@ -158,7 +158,16 @@ export function Overview() {
                   <td>{r.submittedAt ? fmt(r.submittedAt) : '—'}</td>
                   <td>{r.submittedAt ? r.comments : '—'}</td>
                   <td>{r.response ? (r.response.error ? 'エラー' : `${r.response.count}件`) : r.submittedAt ? '未着' : '—'}</td>
-                  <td>{r.submittedAt ? <a href={roundHref(r.round)}>差分を見る</a> : '—'}</td>
+                  <td>
+                    {r.submittedAt ? (
+                      <span class="round-diff-links">
+                        <a href={roundHref(r.round, undefined, 'review')}>レビュー前後</a>
+                        <a href={roundHref(r.round, undefined, 'agent')}>エージェント修正</a>
+                      </span>
+                    ) : (
+                      '—'
+                    )}
+                  </td>
                 </tr>
               ))}
             </tbody>

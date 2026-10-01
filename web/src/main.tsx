@@ -33,7 +33,7 @@ function App() {
           {r.page === 'file' ? (
             <FileView key="file" path={r.path} line={r.line} />
           ) : r.page === 'round' ? (
-            <RoundHistory round={r.round} path={r.path} />
+            <RoundHistory round={r.round} path={r.path} phase={r.phase} />
           ) : (
             <Overview />
           )}

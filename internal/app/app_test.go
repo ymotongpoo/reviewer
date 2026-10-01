@@ -118,6 +118,9 @@ func TestRoundTrip(t *testing.T) {
 	if d, err := a.RoundDiff(1, "ch1.md"); err != nil || len(d.Ops) < 2 {
 		t.Errorf("diff = %+v %v", d, err)
 	}
+	if d, err := a.RoundDiffMode(1, "ch1.md", "review"); err != nil || d.Phase != "review" || d.ToRound != 1 || len(d.Ops) == 0 {
+		t.Errorf("review diff = %+v %v", d, err)
+	}
 	if _, err := a.RoundChanges(2); err == nil {
 		t.Error("changes of an unsubmitted round")
 	}

@@ -16,12 +16,13 @@ function withComments(list: RoundComment[]): { at: RoundComment; c: Comment }[] 
   })
 }
 
-function rangeText(c: { round: number; toRound: number }) {
+function rangeText(c: { round: number; toRound: number }, phase: 'review' | 'agent' = 'agent') {
+  if (phase === 'review') return `ラウンド${c.round}の開始 → 提出`
   return c.toRound ? `ラウンド${c.round}の提出 → ラウンド${c.toRound}の開始` : `ラウンド${c.round}の提出 → 現在`
 }
 
 /** What changed in response to a round's feedback. */
-export function RoundHistory({ round, path }: { round: number; path?: string }) {
+export function RoundHistory({ round, path, phase = 'agent' }: { round: number; path?: string; phase?: 'review' | 'agent' }) {
   const [changes, setChanges] = useState<RoundChanges | null>(null)
   const [error, setError] = useState<string | null>(null)
   const fv = fileVersion.value.n
@@ -29,10 +30,10 @@ export function RoundHistory({ round, path }: { round: number; path?: string }) 
   useEffect(() => {
     setError(null)
     api
-      .roundChanges(round)
+      .roundChanges(round, phase)
       .then(setChanges)
       .catch((e) => setError(e instanceof ApiError ? e.message : String(e)))
-  }, [round, fv])
+  }, [round, phase, fv])
 
   if (error) return <div class="empty error">{error}</div>
   if (!changes) return <div class="empty">読み込み中…</div>
@@ -42,12 +43,16 @@ export function RoundHistory({ round, path }: { round: number; path?: string }) 
       <div class="history-side">
         <div class="history-title">
           <a href="#/">← 概要</a>
-          <h2>ラウンド{round}の修正</h2>
-          <div class="muted small">{rangeText(changes)}</div>
+          <h2>ラウンド{round}の{phase === 'review' ? 'レビュー前後の差分' : 'エージェント修正'}</h2>
+          <div class="history-mode-links">
+            <a class={`btn small ${phase === 'review' ? 'active' : ''}`} href={roundHref(round, path, 'review')}>レビュー前後</a>
+            <a class={`btn small ${phase === 'agent' ? 'active' : ''}`} href={roundHref(round, path, 'agent')}>エージェント修正</a>
+          </div>
+          <div class="muted small">{rangeText(changes, phase)}</div>
         </div>
         {changes.files.length === 0 && <div class="empty small">変更されたファイルはありません</div>}
         {changes.files.map((f) => (
-          <a class={`history-file ${f.path === path ? 'active' : ''}`} href={roundHref(round, f.path)}>
+          <a class={`history-file ${f.path === path ? 'active' : ''}`} href={roundHref(round, f.path, phase)}>
             <span class={`chip kind-${f.kind}`}>{kindText[f.kind]}</span>
             <span class="name">{f.path}</span>
             {f.comments > 0 && <span class="muted small">💬{f.comments}</span>}
@@ -61,7 +66,7 @@ export function RoundHistory({ round, path }: { round: number; path?: string }) 
       </div>
       <div class="history-main">
         {path ? (
-          <DiffPane round={round} path={path} notes={changes.comments.filter((c) => c.path === path)} />
+          <DiffPane round={round} path={path} phase={phase} notes={changes.comments.filter((c) => c.path === path)} />
         ) : (
           <RoundSummary changes={changes} />
         )}
@@ -85,7 +90,7 @@ function RoundSummary({ changes }: { changes: RoundChanges }) {
   )
 }
 
-function DiffPane({ round, path, notes }: { round: number; path: string; notes: RoundComment[] }) {
+function DiffPane({ round, path, phase, notes }: { round: number; path: string; phase: 'review' | 'agent'; notes: RoundComment[] }) {
   const [diff, setDiff] = useState<RoundDiff | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [context, setContext] = useState(true)
@@ -95,10 +100,10 @@ function DiffPane({ round, path, notes }: { round: number; path: string; notes: 
     setDiff(null)
     setError(null)
     api
-      .roundDiff(round, path)
+      .roundDiff(round, path, phase)
       .then(setDiff)
       .catch((e) => setError(e instanceof ApiError ? e.message : String(e)))
-  }, [round, path, fv])
+  }, [round, path, phase, fv])
 
   // Rows with old/new line numbers; unchanged runs far from changes fold.
   const rows = useMemo(() => {

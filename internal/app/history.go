@@ -46,6 +46,7 @@ type RoundChanges struct {
 	Round int `json:"round"`
 	// ToRound is n+1, or 0 when compared with the current files.
 	ToRound  int            `json:"toRound"`
+	Phase    string         `json:"phase"`
 	Files    []RoundChange  `json:"files"`
 	Comments []RoundComment `json:"comments"`
 }
@@ -114,15 +115,28 @@ func (a *App) blobLines(h string) []string {
 	return textutil.SplitLines(string(b))
 }
 
-// RoundChanges returns the files changed in response to round n.
-func (a *App) RoundChanges(n int) (*RoundChanges, error) {
+// RoundChangesMode lists changes for either the review or agent phase.
+func (a *App) RoundChangesMode(n int, phase string) (*RoundChanges, error) {
 	a.mu.Lock()
 	defer a.mu.Unlock()
-	from, to, toRound, err := a.snapshotPair(n)
+	if phase == "" {
+		phase = "agent"
+	}
+	var from, to map[string]string
+	var toRound int
+	var err error
+	if phase == "review" {
+		from, to, err = a.reviewSnapshotPair(n)
+		toRound = n
+	} else if phase == "agent" {
+		from, to, toRound, err = a.snapshotPair(n)
+	} else {
+		return nil, badRequest("不明な差分種別です: %s", phase)
+	}
 	if err != nil {
 		return nil, err
 	}
-	rc := &RoundChanges{Round: n, ToRound: toRound, Files: []RoundChange{}, Comments: a.roundComments(n)}
+	rc := &RoundChanges{Round: n, ToRound: toRound, Phase: phase, Files: []RoundChange{}, Comments: a.roundComments(n)}
 	commented := map[string]int{}
 	for _, c := range rc.Comments {
 		if c.Path != "" {
@@ -165,20 +179,49 @@ func (a *App) RoundChanges(n int) (*RoundChanges, error) {
 	return rc, nil
 }
 
+// RoundChanges returns the agent's changes after round n.
+func (a *App) RoundChanges(n int) (*RoundChanges, error) {
+	return a.RoundChangesMode(n, "agent")
+}
+
 // RoundDiff is the diff of one file in response to a round.
 type RoundDiff struct {
 	Round   int           `json:"round"`
 	ToRound int           `json:"toRound"`
 	Path    string        `json:"path"`
 	Kind    string        `json:"kind"`
+	Phase   string        `json:"phase"`
 	Ops     []textutil.Op `json:"ops"`
 }
 
-// RoundDiff returns how path changed in response to round n.
-func (a *App) RoundDiff(n int, path string) (*RoundDiff, error) {
+// reviewSnapshotPair returns the files at the start and submission of round n.
+func (a *App) reviewSnapshotPair(n int) (from, to map[string]string, err error) {
+	m, err := a.Store.Manifest(n)
+	if err != nil || m.SubmittedAt == nil {
+		return nil, nil, notFound("ラウンド%dはまだ提出されていません", n)
+	}
+	return m.OpenFiles, m.SubmitFiles, nil
+}
+
+// RoundDiffMode returns the diff for either the review phase (start -> submit)
+// or the agent phase (submit -> next round/current files).
+func (a *App) RoundDiffMode(n int, path, phase string) (*RoundDiff, error) {
 	a.mu.Lock()
 	defer a.mu.Unlock()
-	from, to, toRound, err := a.snapshotPair(n)
+	if phase == "" {
+		phase = "agent"
+	}
+	var from, to map[string]string
+	var toRound int
+	var err error
+	if phase == "review" {
+		from, to, err = a.reviewSnapshotPair(n)
+		toRound = n
+	} else if phase == "agent" {
+		from, to, toRound, err = a.snapshotPair(n)
+	} else {
+		return nil, badRequest("不明な差分種別です: %s", phase)
+	}
 	if err != nil {
 		return nil, err
 	}
@@ -187,7 +230,7 @@ func (a *App) RoundDiff(n int, path string) (*RoundDiff, error) {
 	if !okf && !okt {
 		return nil, notFound("ラウンド%dの前後にファイルがありません: %s", n, path)
 	}
-	d := &RoundDiff{Round: n, ToRound: toRound, Path: path, Kind: ChangeModified}
+	d := &RoundDiff{Round: n, ToRound: toRound, Path: path, Phase: phase, Kind: ChangeModified}
 	switch {
 	case hf == ht:
 		d.Kind = ChangeUnchanged
@@ -198,4 +241,9 @@ func (a *App) RoundDiff(n int, path string) (*RoundDiff, error) {
 	}
 	d.Ops = textutil.LineDiff(a.blobLines(hf), a.blobLines(ht))
 	return d, nil
+}
+
+// RoundDiff returns the agent's changes after round n.
+func (a *App) RoundDiff(n int, path string) (*RoundDiff, error) {
+	return a.RoundDiffMode(n, path, "agent")
 }

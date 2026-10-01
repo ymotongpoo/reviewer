@@ -143,6 +143,7 @@ export interface RoundDiff {
   toRound: number
   path: string
   kind: ChangeKind
+  phase: 'review' | 'agent'
   ops: DiffOp[]
 }
 

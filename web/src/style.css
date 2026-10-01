@@ -1596,6 +1596,27 @@ input.search {
   font-size: 16px;
   margin: 6px 0 2px;
 }
+.history-mode-links,
+.round-diff-links {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+.history-mode-links {
+  margin: 8px 0 6px;
+}
+.history-mode-links .btn.active {
+  background: var(--accent-subtle);
+  border-color: var(--accent);
+}
+.round-diff-links a + a::before {
+  content: ' / ';
+  color: var(--fg-muted);
+  margin-right: 6px;
+}
+.history-mode-links + .muted {
+  display: block;
+}
 .history-file {
   display: flex;
   align-items: center;

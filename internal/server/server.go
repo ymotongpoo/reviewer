@@ -276,12 +276,12 @@ func roundParam(r *http.Request) int {
 }
 
 func (p *Project) handleRoundChanges(w http.ResponseWriter, r *http.Request) {
-	rc, err := p.App.RoundChanges(roundParam(r))
+	rc, err := p.App.RoundChangesMode(roundParam(r), r.URL.Query().Get("phase"))
 	respond(w, rc, err)
 }
 
 func (p *Project) handleRoundDiff(w http.ResponseWriter, r *http.Request) {
-	d, err := p.App.RoundDiff(roundParam(r), r.URL.Query().Get("path"))
+	d, err := p.App.RoundDiffMode(roundParam(r), r.URL.Query().Get("path"), r.URL.Query().Get("phase"))
 	respond(w, d, err)
 }
 
