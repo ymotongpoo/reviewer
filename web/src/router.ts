@@ -4,6 +4,7 @@ export type Route =
   | { page: 'overview' }
   | { page: 'file'; path: string; line?: number }
   | { page: 'round'; round: number; path?: string; phase?: 'review' | 'agent' }
+  | { page: 'settings' }
 
 function parse(): Route {
   const h = decodeURIComponent(location.hash.replace(/^#/, ''))
@@ -11,6 +12,7 @@ function parse(): Route {
   if (m) return { page: 'file', path: m[1], line: m[2] ? Number(m[2]) : undefined }
   const r = h.match(/^\/round\/(\d+)(?:\/(.+?))?(?:\?view=(review|agent))?$/)
   if (r) return { page: 'round', round: Number(r[1]), path: r[2], phase: r[3] as 'review' | 'agent' | undefined }
+  if (h === '/settings') return { page: 'settings' }
   return { page: 'overview' }
 }
 

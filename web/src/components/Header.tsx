@@ -5,7 +5,6 @@ import { agentInfo, comments, draftCount, info, refreshAll, responseBanner, toas
 import { AgentChip } from './Agent'
 import { AnnotateButton } from './Annotate'
 import { GitButton } from './Git'
-import { ThemeToggle } from './ThemeToggle'
 import type { ProjectSummary, SubmitResult } from '../types'
 
 export function CopyPrompt({ prompt, label = '指示文をコピー' }: { prompt: string; label?: string }) {
@@ -99,7 +98,7 @@ export function Header() {
           ラウンド {i.round} · {submitted ? '提出済み' : '下書き中'}
         </span>
         <span class="spacer" />
-        <ThemeToggle />
+        <a class="btn small settings-link" href="#/settings" title="設定">⚙ 設定</a>
         <GitButton />
         <AnnotateButton />
         <AgentChip />
