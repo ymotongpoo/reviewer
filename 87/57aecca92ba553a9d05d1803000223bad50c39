@@ -1,0 +1,70 @@
+internal/app/edit.go
+  h_bf0ada3931f770 1-44
+internal/app/git_test.go
+  h_bf0ada3931f770 325-343
+internal/project/project.go
+  h_bf0ada3931f770 296-344
+internal/project/project_test.go
+  h_bf0ada3931f770 59-86
+internal/server/dist/assets/c-DUb5zLr4.js
+  h_bf0ada3931f770 1
+internal/server/dist/assets/cpp-B0hvPXa7.js
+  h_bf0ada3931f770 1
+internal/server/dist/assets/css-C-OyEwdw.js
+  h_bf0ada3931f770 1
+internal/server/dist/assets/dist-CnMNtpn0.js
+  h_bf0ada3931f770 1-2,47
+internal/server/dist/assets/graphql-C72An9f0.js
+  h_bf0ada3931f770 1
+internal/server/dist/assets/html-BtYQmn2W.js
+  h_bf0ada3931f770 1
+internal/server/dist/assets/html-derivative-Df0mDNBW.js
+  h_bf0ada3931f770 1
+internal/server/dist/assets/index-A3u8KZba.js
+  h_bf0ada3931f770 1-2,69-70,74-76,79-82,84-86,88-90,98-99,101,118-119,121,123,127,130-131,144,146,236,239-250
+internal/server/dist/assets/index-BE8HpIvi.css
+  h_bf0ada3931f770 1
+internal/server/dist/assets/java-BPC2Dpyo.js
+  h_bf0ada3931f770 1
+internal/server/dist/assets/jsx-BWbH-ROe.js
+  h_bf0ada3931f770 1
+internal/server/dist/assets/lua-Dpow9O3b.js
+  h_bf0ada3931f770 1
+internal/server/dist/assets/php-DD4KQ9Uz.js
+  h_bf0ada3931f770 1
+internal/server/dist/assets/rst-CXn3qsmt.js
+  h_bf0ada3931f770 1
+internal/server/dist/assets/ruby-B0AI7NL3.js
+  h_bf0ada3931f770 1
+internal/server/dist/assets/sql-Dq86FQmC.js
+  h_bf0ada3931f770 1
+internal/server/dist/assets/tsx-CRzDYEm0.js
+  h_bf0ada3931f770 1
+internal/server/dist/assets/typescript-BRYBKErf.js
+  h_bf0ada3931f770 1
+internal/server/dist/assets/vue-CsswG-2o.js
+  h_bf0ada3931f770 1
+internal/server/dist/assets/xml-DnuVoBIH.js
+  h_bf0ada3931f770 1
+internal/server/dist/index.html
+  h_bf0ada3931f770 8-9
+internal/server/server.go
+  h_bf0ada3931f770 95,278-286
+web/src/api.ts
+  h_bf0ada3931f770 135-136
+web/src/components/FileView.tsx
+  h_bf0ada3931f770 2,53-55,185-209,269-271,278-287,395-396,398-493
+web/src/style.css
+  h_bf0ada3931f770 971-1020
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "8757aecca92ba553a9d05d1803000223bad50c39",
+  "prompts": {},
+  "humans": {
+    "h_bf0ada3931f770": {
+      "author": "Yoshi Yamaguchi <ymotongpoo@gmail.com>"
+    }
+  }
+}
