@@ -11,6 +11,11 @@ import type {
   AnnotationRequestView,
   Comment,
   FileView,
+  GitCommitResult,
+  GitLanguage,
+  GitPushResult,
+  GitSettings,
+  GitStatus,
   Info,
   Preset,
   RequestDiff,
@@ -120,10 +125,19 @@ export const api = {
     request<Comment>('POST', `/api/annotations/${q(id)}/adopt`, patch),
   updateAnnotation: (id: string, state: 'pending' | 'dismissed') =>
     request<Annotation>('PATCH', `/api/annotations/${q(id)}`, { state }),
+  /** remote and branch pick a one-off push target; empty uses the defaults. */
+  gitStatus: (remote = '', branch = '') =>
+    request<GitStatus>('GET', `/api/git?remote=${q(remote)}&branch=${q(branch)}`),
+  saveGitSettings: (settings: GitSettings) => request<GitSettings>('PUT', '/api/git/settings', settings),
+  gitCommit: (message: string, fingerprint: string) =>
+    request<GitCommitResult>('POST', '/api/git/commit', { message, fingerprint }),
+  gitPush: (remote: string, branch: string) => request<GitPushResult>('POST', '/api/git/push', { remote, branch }),
 
   server: () => request<ServerInfo>('GET', '/api/server'),
   projects: () => request<{ projects: ProjectSummary[] }>('GET', '/api/projects').then((r) => r.projects),
-  openProject: (path: string) => request<{ id: string; url: string; path: string }>('POST', '/api/projects/open', { path }),
+  /** gitLanguage is the commit message language chosen when starting a review. */
+  openProject: (path: string, gitLanguage?: GitLanguage) =>
+    request<{ id: string; url: string; path: string }>('POST', '/api/projects/open', { path, gitLanguage }),
   closeProject: (id: string) => request<{ ok: boolean }>('POST', `/api/projects/${q(id)}/close`),
   forgetProject: (id: string) => request<{ ok: boolean }>('DELETE', `/api/projects/${q(id)}`),
   listDir: (path: string) => request<DirListing>('GET', `/api/fs?path=${q(path)}`),

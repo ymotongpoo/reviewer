@@ -18,6 +18,7 @@ import (
 
 	"github.com/ymotongpoo/reviewer/internal/app"
 	"github.com/ymotongpoo/reviewer/internal/config"
+	"github.com/ymotongpoo/reviewer/internal/gitops"
 	"github.com/ymotongpoo/reviewer/internal/store"
 )
 
@@ -433,13 +434,24 @@ func (s *Server) handleProjects(w http.ResponseWriter, r *http.Request) {
 func (s *Server) handleOpenProject(w http.ResponseWriter, r *http.Request) {
 	var req struct {
 		Path string `json:"path"`
+		// GitLanguage is the commit message language chosen when the
+		// review starts; it only applies to a project without git.toml.
+		GitLanguage string `json:"gitLanguage"`
 	}
 	if err := decode(r, &req); err != nil {
 		writeError(w, err)
 		return
 	}
+	if req.GitLanguage != "" && !gitops.ValidLanguage(req.GitLanguage) {
+		writeError(w, &app.Error{Code: http.StatusBadRequest, Msg: "コミットメッセージの言語は ja か en です"})
+		return
+	}
 	p, err := s.Reg.Open(req.Path)
 	if err != nil {
+		writeError(w, err)
+		return
+	}
+	if err := p.App.InitGitLanguage(req.GitLanguage); err != nil {
 		writeError(w, err)
 		return
 	}

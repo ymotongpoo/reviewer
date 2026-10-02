@@ -13,6 +13,7 @@ import (
 	"slices"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/ymotongpoo/reviewer/internal/agent"
@@ -46,7 +47,7 @@ func conflict(format string, a ...any) error {
 
 // Event is published to connected clients.
 type Event struct {
-	Type    string   `json:"type"` // files | tree | comments | round | response | agent | annotate | annotations
+	Type    string   `json:"type"` // files | tree | comments | round | response | agent | annotate | annotations | git
 	Paths   []string `json:"paths,omitempty"`
 	Round   int      `json:"round,omitempty"`
 	Request string   `json:"request,omitempty"`
@@ -66,6 +67,11 @@ type App struct {
 	files   []project.File
 	now     func() time.Time
 	agents  agentState
+
+	// gitMu serializes Git operations; they run without holding mu.
+	gitMu   sync.Mutex
+	gitOnce sync.Once
+	isRepo  atomic.Bool
 }
 
 // New opens the project at root with cfg. notify may be nil.
@@ -208,6 +214,8 @@ type Info struct {
 	Latest      *RoundPaths         `json:"latest,omitempty"`
 	Response    *store.ResponseInfo `json:"response,omitempty"`
 	Rounds      []RoundSummary      `json:"rounds"`
+	// Git tells whether the project is inside a Git work tree.
+	Git bool `json:"git"`
 }
 
 // RoundSummary is a past or current round.
@@ -221,13 +229,14 @@ type RoundSummary struct {
 
 // Info returns the session summary.
 func (a *App) Info() Info {
+	isRepo := a.gitRepo()
 	a.mu.Lock()
 	defer a.mu.Unlock()
 	st := a.Store.State
 	info := Info{
 		Name: a.Proj.Name(), Root: a.Proj.Root, DataDir: a.DataDir,
 		Round: st.Round, RoundStatus: st.RoundStatus, Labels: a.Cfg.Labels,
-		Warnings: a.warnings(), Rounds: []RoundSummary{},
+		Warnings: a.warnings(), Rounds: []RoundSummary{}, Git: isRepo,
 	}
 	info.BaseRound, _ = a.baseFiles()
 	for n := 1; n <= st.Round; n++ {

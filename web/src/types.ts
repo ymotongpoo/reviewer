@@ -89,6 +89,8 @@ export interface Info {
   latest?: RoundPaths
   response?: ResponseInfo
   rounds: RoundSummary[]
+  /** Whether the project is inside a Git work tree. */
+  git: boolean
 }
 
 export interface TreeFile {
@@ -154,7 +156,7 @@ export interface SubmitResult extends RoundPaths {
 }
 
 export interface ServerEvent {
-  type: 'files' | 'tree' | 'comments' | 'round' | 'response' | 'agent' | 'annotate' | 'annotations'
+  type: 'files' | 'tree' | 'comments' | 'round' | 'response' | 'agent' | 'annotate' | 'annotations' | 'git'
   paths?: string[]
   round?: number
   request?: string
@@ -344,4 +346,87 @@ export interface DirListing {
   parent?: string
   entries: DirEntry[]
   hasReviewer: boolean
+}
+
+export type GitLanguage = 'ja' | 'en'
+
+export interface GitSettings {
+  language: GitLanguage
+  /** Default push target; empty means the upstream (or origin) and the current branch. */
+  remote: string
+  branch: string
+}
+
+export interface GitChange {
+  path: string
+  from?: string
+  kind: 'added' | 'modified' | 'deleted' | 'renamed' | 'typechange' | 'conflict'
+  staged: boolean
+  untracked?: boolean
+}
+
+export interface GitRemote {
+  name: string
+  /** Masked push URL, informational only. */
+  url: string
+  branches: string[]
+  mirror?: boolean
+}
+
+export interface GitTarget {
+  remote: string
+  branch: string
+  tracked: boolean
+  ahead: number
+  behind: number
+}
+
+export interface GitStatus {
+  repo: boolean
+  toplevel?: string
+  prefix?: string
+  branch: string
+  unborn: boolean
+  head?: string
+  upstream: { remote?: string; branch?: string }
+  operation?: string
+  changes: GitChange[]
+  outsideStaged: string[]
+  fingerprint: string
+  identity?: string
+  messages: Partial<Record<GitLanguage, string>>
+  settings: GitSettings
+  remotes: GitRemote[]
+  target: GitTarget
+  commitBlockers: string[]
+  pushBlockers: string[]
+  env: { sshAgent: boolean; credentialHelper: boolean }
+}
+
+export interface GitCommitResult {
+  commit: string
+  branch: string
+  subject: string
+  files: number
+}
+
+export interface GitHint {
+  text: string
+  commands?: string[]
+}
+
+export interface GitFailure {
+  kind: string
+  message: string
+  detail: string
+  hints: GitHint[]
+}
+
+export interface GitPushResult {
+  ok: boolean
+  remote: string
+  branch: string
+  commit?: string
+  messages?: string
+  failure?: GitFailure
 }

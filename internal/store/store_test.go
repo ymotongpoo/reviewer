@@ -170,3 +170,22 @@ func TestOldStateDefaultsAnnotationCounters(t *testing.T) {
 		t.Fatalf("state = %+v", s.State)
 	}
 }
+
+func TestGitSettings(t *testing.T) {
+	s := &Store{Dir: t.TempDir()}
+	if _, ok, err := s.GitSettings(); ok || err != nil {
+		t.Fatalf("missing file: ok=%v err=%v", ok, err)
+	}
+	want := config.GitConfig{Language: "en", Remote: "origin", Branch: "feature/x"}
+	if err := s.SaveGitSettings(want); err != nil {
+		t.Fatal(err)
+	}
+	got, ok, err := s.GitSettings()
+	if err != nil || !ok || got != want {
+		t.Fatalf("got %+v ok=%v err=%v", got, ok, err)
+	}
+	os.WriteFile(filepath.Join(s.Dir, "git.toml"), []byte("[git\n"), 0o644)
+	if _, _, err := s.GitSettings(); err == nil {
+		t.Fatal("broken git.toml accepted")
+	}
+}

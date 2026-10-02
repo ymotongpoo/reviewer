@@ -4,6 +4,7 @@ import { copyText } from '../clipboard'
 import { agentInfo, comments, draftCount, info, refreshAll, responseBanner, toast } from '../state'
 import { AgentChip } from './Agent'
 import { AnnotateButton } from './Annotate'
+import { GitButton } from './Git'
 import { ThemeToggle } from './ThemeToggle'
 import type { ProjectSummary, SubmitResult } from '../types'
 
@@ -99,6 +100,7 @@ export function Header() {
         </span>
         <span class="spacer" />
         <ThemeToggle />
+        <GitButton />
         <AnnotateButton />
         <AgentChip />
         {submitted && (

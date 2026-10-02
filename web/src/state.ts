@@ -7,6 +7,7 @@ import type {
   AnnotationRequestView,
   AnnotationSeverity,
   Comment,
+  GitStatus,
   Info,
   Preset,
   ServerEvent,
@@ -24,6 +25,10 @@ export const agentRound = signal<number>(0)
 export const presets = signal<Preset[]>([])
 export const annotations = signal<Annotation[]>([])
 export const annotationRequests = signal<AnnotationRequestView[]>([])
+/** Git state with the default push target, for the header button. */
+export const gitStatus = signal<GitStatus | null>(null)
+/** Bumped when the working tree or the repository may have changed. */
+export const gitVersion = signal(0)
 
 export type CommentListKind = 'human' | 'ai'
 export interface CommentListSelection {
@@ -162,6 +167,9 @@ export async function refreshAnnotationRequests() {
   )
   annotationRequests.value = views
 }
+export async function refreshGit() {
+  gitStatus.value = info.value?.git ? await api.gitStatus() : null
+}
 export async function showAgentRound(round: number) {
   if (agentRound.value === round) return
   agentRound.value = round
@@ -169,7 +177,8 @@ export async function showAgentRound(round: number) {
 }
 export async function refreshAll() {
   await Promise.all([
-    refreshInfo(),
+    // Git is optional: a failing git must not break the page.
+    refreshInfo().then(() => refreshGit().catch(() => {})),
     refreshTree(),
     refreshComments(),
     refreshAgent(),
@@ -238,6 +247,11 @@ const lazyAgent = debounced(() => refreshAgent().catch(() => {}), 150)
 const lazyPresets = debounced(() => refreshPresets().catch(() => {}), 150)
 const lazyAnnotations = debounced(() => refreshAnnotations().catch(() => {}), 150)
 const lazyAnnotationRequests = debounced(() => refreshAnnotationRequests().catch(() => {}), 150)
+// git status runs several commands; coalesce bursts of file events.
+const lazyGit = debounced(() => {
+  gitVersion.value++
+  refreshGit().catch(() => {})
+}, 800)
 
 export function connectEvents() {
   const es = new EventSource(`${projectBase}/api/events`)
@@ -246,6 +260,7 @@ export function connectEvents() {
     if (wasDown) {
       wasDown = false
       refreshAll().catch(() => {})
+      gitVersion.value++
       fileVersion.value = { n: fileVersion.value.n + 1, paths: ['*'] }
     }
   }
@@ -259,6 +274,10 @@ export function connectEvents() {
         fileVersion.value = { n: fileVersion.value.n + 1, paths: ev.paths ?? [] }
         lazyTree()
         lazyComments()
+        lazyGit()
+        break
+      case 'git':
+        lazyGit()
         break
       case 'tree':
         lazyTree()

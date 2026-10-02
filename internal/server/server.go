@@ -2,6 +2,7 @@
 package server
 
 import (
+	"context"
 	"crypto/rand"
 	"crypto/subtle"
 	"embed"
@@ -122,6 +123,10 @@ func (p *Project) Handler() http.Handler {
 		mux.HandleFunc("GET /api/annotations", p.handleAnnotations)
 		mux.HandleFunc("POST /api/annotations/{id}/adopt", p.handleAdoptAnnotation)
 		mux.HandleFunc("PATCH /api/annotations/{id}", p.handleUpdateAnnotation)
+		mux.HandleFunc("GET /api/git", p.handleGitStatus)
+		mux.HandleFunc("PUT /api/git/settings", p.handleGitSettings)
+		mux.HandleFunc("POST /api/git/commit", p.handleGitCommit)
+		mux.HandleFunc("POST /api/git/push", p.handleGitPush)
 		mux.HandleFunc("GET /api/events", p.handleEvents)
 		mux.HandleFunc("/api/", func(w http.ResponseWriter, r *http.Request) {
 			writeError(w, &app.Error{Code: http.StatusNotFound, Msg: "not found"})
@@ -533,6 +538,46 @@ func (p *Project) handleUpdateAnnotation(w http.ResponseWriter, r *http.Request)
 	}
 	annotation, err := p.App.SetAnnotationState(r.PathValue("id"), patch.State)
 	respond(w, annotation, err)
+}
+
+func (p *Project) handleGitStatus(w http.ResponseWriter, r *http.Request) {
+	q := r.URL.Query()
+	st, err := p.App.GitStatus(r.Context(), q.Get("remote"), q.Get("branch"))
+	respond(w, st, err)
+}
+
+func (p *Project) handleGitSettings(w http.ResponseWriter, r *http.Request) {
+	var req config.GitConfig
+	if err := decode(r, &req); err != nil {
+		writeError(w, err)
+		return
+	}
+	g, err := p.App.SaveGitSettings(r.Context(), req)
+	respond(w, g, err)
+}
+
+// Commit and push keep running when the browser goes away: interrupting git
+// half-way would leave a lock file or an unknown push state behind. They
+// have their own timeouts.
+
+func (p *Project) handleGitCommit(w http.ResponseWriter, r *http.Request) {
+	var req app.GitCommitInput
+	if err := decode(r, &req); err != nil {
+		writeError(w, err)
+		return
+	}
+	res, err := p.App.GitCommit(context.WithoutCancel(r.Context()), req)
+	respond(w, res, err)
+}
+
+func (p *Project) handleGitPush(w http.ResponseWriter, r *http.Request) {
+	var req app.GitPushInput
+	if err := decode(r, &req); err != nil {
+		writeError(w, err)
+		return
+	}
+	res, err := p.App.GitPush(context.WithoutCancel(r.Context()), req)
+	respond(w, res, err)
 }
 
 func (p *Project) handleOpenRound(w http.ResponseWriter, r *http.Request) {

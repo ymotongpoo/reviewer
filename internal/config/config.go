@@ -80,6 +80,18 @@ type Config struct {
 		FuzzyThreshold float64 `toml:"fuzzy_threshold"`
 	} `toml:"anchor"`
 	Agent AgentConfig `toml:"agent"`
+	Git   GitConfig   `toml:"git"`
+}
+
+// GitConfig configures committing and pushing from the web UI. The project
+// copy edited by the UI lives in <data>/git.toml and overrides these.
+type GitConfig struct {
+	// Language of generated commit messages: "ja" or "en".
+	Language string `toml:"language,omitempty" json:"language"`
+	// Remote and Branch are the default push target. Empty means the
+	// upstream of the current branch (or "origin") and the current branch.
+	Remote string `toml:"remote,omitempty" json:"remote"`
+	Branch string `toml:"branch,omitempty" json:"branch"`
 }
 
 // AgentConfig configures sending feedback directly to a coding agent.
@@ -129,6 +141,7 @@ func Default() Config {
 	c.Agent.AutoSend = true
 	c.Agent.Notify = "hermes"
 	c.Agent.Hermes.APIKeyEnv = "HERMES_API_KEY"
+	c.Git.Language = "ja"
 	return c
 }
 

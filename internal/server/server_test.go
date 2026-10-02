@@ -7,6 +7,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -337,5 +338,88 @@ func TestAnnotationAPI(t *testing.T) {
 	res, body = do(t, "POST", base+"/api/annotate/requests/"+req.ID+"/discard", "", bearer)
 	if res.StatusCode != 200 || !strings.Contains(body, `"ok":true`) {
 		t.Fatalf("discard: %d %s", res.StatusCode, body)
+	}
+}
+
+func TestGitAPI(t *testing.T) {
+	if _, err := exec.LookPath("git"); err != nil {
+		t.Skip("git is not installed")
+	}
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	t.Setenv("GIT_CONFIG_NOSYSTEM", "1")
+	t.Setenv("GIT_CONFIG_GLOBAL", filepath.Join(home, "gitconfig"))
+	e := newEnv(t)
+	dir := filepath.Join(e.root, "a")
+	for _, args := range [][]string{
+		{"init", "-q", "-b", "main"},
+		{"config", "user.name", "Tester"},
+		{"config", "user.email", "tester@example.com"},
+	} {
+		cmd := exec.Command("git", args...)
+		cmd.Dir = dir
+		if out, err := cmd.CombinedOutput(); err != nil {
+			t.Fatalf("git %v: %v %s", args, err, out)
+		}
+	}
+
+	b, _ := json.Marshal(map[string]string{"path": dir, "gitLanguage": "fr"})
+	if res, _ := do(t, "POST", e.ts.URL+"/api/projects/open", string(b), bearer); res.StatusCode != 400 {
+		t.Fatalf("bad language: %d", res.StatusCode)
+	}
+	b, _ = json.Marshal(map[string]string{"path": dir, "gitLanguage": "en"})
+	res, body := do(t, "POST", e.ts.URL+"/api/projects/open", string(b), bearer)
+	if res.StatusCode != 200 {
+		t.Fatalf("open: %d %s", res.StatusCode, body)
+	}
+	var opened struct{ ID string }
+	json.Unmarshal([]byte(body), &opened)
+	base := e.ts.URL + "/p/" + opened.ID
+
+	res, body = do(t, "GET", base+"/api/git", "", bearer)
+	var st app.GitStatus
+	if err := json.Unmarshal([]byte(body), &st); res.StatusCode != 200 || err != nil {
+		t.Fatalf("status: %d %s", res.StatusCode, body)
+	}
+	if !st.Repo || st.Settings.Language != "en" || len(st.Changes) != 1 || st.Changes[0].Path != "a.md" || st.Messages["en"] != "docs: add a.md\n" {
+		t.Fatalf("status = %s", body)
+	}
+	if !st.Unborn || len(st.PushBlockers) == 0 {
+		t.Fatalf("push should be blocked before the first commit: %s", body)
+	}
+
+	if res, _ := do(t, "PUT", base+"/api/git/settings", `{"language":"xx"}`, bearer); res.StatusCode != 400 {
+		t.Fatalf("settings: %d", res.StatusCode)
+	}
+	if res, _ := do(t, "POST", base+"/api/git/commit", `{"message":"docs: x"}`, map[string]string{"Authorization": "Bearer secret"}); res.StatusCode != 403 {
+		t.Fatalf("commit without X-Reviewer: %d", res.StatusCode)
+	}
+	if res, _ := do(t, "POST", base+"/api/git/commit", `{"message":"add a","fingerprint":"`+st.Fingerprint+`"}`, bearer); res.StatusCode != 400 {
+		t.Fatalf("bad message: %d", res.StatusCode)
+	}
+	res, body = do(t, "POST", base+"/api/git/commit", `{"message":"docs: add a.md","fingerprint":"`+st.Fingerprint+`"}`, bearer)
+	if res.StatusCode != 200 || !strings.Contains(body, `"subject":"docs: add a.md"`) {
+		t.Fatalf("commit: %d %s", res.StatusCode, body)
+	}
+	if res, body := do(t, "POST", base+"/api/git/push", `{"remote":"origin","branch":"main"}`, bearer); res.StatusCode != 400 {
+		t.Fatalf("push without remotes: %d %s", res.StatusCode, body)
+	}
+
+	// Reopening with another language keeps the saved choice.
+	b, _ = json.Marshal(map[string]string{"path": dir, "gitLanguage": "ja"})
+	if res, body := do(t, "POST", e.ts.URL+"/api/projects/open", string(b), bearer); res.StatusCode != 200 {
+		t.Fatalf("reopen: %d %s", res.StatusCode, body)
+	}
+	_, body = do(t, "GET", base+"/api/git", "", bearer)
+	if err := json.Unmarshal([]byte(body), &st); err != nil || st.Settings.Language != "en" {
+		t.Fatalf("reopen changed the language: %s", body)
+	}
+	res, body = do(t, "PUT", base+"/api/git/settings", `{"language":"ja","remote":"","branch":"main"}`, bearer)
+	if res.StatusCode != 200 || !strings.Contains(body, `"language":"ja"`) || !strings.Contains(body, `"branch":"main"`) {
+		t.Fatalf("save settings: %d %s", res.StatusCode, body)
+	}
+	_, body = do(t, "GET", base+"/api/git", "", bearer)
+	if err := json.Unmarshal([]byte(body), &st); err != nil || st.Settings.Language != "ja" || st.Unborn || len(st.Changes) != 0 {
+		t.Fatalf("after commit: %s", body)
 	}
 }
