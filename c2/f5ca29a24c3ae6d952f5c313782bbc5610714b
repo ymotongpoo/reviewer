@@ -1,0 +1,131 @@
+internal/server/dist/assets/java-B1fifEpw.js
+  s_3573f8bfb8ae26::t_b61c98027ae2e2 1
+web/src/components/CommentList.tsx
+  s_3573f8bfb8ae26::t_73ca02efbfe1df 2,11
+web/src/textrange.test.ts
+  s_3573f8bfb8ae26::t_1ab4fbbebe1b10 1-149
+internal/server/dist/assets/graphql-x_W5n2e3.js
+  s_3573f8bfb8ae26::t_b61c98027ae2e2 1
+web/src/components/Composer.tsx
+  s_3573f8bfb8ae26::t_73ca02efbfe1df 74
+internal/server/dist/assets/lua-BkeX1blA.js
+  s_3573f8bfb8ae26::t_b61c98027ae2e2 1
+internal/server/dist/assets/php-Cxkq7N_8.js
+  s_3573f8bfb8ae26::t_b61c98027ae2e2 1
+internal/server/dist/assets/css-BAKEo4JC.js
+  s_3573f8bfb8ae26::t_b61c98027ae2e2 1
+internal/server/dist/assets/typescript-CVGM08sB.js
+  s_3573f8bfb8ae26::t_b61c98027ae2e2 1
+internal/anchor/textrange.go
+  s_5bad300bda4bd8::t_87844cdc1ab1c9 40-41,56,64-81,137-138,148-151,154
+  s_5bad300bda4bd8::t_fd60631c9b4dd8 43,47
+  s_5bad300bda4bd8::t_c69f4116a605db 1-39,42,44-46,48-55,57-63,82-136,139-147,152-153,155-262
+web/src/components/FileView.tsx
+  s_3573f8bfb8ae26::t_a3c5ad059d4e00 314-315,429,1108-1111,1115,1120,1137-1138
+  s_3573f8bfb8ae26::t_363ae06c2f84a6 49-50,299,302,305-313,316-319,390-391,395-396,404,406-428,715-720,978,1043,1054,1103-1107,1112-1114,1116-1119,1121-1136,1139-1152
+  s_3573f8bfb8ae26::t_e8afe525de7788 1153
+internal/server/dist/assets/tsx-rQh3dgVa.js
+  s_3573f8bfb8ae26::t_b61c98027ae2e2 1
+internal/store/model.go
+  s_5bad300bda4bd8::t_b390207a25c3b8 47-49,78-82
+internal/anchor/textrange_test.go
+  s_5bad300bda4bd8::t_47193c29f5192c 1-17,19-60,62-92,95-125,128,130-132
+  s_5bad300bda4bd8::t_09adec0f86cd47 18,93-94
+  s_5bad300bda4bd8::t_003542bbea438d 126-127,129
+  s_5bad300bda4bd8::t_388b3075031627 61
+web/src/components/CodeRow.tsx
+  s_3573f8bfb8ae26::t_384a4be0752bc8 62-63,88-89,93-95,114
+  s_3573f8bfb8ae26::t_a3c5ad059d4e00 4,83-86
+web/src/textrange.ts
+  s_5bad300bda4bd8::t_907d68e84ea489 1-66,74,78,80-87,90-151
+  s_3573f8bfb8ae26::t_4fe3af2ac5e6c4 67-73,75-77,79,88-89
+internal/server/dist/assets/index-CBypud6b.css
+  s_3573f8bfb8ae26::t_b61c98027ae2e2 1
+internal/server/dist/assets/xml-CNUthRhV.js
+  s_3573f8bfb8ae26::t_b61c98027ae2e2 1
+internal/server/dist/assets/dist-CIY70Sww.js
+  s_3573f8bfb8ae26::t_b61c98027ae2e2 1-63
+internal/server/dist/assets/jsx-Ca27TLWw.js
+  s_3573f8bfb8ae26::t_b61c98027ae2e2 1
+web/src/state.ts
+  s_3573f8bfb8ae26::t_5090120e88ea51 14
+  s_3573f8bfb8ae26::t_090be85c04f32a 122-123
+internal/app/rounds.go
+  s_5bad300bda4bd8::t_d0fc37381e44be 144-153,393-396,424-444
+  s_5bad300bda4bd8::t_081a095c2b3c31 445-446
+web/src/labels.ts
+  s_3573f8bfb8ae26::t_73ca02efbfe1df 1-2,31-35
+  s_3573f8bfb8ae26::t_82a00472d7ab48 36
+web/src/components/Overview.tsx
+  s_3573f8bfb8ae26::t_73ca02efbfe1df 15,127
+internal/server/dist/assets/html-derivative-BNxlHdoH.js
+  s_3573f8bfb8ae26::t_b61c98027ae2e2 1
+internal/server/dist/assets/vue-DKrVYt3U.js
+  s_3573f8bfb8ae26::t_b61c98027ae2e2 1
+web/src/style.css
+  s_3573f8bfb8ae26::t_caf92a63bfbf74 666-670
+web/src/api.ts
+  s_3573f8bfb8ae26::t_5090120e88ea51 25
+  s_3573f8bfb8ae26::t_090be85c04f32a 86
+internal/server/dist/assets/cpp-C0Q4q7a1.js
+  s_3573f8bfb8ae26::t_b61c98027ae2e2 1
+internal/server/dist/assets/html-F5D8QqEQ.js
+  s_3573f8bfb8ae26::t_b61c98027ae2e2 1
+web/src/types.ts
+  s_3573f8bfb8ae26::t_090be85c04f32a 12-28,35-36,61-62
+internal/app/range_test.go
+  s_5bad300bda4bd8::t_8324be650b3bcc 37
+  s_5bad300bda4bd8::t_6cc5e6137d08ce 30,40,109,133,208,211,216,219,248,257,263
+  s_5bad300bda4bd8::t_324307fd221b84 1-29,31-36,38-39,41-108,110-132,134-207,209-210,212-215,217-218,220-247,249-256,258-262,264-286
+internal/server/dist/assets/c-D269Ak5_.js
+  s_3573f8bfb8ae26::t_b61c98027ae2e2 1
+internal/server/dist/assets/index-GqHxo-_a.js
+  s_3573f8bfb8ae26::t_b61c98027ae2e2 1-252
+internal/feedback/feedback_test.go
+  s_5bad300bda4bd8::t_6dfde67e68876f 8
+  s_5bad300bda4bd8::t_bc0974c78daaba 81-98
+internal/feedback/feedback.go
+  s_5bad300bda4bd8::t_a7f433ce4dae6b 10,115-117
+  s_5bad300bda4bd8::t_d0fc37381e44be 40-42,53-63,153,168,227-230,260-266
+  s_5bad300bda4bd8::t_1d65cda52801d6 267
+internal/server/dist/assets/rst-DNa6nQau.js
+  s_3573f8bfb8ae26::t_b61c98027ae2e2 1
+internal/server/dist/assets/ruby-CfCHi0cj.js
+  s_3573f8bfb8ae26::t_b61c98027ae2e2 1
+internal/app/app.go
+  s_5bad300bda4bd8::t_3aef54b1bf3696 494
+  s_5bad300bda4bd8::t_a394c6cb58c9eb 370-373,417-421,465-493,495-513
+  s_5bad300bda4bd8::t_01837ec26ab753 514
+internal/server/server_test.go
+  s_3573f8bfb8ae26::t_52a41554282fc8 457-493
+internal/server/dist/assets/sql-DlCjuqWY.js
+  s_3573f8bfb8ae26::t_b61c98027ae2e2 1
+internal/server/dist/index.html
+  s_3573f8bfb8ae26::t_b61c98027ae2e2 8-9
+web/src/components/Thread.tsx
+  s_3573f8bfb8ae26::t_73ca02efbfe1df 5,38,65-66
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "c2f5ca29a24c3ae6d952f5c313782bbc5610714b",
+  "prompts": {},
+  "sessions": {
+    "s_3573f8bfb8ae26": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "e17f1bea-bdce-4d9f-b92b-e03b63132d32",
+        "model": "claude-opus-5-5"
+      },
+      "human_author": "Yoshi Yamaguchi <ymotongpoo@gmail.com>"
+    },
+    "s_5bad300bda4bd8": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "66a2d6b3-17a0-4c9a-b880-3a275452e34f",
+        "model": "claude-opus-5-5"
+      },
+      "human_author": "Yoshi Yamaguchi <ymotongpoo@gmail.com>"
+    }
+  }
+}
