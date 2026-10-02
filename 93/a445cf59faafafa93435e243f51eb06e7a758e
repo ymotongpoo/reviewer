@@ -1,0 +1,54 @@
+internal/server/dist/assets/c-DZGIoJ62.js
+  h_bf0ada3931f770 1
+internal/server/dist/assets/cpp-BOr0kKYU.js
+  h_bf0ada3931f770 1
+internal/server/dist/assets/css-CLkCJ6a-.js
+  h_bf0ada3931f770 1
+internal/server/dist/assets/dist-BvkIZokE.js
+  h_bf0ada3931f770 1-2,47
+internal/server/dist/assets/graphql-96WFOOIq.js
+  h_bf0ada3931f770 1
+internal/server/dist/assets/html-cm7ANtpe.js
+  h_bf0ada3931f770 1
+internal/server/dist/assets/html-derivative-U9NhIl0O.js
+  h_bf0ada3931f770 1
+internal/server/dist/assets/index-BOfwysDr.js
+  h_bf0ada3931f770 1,239,241,249-250
+internal/server/dist/assets/java-8kYzoRX7.js
+  h_bf0ada3931f770 1
+internal/server/dist/assets/jsx-BuqSkASl.js
+  h_bf0ada3931f770 1
+internal/server/dist/assets/lua-Cr6MeShh.js
+  h_bf0ada3931f770 1
+internal/server/dist/assets/php-h9a2Mrt3.js
+  h_bf0ada3931f770 1
+internal/server/dist/assets/rst-BcwtQkkq.js
+  h_bf0ada3931f770 1
+internal/server/dist/assets/ruby-qBP9Eii-.js
+  h_bf0ada3931f770 1
+internal/server/dist/assets/sql-O_GSHkwm.js
+  h_bf0ada3931f770 1
+internal/server/dist/assets/tsx-VpoU21xH.js
+  h_bf0ada3931f770 1
+internal/server/dist/assets/typescript-B2s_g_mL.js
+  h_bf0ada3931f770 1
+internal/server/dist/assets/vue-BfvAiNWC.js
+  h_bf0ada3931f770 1
+internal/server/dist/assets/xml-Ystamteg.js
+  h_bf0ada3931f770 1
+internal/server/dist/index.html
+  h_bf0ada3931f770 8
+web/src/components/FileView.tsx
+  h_bf0ada3931f770 517-519
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "93a445cf59faafafa93435e243f51eb06e7a758e",
+  "prompts": {},
+  "humans": {
+    "h_bf0ada3931f770": {
+      "author": "Yoshi Yamaguchi <ymotongpoo@gmail.com>"
+    }
+  }
+}
