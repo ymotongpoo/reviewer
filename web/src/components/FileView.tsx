@@ -281,6 +281,7 @@ export function FileView({ path, line }: { path: string; line?: number }) {
         <DirectEditor
           value={draft}
           original={file.content}
+          path={path}
           focusLine={editLine}
           disabled={saving}
           onChange={setDraft}
@@ -419,6 +420,7 @@ export function FileView({ path, line }: { path: string; line?: number }) {
 function DirectEditor({
   value,
   original,
+  path,
   focusLine,
   disabled,
   onChange,
@@ -427,6 +429,7 @@ function DirectEditor({
 }: {
   value: string
   original: string
+  path: string
   focusLine?: number
   disabled: boolean
   onChange: (value: string) => void
@@ -434,7 +437,17 @@ function DirectEditor({
   onCancel: () => void
 }) {
   const [confirming, setConfirming] = useState(false)
+  const [highlighted, setHighlighted] = useState<Token[][]>()
   const inputRef = useRef<HTMLTextAreaElement>(null)
+  const highlightRef = useRef<HTMLPreElement>(null)
+
+  useEffect(() => {
+    let cancelled = false
+    tokenize(value, path).then((tokens) => {
+      if (!cancelled) setHighlighted(tokens)
+    })
+    return () => { cancelled = true }
+  }, [value, path])
 
   useEffect(() => {
     const input = inputRef.current
@@ -445,6 +458,8 @@ function DirectEditor({
     input.focus()
     input.selectionStart = start
     input.selectionEnd = end
+    input.scrollTop = Math.max(0, (focusLine - 3) * 20)
+    if (highlightRef.current) highlightRef.current.scrollTop = input.scrollTop
   }, [focusLine])
 
   function keyDown(e: KeyboardEvent) {
@@ -493,15 +508,27 @@ function DirectEditor({
   return (
     <div class="direct-editor">
       <p class="muted small">補完や構文解析はありません。Tabでハードタブを入力できます。</p>
-      <textarea
-        class="direct-editor-input"
-        ref={inputRef}
-        value={value}
-        disabled={disabled}
-        spellcheck={false}
-        onInput={(e) => onChange(e.currentTarget.value)}
-        onKeyDown={keyDown}
-      />
+      <div class="direct-editor-layer" onScroll={(e) => {
+        const top = (e.currentTarget as HTMLDivElement).scrollTop
+        if (inputRef.current) inputRef.current.scrollTop = top
+        if (highlightRef.current) highlightRef.current.scrollTop = top
+      }}>
+        <pre class="direct-editor-highlight" ref={highlightRef} aria-hidden="true">
+          {highlighted ? highlighted.map((line) => <span>{line.map((token) => <span style={token.style}>{token.content}</span>)}\n</span>) : value}
+        </pre>
+        <textarea
+          class="direct-editor-input"
+          ref={inputRef}
+          value={value}
+          disabled={disabled}
+          spellcheck={false}
+          onInput={(e) => onChange(e.currentTarget.value)}
+          onKeyDown={keyDown}
+          onScroll={(e) => {
+            if (highlightRef.current) highlightRef.current.scrollTop = e.currentTarget.scrollTop
+          }}
+        />
+      </div>
       {confirming && (
         <div class="direct-diff">
           <strong>変更内容を確認</strong>
