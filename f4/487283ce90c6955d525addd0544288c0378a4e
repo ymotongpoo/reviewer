@@ -1,0 +1,58 @@
+internal/server/dist/assets/c-YMmxBj3t.js
+  h_bf0ada3931f770 1
+internal/server/dist/assets/cpp-B44sbxvL.js
+  h_bf0ada3931f770 1
+internal/server/dist/assets/css-yzzaN6rx.js
+  h_bf0ada3931f770 1
+internal/server/dist/assets/dist-D9q1lnRB.js
+  h_bf0ada3931f770 1-2,47
+internal/server/dist/assets/graphql-CxNc6tRz.js
+  h_bf0ada3931f770 1
+internal/server/dist/assets/html-3Pg9wElY.js
+  h_bf0ada3931f770 1
+internal/server/dist/assets/html-derivative-CqVCDK0u.js
+  h_bf0ada3931f770 1
+internal/server/dist/assets/index-BTE_9IaB.js
+  h_bf0ada3931f770 1,239,241-245,247-250
+internal/server/dist/assets/index-CS7ZyfnC.css
+  h_bf0ada3931f770 1
+internal/server/dist/assets/java-ByPO7D0S.js
+  h_bf0ada3931f770 1
+internal/server/dist/assets/jsx-C4c8ZArv.js
+  h_bf0ada3931f770 1
+internal/server/dist/assets/lua-T1oBcpmX.js
+  h_bf0ada3931f770 1
+internal/server/dist/assets/php-C8o1Ycdm.js
+  h_bf0ada3931f770 1
+internal/server/dist/assets/rst-BPESAGSU.js
+  h_bf0ada3931f770 1
+internal/server/dist/assets/ruby-VkLRwcVm.js
+  h_bf0ada3931f770 1
+internal/server/dist/assets/sql-CaeK3XZ2.js
+  h_bf0ada3931f770 1
+internal/server/dist/assets/tsx-Ck3F7rCF.js
+  h_bf0ada3931f770 1
+internal/server/dist/assets/typescript-DVAzM-gn.js
+  h_bf0ada3931f770 1
+internal/server/dist/assets/vue-BaA32PT0.js
+  h_bf0ada3931f770 1
+internal/server/dist/assets/xml-CErpRhKb.js
+  h_bf0ada3931f770 1
+internal/server/dist/index.html
+  h_bf0ada3931f770 8-9
+web/src/components/FileView.tsx
+  h_bf0ada3931f770 284,423,432,440,442-450,461-462,511-531
+web/src/style.css
+  h_bf0ada3931f770 998-999,1001,1005-1013,1017-1029,1032-1034
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "f4487283ce90c6955d525addd0544288c0378a4e",
+  "prompts": {},
+  "humans": {
+    "h_bf0ada3931f770": {
+      "author": "Yoshi Yamaguchi <ymotongpoo@gmail.com>"
+    }
+  }
+}
