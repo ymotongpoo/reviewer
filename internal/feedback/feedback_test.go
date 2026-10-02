@@ -5,6 +5,7 @@ import (
 	"os"
 	"path/filepath"
 	"reflect"
+	"strings"
 	"testing"
 	"time"
 )
@@ -75,5 +76,23 @@ func TestParseResponse(t *testing.T) {
 	}
 	if _, _, err := ParseResponse([]byte("{"), 1, nil); err == nil {
 		t.Error("expected error")
+	}
+}
+
+func TestMarkdownRange(t *testing.T) {
+	doc := sampleDoc()
+	doc.Items = append(doc.Items, Item{
+		ID: "C-20", Scope: "line", Path: "ch3.md", Label: "nit", Body: "語尾", StartLine: 3, EndLine: 4, Located: true,
+		Quote: []string{"一行目の文", "二行目"}, Round: 2, Status: "open",
+		Range: &Range{StartLine: 3, StartColumn: 3, EndLine: 4, EndColumn: 2, Text: "の文\n二行"},
+	})
+	md := string(doc.Markdown())
+	for _, want := range []string{"`L3:5-4:2` のように列を含む位置", "### [C-20][nit] L3:4-4:2\n\n> 一行目の文\n> 二行目\n\n対象の文字列:\n\n> の文\n> 二行\n\n語尾"} {
+		if !strings.Contains(md, want) {
+			t.Errorf("markdown lacks %q:\n%s", want, md)
+		}
+	}
+	if strings.Contains(string(sampleDoc().Markdown()), "列を含む位置") {
+		t.Error("the note on columns is shown without range comments")
 	}
 }

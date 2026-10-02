@@ -367,6 +367,10 @@ type NewComment struct {
 	// Hash is the content hash the client was looking at. When the file has
 	// changed since, the range is re-anchored onto the current content.
 	Hash string `json:"hash"`
+	// Range turns a line comment into a range comment. Only its position and
+	// text are read; both are checked against the content of Hash, and Start
+	// and End are taken from it.
+	Range *anchor.TextRange `json:"range,omitempty"`
 }
 
 func (a *App) validLabel(l string) bool {
@@ -410,7 +414,11 @@ func (a *App) createComment(req NewComment) (*store.Comment, error) {
 		}
 		c.Path = req.Path
 		if req.Scope == store.ScopeLine {
-			if err := a.anchorNew(c, b, req); err != nil {
+			anchorNew := a.anchorNew
+			if req.Range != nil {
+				anchorNew = a.anchorNewRange
+			}
+			if err := anchorNew(c, b, req); err != nil {
 				return nil, err
 			}
 		}
@@ -452,6 +460,56 @@ func (a *App) anchorNew(c *store.Comment, cur []byte, req NewComment) error {
 		a.reanchorComment(c, curLines, h)
 	}
 	return nil
+}
+
+// anchorNewRange anchors a range comment. Unlike line comments, the content
+// the client selected from must still be known, and the selection must match
+// it exactly; nothing the client computed is stored.
+func (a *App) anchorNewRange(c *store.Comment, cur []byte, req NewComment) error {
+	if len(req.Range.Text) > anchor.MaxRangeTextBytes {
+		return badRequest("選択範囲が長すぎます。%dバイト以内で選択してください", anchor.MaxRangeTextBytes)
+	}
+	h, err := a.Store.PutBlob(cur)
+	if err != nil {
+		return err
+	}
+	view := cur
+	if req.Hash != h {
+		if view, err = a.Store.Blob(req.Hash); err != nil {
+			return conflict("選択したときのファイルの内容が見つかりません。再読み込みしてから選択し直してください")
+		}
+	}
+	viewLines := textutil.SplitLines(string(view))
+	textLines := anchor.TextLines(viewLines)
+	r, err := anchor.NormalizeRange(textLines, *req.Range)
+	if err != nil {
+		return conflict("選択範囲がファイルの内容と一致しません。再読み込みしてから選択し直してください")
+	}
+	text := anchor.RangeText(textLines, r)
+	if text != req.Range.Text {
+		return conflict("選択範囲がファイルの内容と一致しません。再読み込みしてから選択し直してください")
+	}
+	if anchor.OnlyLineBreaks(text) {
+		// Nothing but line breaks: a comment on the lines.
+		req.Range, req.Start, req.End = nil, r.StartLine, r.EndLine
+		return a.anchorNew(c, cur, req)
+	}
+	r = anchor.WithContext(textLines, r)
+	anc := anchor.New(viewLines, r.StartLine, r.EndLine)
+	c.Anchor = &anc
+	c.OrigStart, c.OrigEnd, c.OrigBlob = r.StartLine, r.EndLine, req.Hash
+	c.Range = &r
+	c.Loc = &store.Location{Start: r.StartLine, End: r.EndLine, State: anchor.Exact, Blob: req.Hash, Anchor: anc, Range: locRange(r)}
+	if req.Hash != h {
+		a.reanchorComment(c, textutil.SplitLines(string(cur)), h)
+	}
+	return nil
+}
+
+// locRange is r without its text, which only the comment keeps.
+func locRange(r anchor.TextRange) *anchor.TextRange {
+	r.Text = ""
+	return &r
 }
 
 func nonEmpty(s string) []string {

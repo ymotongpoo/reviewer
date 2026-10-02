@@ -12,7 +12,7 @@ import {
   showDismissedAnnotations,
   toast,
 } from '../state'
-import { statusText, lineRange } from '../labels'
+import { statusText, commentLines } from '../labels'
 import { fileHref, roundHref } from '../router'
 import type { AnnotationRequestView, Comment, RequestDiff } from '../types'
 import { Composer } from './Composer'
@@ -124,7 +124,7 @@ export function Overview() {
               {list.map((c) => (
                 <a class={`summary-row status-${c.status}`} href={fileHref(path, c.scope === 'line' ? c.loc?.start : undefined)}>
                   <span class="cid">{c.id}</span>
-                  <span class="where">{c.scope === 'file' ? 'ファイル' : lineRange(c.loc?.start, c.loc?.end)}</span>
+                  <span class="where">{c.scope === 'file' ? 'ファイル' : commentLines(c)}</span>
                   <span class={`chip label-${c.label}`}>{c.label}</span>
                   <span class={`chip status status-${c.status}`}>{statusText[c.status]}</span>
                   {c.loc?.state === 'outdated' && <span class="chip anchor-outdated">位置不明</span>}

@@ -7,6 +7,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"regexp"
+	"slices"
 	"sort"
 	"strings"
 	"text/template"
@@ -36,7 +37,9 @@ type Item struct {
 	EndLine   int `json:"endLine,omitempty"`
 	// Located is false when the commented text could not be found anymore;
 	// the line numbers are then those of the original snapshot.
-	Located     bool          `json:"located"`
+	Located bool `json:"located"`
+	// Range is set for a comment on part of the lines.
+	Range       *Range        `json:"range,omitempty"`
 	Quote       []string      `json:"quote,omitempty"`
 	Suggestions []string      `json:"suggestions,omitempty"`
 	Round       int           `json:"round"`
@@ -45,6 +48,17 @@ type Item struct {
 	Thread      []ThreadEntry `json:"thread,omitempty"`
 	// NewReplies are the human replies added in this round.
 	NewReplies []string `json:"newReplies,omitempty"`
+}
+
+// Range is the characters a comment refers to, as the half-open range
+// [start, end). Columns are 0-based Unicode code points, not counting a byte
+// order mark or the CR of a CRLF line break.
+type Range struct {
+	StartLine   int    `json:"startLine"`
+	StartColumn int    `json:"startColumn"`
+	EndLine     int    `json:"endLine"`
+	EndColumn   int    `json:"endColumn"`
+	Text        string `json:"text"`
 }
 
 // Doc is a whole round of feedback.
@@ -98,6 +112,9 @@ func (d *Doc) Markdown() []byte {
 	w("- 提出: %s\n", d.SubmittedAt.Format(time.RFC3339))
 	w("- 返答先: `%s`（形式は末尾の「返答の書き方」を参照）\n\n", d.ResponsePath)
 	w("行番号はこのラウンドを提出した時点のファイルのものです。引用（`>` の行）を手がかりに該当箇所を探してください。\n")
+	if slices.ContainsFunc(d.Items, func(it Item) bool { return it.Range != nil }) {
+		w("`L3:5-4:2` のように列を含む位置は、行の一部へのコメントです（列は1から数えた文字位置で、終端の文字を含みます）。対象の文字列は「対象の文字列」に示します。\n")
+	}
 	w("言語名が `suggestion` のコードブロックは、指定した行範囲をブロックの内容で置き換える提案です。\n\n")
 
 	var project, carried []Item
@@ -133,6 +150,7 @@ func (d *Doc) Markdown() []byte {
 		for _, it := range items {
 			w("### [%s][%s] %s\n\n", it.ID, it.Label, location(it))
 			writeQuote(&b, it.Quote)
+			writeRangeText(&b, it.Range)
 			writeBody(&b, it.Body)
 		}
 	}
@@ -147,6 +165,7 @@ func (d *Doc) Markdown() []byte {
 			}
 			w("### [%s][%s] %s（ラウンド%dの指摘・現在の状態: %s）\n\n", it.ID, it.Label, target, it.Round, it.Status)
 			writeQuote(&b, it.Quote)
+			writeRangeText(&b, it.Range)
 			writeBody(&b, it.Body)
 			for _, t := range it.Thread {
 				who := "レビュアー"
@@ -205,6 +224,10 @@ func location(it Item) string {
 }
 
 func lineRange(it Item) string {
+	if r := it.Range; r != nil {
+		// 1-based columns of the first and the last character.
+		return fmt.Sprintf("%d:%d-%d:%d", r.StartLine, r.StartColumn+1, r.EndLine, r.EndColumn)
+	}
 	if it.StartLine == it.EndLine {
 		return fmt.Sprint(it.StartLine)
 	}
@@ -232,6 +255,14 @@ func writeQuote(b *bytes.Buffer, lines []string) {
 		}
 	}
 	b.WriteString("\n")
+}
+
+func writeRangeText(b *bytes.Buffer, r *Range) {
+	if r == nil {
+		return
+	}
+	b.WriteString("対象の文字列:\n\n")
+	writeQuote(b, strings.Split(r.Text, "\n"))
 }
 
 func writeBody(b *bytes.Buffer, body string) {

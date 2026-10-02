@@ -9,12 +9,31 @@ export interface Anchor {
   hash: string
 }
 
+/**
+ * The half-open character range [start, end) of a range comment. Lines are
+ * 1-based; columns are 0-based Unicode code points of the text without a byte
+ * order mark, not counting the CR of a CRLF line break.
+ */
+export interface TextRange {
+  startLine: number
+  startColumn: number
+  endLine: number
+  endColumn: number
+  /** The selected text, with lines joined by "\n". */
+  text?: string
+  /** Characters around the range, which tell identical selections apart. */
+  before?: string
+  after?: string
+}
+
 export interface Location {
   start: number
   end: number
   state: AnchorState
   blob: string
   anchor: Anchor
+  /** The range of a range comment where it was last found, without its text. */
+  range?: TextRange
 }
 
 export interface Reply {
@@ -39,6 +58,8 @@ export interface Comment {
   anchor?: Anchor
   origStart?: number
   origEnd?: number
+  /** Set for a comment on part of the lines: the characters it was written against. */
+  range?: TextRange
   loc?: Location
   replies: Reply[]
   resolvedRound?: number

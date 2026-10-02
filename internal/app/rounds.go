@@ -141,6 +141,16 @@ func (a *App) buildDoc(n int, files map[string]string) (*feedback.Doc, error) {
 			} else {
 				it.Quote = lines[c.Loc.Start-1 : c.Loc.End]
 			}
+			if c.Range != nil {
+				r := *c.Range
+				if it.Located && c.Loc.Range != nil {
+					r = *c.Loc.Range
+				}
+				it.Range = &feedback.Range{
+					StartLine: r.StartLine, StartColumn: r.StartColumn,
+					EndLine: r.EndLine, EndColumn: r.EndColumn, Text: c.Range.Text,
+				}
+			}
 		}
 		for _, r := range c.Replies {
 			if r.Draft {
@@ -380,6 +390,10 @@ func (a *App) reanchor(paths []string) {
 }
 
 func (a *App) reanchorComment(c *store.Comment, newLines []string, h string) {
+	if c.Range != nil {
+		a.reanchorRangeComment(c, newLines, h)
+		return
+	}
 	var oldLines []string
 	if b, err := a.Store.Blob(c.Loc.Blob); err == nil {
 		oldLines = textutil.SplitLines(string(b))
@@ -405,6 +419,29 @@ func (a *App) reanchorComment(c *store.Comment, newLines []string, h string) {
 		state = anchor.Moved
 	}
 	c.Loc = &store.Location{Start: res.Start, End: res.End, State: state, Blob: h, Anchor: loc}
+}
+
+// reanchorRangeComment looks for the selected text of a range comment: at
+// its last position, then anywhere, narrowed down by the text around it. A
+// missing or ambiguous text makes the comment outdated; nothing is guessed.
+func (a *App) reanchorRangeComment(c *store.Comment, newLines []string, h string) {
+	prev := *c.Range
+	if c.Loc.Range != nil {
+		prev = *c.Loc.Range
+	}
+	r, ok := anchor.ResolveRange(*c.Range, prev, anchor.TextLines(newLines))
+	if !ok {
+		c.Loc.State = anchor.Outdated
+		return
+	}
+	state := anchor.Exact
+	if !r.SamePosition(*c.Range) {
+		state = anchor.Moved
+	}
+	c.Loc = &store.Location{
+		Start: r.StartLine, End: r.EndLine, State: state, Blob: h,
+		Anchor: anchor.New(newLines, r.StartLine, r.EndLine), Range: locRange(r),
+	}
 }
 
 // Status is a short summary for the CLI.

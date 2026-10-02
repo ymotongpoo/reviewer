@@ -2,7 +2,7 @@ import { useState } from 'preact/hooks'
 import { api } from '../api'
 import { editing, info, removeComment, toast, upsertComment } from '../state'
 import { renderMarkdown } from '../markdown'
-import { anchorHelp, anchorText, lineRange, statusText } from '../labels'
+import { anchorHelp, anchorText, commentLines, statusText } from '../labels'
 import { fileHref } from '../router'
 import type { Comment, Reply } from '../types'
 import { Composer } from './Composer'
@@ -35,7 +35,7 @@ export function Thread({ comment: c, showLocation, historic }: Props) {
       ? '全体'
       : c.scope === 'file'
         ? `${c.path}（ファイル全体）`
-        : `${c.path} ${lineRange(c.loc?.start, c.loc?.end)}`
+        : `${c.path} ${commentLines(c)}`
 
   return (
     <div class={`thread status-${c.status} ${open ? '' : 'collapsed'}`} id={`comment-${c.id}`}>
@@ -62,8 +62,8 @@ export function Thread({ comment: c, showLocation, historic }: Props) {
       {open && (
         <>
           {locState === 'outdated' && original && (
-            <blockquote class="quote" title="コメントしたときの文章">
-              {original.map((l) => (
+            <blockquote class="quote" title={c.range ? 'コメントした文字列' : 'コメントしたときの文章'}>
+              {(c.range?.text?.split('\n') ?? original).map((l) => (
                 <div>{l || ' '}</div>
               ))}
             </blockquote>

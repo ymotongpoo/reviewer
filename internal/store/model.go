@@ -44,6 +44,9 @@ type Location struct {
 	Blob string `json:"blob"`
 	// Anchor is the text at the location when it was last found.
 	Anchor anchor.Anchor `json:"anchor"`
+	// Range is the character range of a range comment within Start..End,
+	// with the context found there. Its text is that of Comment.Range.
+	Range *anchor.TextRange `json:"range,omitempty"`
 }
 
 // Reply is an entry in a comment thread.
@@ -72,8 +75,11 @@ type Comment struct {
 	OrigStart int            `json:"origStart,omitempty"`
 	OrigEnd   int            `json:"origEnd,omitempty"`
 	OrigBlob  string         `json:"origBlob,omitempty"`
-	Loc       *Location      `json:"loc,omitempty"`
-	Replies   []Reply        `json:"replies"`
+	// Range makes a line comment a range comment: the characters it was
+	// written against in OrigBlob, within OrigStart..OrigEnd.
+	Range   *anchor.TextRange `json:"range,omitempty"`
+	Loc     *Location         `json:"loc,omitempty"`
+	Replies []Reply           `json:"replies"`
 	// ResolvedRound is the round in which the human resolved the comment.
 	ResolvedRound int       `json:"resolvedRound,omitempty"`
 	CreatedAt     time.Time `json:"createdAt"`

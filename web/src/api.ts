@@ -22,6 +22,7 @@ import type {
   RoundChanges,
   RoundDiff,
   SubmitResult,
+  TextRange,
   TreeFile,
 } from './types'
 
@@ -82,6 +83,7 @@ export const api = {
     label: string
     body: string
     hash?: string
+    range?: TextRange
   }) => request<Comment>('POST', '/api/comments', c),
   updateComment: (id: string, patch: { label?: string; body?: string; status?: string }) =>
     request<Comment>('PATCH', `/api/comments/${q(id)}`, patch),

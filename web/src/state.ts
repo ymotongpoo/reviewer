@@ -11,6 +11,7 @@ import type {
   Info,
   Preset,
   ServerEvent,
+  TextRange,
   TreeFile,
 } from './types'
 
@@ -118,6 +119,8 @@ export type EditTarget =
       start?: number
       end?: number
       hash?: string
+      /** Selected text of a line comment, which makes it a range comment on the lines start..end. */
+      range?: TextRange
       /** Set once the draft has been saved; the thread is then hidden in favor of the editor. */
       createdId?: string
     }

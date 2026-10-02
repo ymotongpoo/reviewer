@@ -71,6 +71,7 @@ export function Composer({ target, comment, original, onClosed }: Props) {
           start: target.start,
           end: target.end,
           hash: target.hash,
+          range: target.range,
           label,
           body,
         })

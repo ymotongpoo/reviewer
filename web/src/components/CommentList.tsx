@@ -1,5 +1,5 @@
 import { closeCommentList, comments, commentListSelection, visibleAnnotations } from '../state'
-import { lineRange, statusText } from '../labels'
+import { commentLines, lineRange, statusText } from '../labels'
 import { renderMarkdown } from '../markdown'
 import type { Annotation, Comment } from '../types'
 
@@ -8,7 +8,7 @@ const severityText = { critical: '重大', major: '要修正', minor: '軽微', 
 function humanLocation(c: Comment): string {
   if (c.scope === 'file') return 'ファイル全体'
   if (c.scope === 'project') return 'プロジェクト全体'
-  return lineRange(c.loc?.start, c.loc?.end)
+  return commentLines(c)
 }
 
 function aiLocation(a: Annotation): string {

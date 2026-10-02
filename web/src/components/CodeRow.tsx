@@ -1,6 +1,7 @@
 import { memo } from 'preact/compat'
 import { useLayoutEffect, useRef } from 'preact/hooks'
 import type { Token } from '../highlight'
+import { BOM, decodeMarks, splitMarked } from '../textrange'
 
 /** Callbacks shared by every row. The object must keep its identity across renders. */
 export interface RowHandlers {
@@ -58,6 +59,8 @@ export interface RowProps {
   annotationCount: number
   annotationClass: string
   annotationOpen: boolean
+  /** Characters of range comments on the line, encoded by encodeMarks. */
+  marks?: string
   input?: InputState
   handlers: RowHandlers
 }
@@ -77,13 +80,19 @@ export const CodeRow = memo(function CodeRow(p: RowProps) {
   const text = p.text.endsWith('\r') ? p.text.slice(0, -1) : p.text
   const showTokens =
     p.tokens && (!p.verifyTokens || p.tokens.reduce((s, t) => s + t.content, '') === text)
+  // Marks leave out a byte order mark, which the row may show.
+  const rendered = showTokens ? p.tokens!.reduce((s, t) => s + t.content, '') : text
+  const shift = rendered.startsWith(BOM) ? BOM.length : 0
+  const marks = decodeMarks(p.marks).map(([f, t]) => [f + shift, t + shift] as [number, number])
   const content = showTokens
-    ? p.tokens!.map((t) => (
-        <span class="tok" style={t.style}>
+    ? splitMarked(p.tokens!, marks).map((t) => (
+        <span class={t.marked ? 'tok range-mark' : 'tok'} style={t.style}>
           {t.content}
         </span>
       ))
-    : text || ' '
+    : marks.length > 0
+      ? splitMarked([{ content: text }], marks).map((t) => (t.marked ? <span class="range-mark">{t.content}</span> : t.content))
+      : text || ' '
   const classes = [
     'row',
     p.selected && 'selected',
@@ -102,7 +111,7 @@ export const CodeRow = memo(function CodeRow(p: RowProps) {
       <span
         class={`ln clickable ${p.annotationCount ? 'has-annotation' : ''} ${p.commentBlocked ? 'no-comment' : ''}`}
         onMouseDown={(e) => handlers.gutterDown(e, no)}
-        title={p.commentBlocked ?? 'クリックでコメント（Shift+クリックかドラッグで範囲選択）'}
+        title={p.commentBlocked ?? 'クリックでコメント（Shift+クリックかドラッグで範囲選択、本文を選択中なら選択した文字列にコメント）'}
       >
         {no}
         {p.annotationCount > 0 && (

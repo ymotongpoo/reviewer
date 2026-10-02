@@ -46,7 +46,8 @@ import {
   type Pos,
   type Sel,
 } from '../editbuffer'
-import type { Annotation, Comment, FileView as FileData } from '../types'
+import type { Annotation, Comment, FileView as FileData, TextRange } from '../types'
+import { BOM, encodeMarks, lineMark, selectionTarget, type SelectionTarget, type TextPoint } from '../textrange'
 import { Composer } from './Composer'
 import { Thread } from './Thread'
 import { Preview } from './Preview'
@@ -295,11 +296,27 @@ export function FileView({ path, line }: { path: string; line?: number }) {
   const newFile = ed?.kind === 'new' && ed.scope === 'file' && ed.path === path ? ed : null
   // The new comment's range is in lines on disk; show it where those lines are now.
   const newLineAt = newLine ? { start: toDraft(newLine.start!), end: toDraft(newLine.end!) } : null
+  // A new range comment shows its characters rather than whole lines.
   const selRange = sel
     ? [Math.min(sel.anchor, sel.focus), Math.max(sel.anchor, sel.focus)]
-    : newLineAt?.start && newLineAt.end
+    : newLineAt?.start && newLineAt.end && !newLine?.range
       ? [newLineAt.start, newLineAt.end]
       : null
+
+  // Characters of range comments, by the row they are shown on.
+  const diskText = useMemo(() => textLines(lines), [lines])
+  const marks = new Map<number, [number, number][]>()
+  const addMarks = (r: TextRange) => {
+    for (let l = r.startLine; l <= r.endLine; l++) {
+      const d = toDraft(l)
+      const m = lineMark(diskText, r, l)
+      // A line changed in the draft no longer has those characters.
+      if (d === undefined || !m || textLine(displayLines[d - 1] ?? '') !== diskText[l - 1]) continue
+      marks.set(d, [...(marks.get(d) ?? []), m])
+    }
+  }
+  for (const c of located) if (c.range) addMarks(c.loc!.range ?? c.range)
+  if (newLine?.range) addMarks(newLine.range)
   const targetLine = line !== undefined ? toDraft(line) : undefined
 
   // Scroll to a deep-linked line once content is there.
@@ -370,12 +387,13 @@ export function FileView({ path, line }: { path: string; line?: number }) {
     }
   }, [])
 
-  function openComposer(start: number, end: number) {
+  /** Opens the composer for lines start..end, or for range in them; returns false when they cannot be commented on yet. */
+  function openComposer(start: number, end: number, range?: TextRange): boolean {
     const s = sessionRef.current
     const m = mapRef.current
     if (!s || !m) {
-      editing.value = { kind: 'new', scope: 'line', path, start, end, hash: file?.hash }
-      return
+      editing.value = { kind: 'new', scope: 'line', path, start, end, hash: file?.hash, range }
+      return true
     }
     // While editing, only unchanged lines can be commented on, by their line on disk.
     const base = m.toBase[start - 1]
@@ -383,9 +401,32 @@ export function FileView({ path, line }: { path: string; line?: number }) {
     for (let d = start - 1; ok && d < end; d++) ok = !m.changed[d] && m.toBase[d] === base + d - (start - 1)
     if (!ok) {
       toast('変更した行を含む範囲には、保存後にコメントできます')
-      return
+      return false
     }
-    editing.value = { kind: 'new', scope: 'line', path, start: base + 1, end: base + 1 + end - start, hash: s.baseHash }
+    // Unchanged lines have the same columns on disk.
+    const shift = base + 1 - start
+    const onDisk = range && { ...range, startLine: range.startLine + shift, endLine: range.endLine + shift }
+    editing.value = { kind: 'new', scope: 'line', path, start: base + 1, end: base + 1 + end - start, hash: s.baseHash, range: onDisk }
+    return true
+  }
+
+  /**
+   * What the text selected in the rows comments on, or undefined when no text
+   * is selected there. Only the rows of the review are read, never an input;
+   * columns come from the lines, not from what the rows show.
+   */
+  function textSelection(): SelectionTarget | undefined {
+    const code = codeRef.current
+    const ds = window.getSelection()
+    if (!code || !ds || ds.rangeCount === 0 || ds.isCollapsed || sessionRef.current?.mode === 'insert') return undefined
+    const r = ds.getRangeAt(0)
+    if (!code.contains(r.startContainer) || !code.contains(r.endContainer)) return undefined
+    const rows = Array.from(code.querySelectorAll<HTMLElement>(':scope > .row'))
+    const a = rowPoint(rows, r.startContainer, r.startOffset, 'start')
+    const b = rowPoint(rows, r.endContainer, r.endOffset, 'end')
+    // Text selected within a thread between two rows is not on any line.
+    if (!a || !b || a.line > b.line || (a.line === b.line && a.offset >= b.offset)) return undefined
+    return selectionTarget(textLines(displayLines), a, b)
   }
 
   // Editing
@@ -671,6 +712,12 @@ export function FileView({ path, line }: { path: string; line?: number }) {
   const rowHandlerImpl: Omit<RowHandlers, 'input'> = {
     gutterDown(e, no) {
       e.preventDefault()
+      // Text selected in the rows wins over the line; the gutter keeps the selection.
+      const t = textSelection()
+      if (t) {
+        if (openComposer(t.start, t.end, t.range)) window.getSelection()?.removeAllRanges()
+        return
+      }
       if (mapRef.current?.changed[no - 1]) {
         toast(CHANGED_LINE)
         return
@@ -928,7 +975,7 @@ export function FileView({ path, line }: { path: string; line?: number }) {
               ))}
               {newFile && <Composer key="new-file" target={newFile} />}
               {newLine && !newLineAt?.end && (
-                <Composer key={`new-${newLine.start}-${newLine.end}`} target={newLine} original={lines.slice(newLine.start! - 1, newLine.end!)} />
+                <Composer key={composerKey(newLine)} target={newLine} original={lines.slice(newLine.start! - 1, newLine.end!)} />
               )}
               {lost.length > 0 && (
                 <div class="lost">
@@ -993,6 +1040,7 @@ export function FileView({ path, line }: { path: string; line?: number }) {
                       lineAnnotations ? `severity-${highestSeverity(lineAnnotations)} ${confidenceClass(lineAnnotations)}` : ''
                     }
                     annotationOpen={annotationOpen}
+                    marks={marks.has(no) ? encodeMarks(marks.get(no)!) : undefined}
                     input={insert && head?.line === i ? inputState : undefined}
                     handlers={handlers}
                   />
@@ -1003,7 +1051,7 @@ export function FileView({ path, line }: { path: string; line?: number }) {
                       ))}
                       {composerHere && (
                         <Composer
-                          key={`new-${newLine!.start}-${newLine!.end}`}
+                          key={composerKey(newLine!)}
                           target={newLine!}
                           original={lines.slice(newLine!.start! - 1, newLine!.end!)}
                         />
@@ -1050,6 +1098,57 @@ function confidenceClass(list: Annotation[]): string {
   const rank = { high: 3, medium: 2, low: 1 }
   const confidence = [...list].sort((a, b) => rank[b.confidence] - rank[a.confidence])[0].confidence
   return `confidence-${confidence}`
+}
+
+function composerKey(t: { start?: number; end?: number; range?: TextRange }): string {
+  const r = t.range
+  return `new-${t.start}-${t.end}${r ? `-${r.startColumn}-${r.endColumn}` : ''}`
+}
+
+/** A line as range columns count it: without a CR or a byte order mark. */
+function textLine(l: string): string {
+  if (l.endsWith('\r')) l = l.slice(0, -1)
+  return l.startsWith(BOM) ? l.slice(BOM.length) : l
+}
+
+function textLines(lines: string[]): string[] {
+  return lines.map(textLine)
+}
+
+/**
+ * A boundary of the DOM selection as a line (0-based) and an offset in what
+ * its row shows, less a byte order mark it shows. A boundary in the gutter is the start of the line; one past
+ * the text, its end. One between rows, as in a thread, moves to the next row
+ * when the selection starts there and to the previous one when it ends there.
+ */
+function rowPoint(rows: HTMLElement[], node: Node, offset: number, edge: 'start' | 'end'): TextPoint | undefined {
+  const el = node instanceof Element ? node : node.parentElement
+  const row = el?.closest<HTMLElement>('.row')
+  const lineOf = (r: HTMLElement) => Number(r.id.slice(1)) - 1
+  if (row && rows.includes(row)) {
+    const text = row.querySelector<HTMLElement>(':scope > .text')
+    if (!text) return { line: lineOf(row), offset: 0 }
+    const r = document.createRange()
+    r.selectNodeContents(text)
+    const where = r.comparePoint(node, offset)
+    if (where < 0) return { line: lineOf(row), offset: 0 }
+    if (where > 0) return { line: lineOf(row), offset: Infinity }
+    r.setEnd(node, offset)
+    const bom = text.textContent?.startsWith(BOM) ? BOM.length : 0
+    return { line: lineOf(row), offset: Math.max(0, r.toString().length - bom) }
+  }
+  // The first row after the boundary.
+  let lo = 0
+  let hi = rows.length
+  const r = document.createRange()
+  while (lo < hi) {
+    const mid = (lo + hi) >> 1
+    r.selectNode(rows[mid])
+    if (r.comparePoint(node, offset) < 0) hi = mid
+    else lo = mid + 1
+  }
+  if (edge === 'start') return lo < rows.length ? { line: lineOf(rows[lo]), offset: 0 } : undefined
+  return lo > 0 ? { line: lineOf(rows[lo - 1]), offset: Infinity } : undefined
 }
 
 function splitLines(s: string): string[] {

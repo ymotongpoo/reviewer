@@ -454,3 +454,40 @@ func TestSaveFileAPI(t *testing.T) {
 		t.Fatalf("saved %+v, file %+v", saved, after)
 	}
 }
+
+func TestRangeCommentAPI(t *testing.T) {
+	e := newEnv(t)
+	id := e.open(t, filepath.Join(e.root, "a"))
+	_, body := do(t, "GET", e.ts.URL+"/p/"+id+"/api/file?path=a.md", "", bearer)
+	var fv struct{ Hash string }
+	json.Unmarshal([]byte(body), &fv)
+
+	create := func(hash, text string) (*http.Response, string) {
+		b, _ := json.Marshal(map[string]any{
+			"scope": "line", "path": "a.md", "label": "must", "body": "x", "hash": hash,
+			"range": map[string]any{"startLine": 2, "startColumn": 1, "endLine": 2, "endColumn": 3, "text": text},
+		})
+		return do(t, "POST", e.ts.URL+"/p/"+id+"/api/comments", string(b), bearer)
+	}
+	res, body := create(fv.Hash, "in")
+	if res.StatusCode != 200 {
+		t.Fatalf("create: %d %s", res.StatusCode, body)
+	}
+	var c struct {
+		Range struct {
+			StartColumn int
+			Text        string
+		}
+		Loc struct{ Start, End int }
+	}
+	json.Unmarshal([]byte(body), &c)
+	if c.Range.Text != "in" || c.Range.StartColumn != 1 || c.Loc.Start != 2 || c.Loc.End != 2 {
+		t.Fatalf("created %s", body)
+	}
+	if res, body := create(fv.Hash, "ne"); res.StatusCode != http.StatusConflict {
+		t.Fatalf("mismatched text: %d %s", res.StatusCode, body)
+	}
+	if res, body := create(strings.Repeat("0", 64), "in"); res.StatusCode != http.StatusConflict {
+		t.Fatalf("unknown hash: %d %s", res.StatusCode, body)
+	}
+}

@@ -1,4 +1,5 @@
-import type { AnchorState, Status } from './types'
+import { formatRange } from './textrange'
+import type { AnchorState, Comment, Status } from './types'
 
 export const statusText: Record<Status, string> = {
   draft: '下書き',
@@ -26,4 +27,10 @@ export const anchorHelp: Record<AnchorState, string> = {
 export function lineRange(start?: number, end?: number): string {
   if (!start) return ''
   return start === end || !end ? `L${start}` : `L${start}-${end}`
+}
+
+/** Position of a line comment; that of a range comment includes its columns. */
+export function commentLines(c: Comment): string {
+  const r = c.range && (c.loc?.range ?? c.range)
+  return r ? formatRange(r) : lineRange(c.loc?.start, c.loc?.end)
 }
