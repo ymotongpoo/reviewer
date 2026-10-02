@@ -1,8 +1,10 @@
 package project
 
 import (
+	"errors"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 )
 
@@ -67,8 +69,8 @@ func TestWriteChecksHashAndPreservesMode(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if err := p.Write("main.go", "stale", []byte("changed\n")); err == nil {
-		t.Fatal("stale write succeeded")
+	if err := p.Write("main.go", "stale", []byte("changed\n")); !errors.Is(err, ErrChanged) {
+		t.Fatalf("stale write error = %v", err)
 	}
 	if err := p.Write("main.go", HashBytes(before), []byte("package main\n\nfunc main() {}\n")); err != nil {
 		t.Fatal(err)
@@ -82,6 +84,38 @@ func TestWriteChecksHashAndPreservesMode(t *testing.T) {
 	}
 	if err := p.Write("main.go", HashBytes(got), []byte("a\x00b")); err != ErrNotText {
 		t.Fatalf("binary write error = %v", err)
+	}
+	info, err := os.Stat(filepath.Join(root, "main.go"))
+	if err != nil || info.Mode().Perm() != 0o644 {
+		t.Fatalf("mode after write = %v, %v", info.Mode(), err)
+	}
+}
+
+func TestWriteLeavesNoTempFile(t *testing.T) {
+	root := t.TempDir()
+	write(t, root, "a.txt", "one\r\ntwo\r\n")
+	p, err := New(root, filepath.Join(root, ".reviewer"), nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	before, _ := p.Read("a.txt")
+	content := "\ufeffone\r\nTWO\r\n"
+	if err := p.Write("a.txt", HashBytes(before), []byte(content)); err != nil {
+		t.Fatal(err)
+	}
+	// A failed write must not leave its temporary file either.
+	if err := p.Write("a.txt", "stale", []byte("x")); !errors.Is(err, ErrChanged) {
+		t.Fatalf("stale write error = %v", err)
+	}
+	got, _ := os.ReadFile(filepath.Join(root, "a.txt"))
+	if string(got) != content {
+		t.Fatalf("content = %q", got)
+	}
+	entries, _ := os.ReadDir(root)
+	for _, e := range entries {
+		if strings.HasPrefix(e.Name(), ".reviewer-save-") {
+			t.Fatalf("temporary file left: %s", e.Name())
+		}
 	}
 }
 func TestResolveRejectsOutside(t *testing.T) {

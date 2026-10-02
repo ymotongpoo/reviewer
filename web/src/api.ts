@@ -133,7 +133,7 @@ export const api = {
     request<GitCommitResult>('POST', '/api/git/commit', { message, fingerprint }),
   gitPush: (remote: string, branch: string) => request<GitPushResult>('POST', '/api/git/push', { remote, branch }),
   saveFile: (path: string, content: string, hash: string) =>
-    request<{ ok: boolean }>('PUT', '/api/file', { path, content, hash }),
+    request<{ ok: boolean; hash: string }>('PUT', '/api/file', { path, content, hash }),
 
   server: () => request<ServerInfo>('GET', '/api/server'),
   projects: () => request<{ projects: ProjectSummary[] }>('GET', '/api/projects').then((r) => r.projects),

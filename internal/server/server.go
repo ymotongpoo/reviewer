@@ -281,7 +281,8 @@ func (p *Project) handleSaveFile(w http.ResponseWriter, r *http.Request) {
 		writeError(w, err)
 		return
 	}
-	respond(w, map[string]bool{"ok": true}, p.App.SaveFile(req))
+	res, err := p.App.SaveFile(req)
+	respond(w, res, err)
 }
 
 func roundParam(r *http.Request) int {

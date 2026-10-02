@@ -423,3 +423,34 @@ func TestGitAPI(t *testing.T) {
 		t.Fatalf("after commit: %s", body)
 	}
 }
+
+func TestSaveFileAPI(t *testing.T) {
+	e := newEnv(t)
+	id := e.open(t, filepath.Join(e.root, "a"))
+	_, body := do(t, "GET", e.ts.URL+"/p/"+id+"/api/file?path=a.md", "", bearer)
+	var fv struct{ Content, Hash string }
+	json.Unmarshal([]byte(body), &fv)
+
+	put := func(content, hash string) (*http.Response, string) {
+		b, _ := json.Marshal(map[string]string{"path": "a.md", "content": content, "hash": hash})
+		return do(t, "PUT", e.ts.URL+"/p/"+id+"/api/file", string(b), bearer)
+	}
+	if res, body := put("# a\nedited\n", "stale"); res.StatusCode != http.StatusConflict {
+		t.Fatalf("stale save: %d %s", res.StatusCode, body)
+	}
+	res, body := put("# a\nedited\n", fv.Hash)
+	if res.StatusCode != 200 {
+		t.Fatalf("save: %d %s", res.StatusCode, body)
+	}
+	var saved struct {
+		OK   bool
+		Hash string
+	}
+	json.Unmarshal([]byte(body), &saved)
+	_, body = do(t, "GET", e.ts.URL+"/p/"+id+"/api/file?path=a.md", "", bearer)
+	var after struct{ Content, Hash string }
+	json.Unmarshal([]byte(body), &after)
+	if !saved.OK || saved.Hash == "" || saved.Hash != after.Hash || after.Content != "# a\nedited\n" {
+		t.Fatalf("saved %+v, file %+v", saved, after)
+	}
+}

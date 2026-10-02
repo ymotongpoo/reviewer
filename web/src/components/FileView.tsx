@@ -1,5 +1,5 @@
+import { Fragment } from 'preact'
 import { useEffect, useMemo, useRef, useState } from 'preact/hooks'
-import { diffLines } from 'diff'
 import { api, ApiError } from '../api'
 import {
   annotationSeverity,
@@ -13,6 +13,39 @@ import {
   visibleAnnotations,
 } from '../state'
 import { tokenize, type Token } from '../highlight'
+import { addNavigationGuard } from '../router'
+import { copyText } from '../clipboard'
+import {
+  caretAt,
+  deleteBackward,
+  deleteForward,
+  deleteSelection,
+  diffHunks,
+  emptyHistory,
+  indent,
+  insertText,
+  isCollapsed,
+  lineEnd,
+  mapLines,
+  moveVertical,
+  newline,
+  ordered,
+  outdent,
+  parseContent,
+  record,
+  redo,
+  selectedLines,
+  selectedText,
+  serializeContent,
+  undo,
+  type Buffer,
+  type EditKind,
+  type Format,
+  type History,
+  type LineMap,
+  type Pos,
+  type Sel,
+} from '../editbuffer'
 import type { Annotation, Comment, FileView as FileData } from '../types'
 import { Composer } from './Composer'
 import { Thread } from './Thread'
@@ -20,16 +53,67 @@ import { Preview } from './Preview'
 import { isMarkdown } from '../preview/render'
 import { AnnotationCard } from './AnnotationCard'
 import { CommentList } from './CommentList'
-
-interface Row {
-  no: number
-  text: string
-}
+import { CodeRow, type InputHandlers, type InputState, type RowHandlers } from './CodeRow'
+import { EditBar, EditReview, type EditError } from './EditBar'
 
 interface Selection {
   anchor: number
   focus: number
 }
+
+/**
+ * An in-place edit of the file. The base is fixed when editing starts, so a
+ * refresh after an external change never moves it: saving then sends the old
+ * hash and the server refuses to overwrite.
+ */
+interface EditSession {
+  path: string
+  baseHash: string
+  baseContent: string
+  baseLines: string[]
+  format: Format
+  buf: Buffer
+  history: History
+  mode: 'normal' | 'insert'
+  /** Bumped when the buffer moved the caret, so the input writes it back. */
+  sync: number
+  /** Bumped to focus the input and scroll its line into view. */
+  reveal: number
+  revealBlock: 'center' | 'nearest'
+}
+
+function startSession(path: string, file: FileData): EditSession {
+  const { format, lines } = parseContent(file.content)
+  return {
+    path,
+    baseHash: file.hash,
+    baseContent: file.content,
+    baseLines: lines,
+    format,
+    buf: { lines, sel: caretAt(0, 0) },
+    history: emptyHistory,
+    mode: 'normal',
+    sync: 0,
+    reveal: 0,
+    revealBlock: 'center',
+  }
+}
+
+function draftContent(s: EditSession): string {
+  return serializeContent(s.format, s.buf.lines)
+}
+
+function isDirty(s: EditSession): boolean {
+  return s.buf.lines !== s.baseLines && draftContent(s) !== s.baseContent
+}
+
+function isBlock(sel: Sel): boolean {
+  return sel.anchor.line !== sel.head.line
+}
+
+const HIGHLIGHT_DELAY = 120
+const PREVIEW_DELAY = 300
+const CHANGED_LINE = '変更した行です。保存後にコメントできます'
 
 export function FileView({ path, line }: { path: string; line?: number }) {
   const [file, setFile] = useState<FileData | null>(null)
@@ -48,18 +132,41 @@ export function FileView({ path, line }: { path: string; line?: number }) {
     }
   })
   const [scrollRatio, setScrollRatio] = useState(0)
-  const [tokens, setTokens] = useState<Token[][] | undefined>()
+  // Tokens, and the draft lines they were computed from while editing.
+  const [hl, setHl] = useState<{ tokens?: Token[][]; lines?: string[] }>({})
   const [error, setError] = useState<string | null>(null)
-  const [directEdit, setDirectEdit] = useState(false)
-  const [draft, setDraft] = useState('')
+  const [session, setSessionState] = useState<EditSession | null>(null)
+  const [review, setReview] = useState<'draft' | 'external' | null>(null)
+  const [editError, setEditError] = useState<EditError | null>(null)
   const [saving, setSaving] = useState(false)
-  const [editLine, setEditLine] = useState<number | undefined>()
+  const [previewDraft, setPreviewDraft] = useState<string | null>(null)
   const [sel, setSel] = useState<Selection | null>(null)
   // AI annotations remain expanded until they are adopted or dismissed.
   const [annotationToggles, setAnnotationToggles] = useState<Map<number, boolean>>(new Map())
   const dragging = useRef(false)
   const lastPath = useRef(path)
+  const sessionRef = useRef<EditSession | null>(null)
+  const savingRef = useRef(false)
+  const inputEl = useRef<HTMLTextAreaElement | null>(null)
+  const codeRef = useRef<HTMLDivElement>(null)
+  const composing = useRef(false)
+  const pendingBefore = useRef<Buffer | null>(null)
+  const goal = useRef<number | undefined>(undefined)
+  const highlightSeq = useRef(0)
   const fv = fileVersion.value
+
+  function setSession(s: EditSession | null) {
+    sessionRef.current = s
+    setSessionState(s)
+  }
+
+  /** Highlights content; only the latest request is applied. */
+  function highlight(content: string, lines?: string[]) {
+    const seq = ++highlightSeq.current
+    tokenize(content, path).then((t) => {
+      if (seq === highlightSeq.current) setHl((prev) => ({ tokens: stabilizeTokens(prev.tokens, t), lines }))
+    })
+  }
 
   // Load the file. Diffs are reviewed per round from the round history.
   useEffect(() => {
@@ -67,22 +174,31 @@ export function FileView({ path, line }: { path: string; line?: number }) {
     const pathChanged = lastPath.current !== path
     lastPath.current = path
     if (pathChanged) {
+      // Drop highlighting still in flight for the previous file.
+      highlightSeq.current++
       setSel(null)
       setFile(null)
-      setTokens(undefined)
+      setHl({})
+      setSession(null)
+      setReview(null)
+      setEditError(null)
     }
     if (!pathChanged && fv.n > 0 && !fv.paths.includes(path) && !fv.paths.includes('*') && file) return
     ;(async () => {
       try {
         const f = await api.file(path)
         if (cancelled) return
-        if (file && file.hash !== f.hash && !pathChanged) toast(`${path} が更新されました`)
+        if (file && file.hash !== f.hash && !pathChanged && !savingRef.current) toast(`${path} が更新されました`)
         setFile(f)
         setError(null)
-        const t = await tokenize(f.content, path)
-        if (!cancelled) setTokens(t)
+        // While editing, the draft keeps its own highlighting and base.
+        if (!sessionRef.current) highlight(f.content)
       } catch (e) {
-        if (!cancelled) setError(e instanceof ApiError ? e.message : String(e))
+        if (cancelled) return
+        const msg = e instanceof ApiError ? e.message : String(e)
+        // Never replace the page while a draft is open; it would be lost.
+        if (sessionRef.current) setEditError({ message: `ファイルを再読み込みできません: ${msg}`, conflict: false })
+        else setError(msg)
       }
     })()
     return () => {
@@ -91,8 +207,46 @@ export function FileView({ path, line }: { path: string; line?: number }) {
   }, [path, fv.n])
 
   const lines = useMemo(() => (file ? splitLines(file.content) : []), [file])
+  const draftLines = session?.buf.lines
+  const displayLines = draftLines ?? lines
+  const map = useMemo(
+    () => (session ? mapLines(session.baseLines, session.buf.lines) : null),
+    [session?.baseLines, draftLines],
+  )
+  const mapRef = useRef<LineMap | null>(null)
+  mapRef.current = map
+  // Until the draft is highlighted again, rows keep the tokens of the lines they show.
+  const tokens = useMemo(
+    () => (session && hl.tokens ? alignTokens(hl.lines ?? session.baseLines, hl.tokens, displayLines) : hl.tokens),
+    [hl, displayLines, session?.baseLines],
+  )
 
-  const rows: Row[] = useMemo(() => lines.map((text, i) => ({ no: i + 1, text })), [lines])
+  /** Draft line (1-based) for a line of the file on disk, or undefined when it was deleted. */
+  const toDraft = (no: number): number | undefined => {
+    if (!map) return no
+    const d = map.toDraft[no - 1]
+    return d === undefined || d < 0 ? undefined : d + 1
+  }
+
+  // Re-highlight the draft shortly after typing stops, but not mid-composition.
+  useEffect(() => {
+    if (!draftLines) return
+    const t = setTimeout(() => {
+      if (!composing.current) highlight(draftLines.join('\n'), draftLines)
+    }, HIGHLIGHT_DELAY)
+    return () => clearTimeout(t)
+  }, [draftLines])
+
+  const showPreview = preview && isMarkdown(path)
+  useEffect(() => {
+    const s = sessionRef.current
+    if (!s || !showPreview) {
+      setPreviewDraft(null)
+      return
+    }
+    const t = setTimeout(() => setPreviewDraft(draftContent(s)), PREVIEW_DELAY)
+    return () => clearTimeout(t)
+  }, [draftLines, showPreview])
 
   // Resolved comments stay in the round history only.
   const fileComments = comments.value.filter((c) => c.path === path && c.status !== 'resolved')
@@ -101,31 +255,52 @@ export function FileView({ path, line }: { path: string; line?: number }) {
   const visible = (c: Comment) => c.id !== hiddenId
   const scopeFile = fileComments.filter((c) => c.scope === 'file' && visible(c))
   const lineComments = fileComments.filter((c) => c.scope === 'line' && c.loc && visible(c))
-  const located = lineComments.filter((c) => c.loc!.state !== 'outdated' && c.loc!.end <= lines.length)
+  // Comments are anchored to the file on disk; while editing they move with the draft.
+  const placeOf = (loc: { start: number; end: number }) => toDraft(loc.end) ?? toDraft(loc.start)
+  const located = lineComments.filter(
+    (c) => c.loc!.state !== 'outdated' && c.loc!.end <= lines.length && placeOf(c.loc!) !== undefined,
+  )
   const lost = lineComments.filter((c) => !located.includes(c))
 
   const fileAnnotations = visibleAnnotations.value.filter((a) => a.path === path)
-  const locatedAnnotations = fileAnnotations.filter((a) => a.loc && a.loc.state !== 'outdated' && a.loc.end <= lines.length)
+  const locatedAnnotations = fileAnnotations.filter(
+    (a) => a.loc && a.loc.state !== 'outdated' && a.loc.end <= lines.length && placeOf(a.loc) !== undefined,
+  )
   const lostAnnotations = fileAnnotations.filter((a) => !locatedAnnotations.includes(a))
   const annotationsByEnd = new Map<number, Annotation[]>()
   const annotationCovered = new Set<number>()
   for (const a of locatedAnnotations) {
-    const end = a.loc!.end
+    const end = placeOf(a.loc!)!
     annotationsByEnd.set(end, [...(annotationsByEnd.get(end) ?? []), a])
-    for (let l = a.loc!.start; l <= end; l++) annotationCovered.add(l)
+    for (let l = a.loc!.start; l <= a.loc!.end; l++) {
+      const d = toDraft(l)
+      if (d !== undefined) annotationCovered.add(d)
+    }
   }
 
   const byEnd = new Map<number, Comment[]>()
   const covered = new Map<number, number>()
   for (const c of located) {
-    const end = c.loc!.end
+    const end = placeOf(c.loc!)!
     byEnd.set(end, [...(byEnd.get(end) ?? []), c])
-    if (c.status !== 'resolved') for (let l = c.loc!.start; l <= end; l++) covered.set(l, (covered.get(l) ?? 0) + 1)
+    if (c.status !== 'resolved') {
+      for (let l = c.loc!.start; l <= c.loc!.end; l++) {
+        const d = toDraft(l)
+        if (d !== undefined) covered.set(d, (covered.get(d) ?? 0) + 1)
+      }
+    }
   }
 
   const newLine = ed?.kind === 'new' && ed.scope === 'line' && ed.path === path ? ed : null
   const newFile = ed?.kind === 'new' && ed.scope === 'file' && ed.path === path ? ed : null
-  const selRange = sel ? [Math.min(sel.anchor, sel.focus), Math.max(sel.anchor, sel.focus)] : newLine ? [newLine.start!, newLine.end!] : null
+  // The new comment's range is in lines on disk; show it where those lines are now.
+  const newLineAt = newLine ? { start: toDraft(newLine.start!), end: toDraft(newLine.end!) } : null
+  const selRange = sel
+    ? [Math.min(sel.anchor, sel.focus), Math.max(sel.anchor, sel.focus)]
+    : newLineAt?.start && newLineAt.end
+      ? [newLineAt.start, newLineAt.end]
+      : null
+  const targetLine = line !== undefined ? toDraft(line) : undefined
 
   // Scroll to a deep-linked line once content is there.
   useEffect(() => {
@@ -137,7 +312,6 @@ export function FileView({ path, line }: { path: string; line?: number }) {
     setAnnotationToggles(new Map())
   }, [path])
 
-  const showPreview = preview && isMarkdown(path)
   useEffect(() => {
     if (!showPreview) return
     const main = document.querySelector('.main')
@@ -164,56 +338,505 @@ export function FileView({ path, line }: { path: string; line?: number }) {
     return () => window.removeEventListener('mouseup', up)
   })
 
-  function openComposer(start: number, end: number) {
-    editing.value = { kind: 'new', scope: 'line', path, start, end, hash: file?.hash }
-  }
+  // Leaving the file or the page with a draft asks first.
+  useEffect(() => {
+    const removeGuard = addNavigationGuard((next) => {
+      const s = sessionRef.current
+      if (!s || (next.page === 'file' && next.path === s.path) || !isDirty(s)) return true
+      return confirm(`${s.path} の編集内容は保存されていません。破棄して移動しますか？`)
+    })
+    const warn = (e: BeforeUnloadEvent) => {
+      const s = sessionRef.current
+      if (s && isDirty(s)) {
+        e.preventDefault()
+        e.returnValue = ''
+      }
+    }
+    // Ctrl/Cmd+S opens the diff; saving always goes through it.
+    const save = (e: KeyboardEvent) => {
+      if (!(e.ctrlKey || e.metaKey) || e.altKey || e.key.toLowerCase() !== 's' || !sessionRef.current) return
+      const t = e.target as HTMLElement | null
+      const ours = !t || t === document.body || t === codeRef.current || t.classList.contains('inline-input')
+      if (!ours && t.closest('input, textarea, select, [contenteditable]')) return
+      e.preventDefault()
+      setReview('draft')
+    }
+    window.addEventListener('beforeunload', warn)
+    window.addEventListener('keydown', save)
+    return () => {
+      removeGuard()
+      window.removeEventListener('beforeunload', warn)
+      window.removeEventListener('keydown', save)
+    }
+  }, [])
 
-  function onGutterDown(e: MouseEvent, no: number) {
-    e.preventDefault()
-    if (e.shiftKey && newLine && !newLine.createdId) {
-      const a = newLine.start!
-      openComposer(Math.min(a, no), Math.max(newLine.end!, no, a))
+  function openComposer(start: number, end: number) {
+    const s = sessionRef.current
+    const m = mapRef.current
+    if (!s || !m) {
+      editing.value = { kind: 'new', scope: 'line', path, start, end, hash: file?.hash }
       return
     }
-    dragging.current = true
-    setSel({ anchor: no, focus: no })
+    // While editing, only unchanged lines can be commented on, by their line on disk.
+    const base = m.toBase[start - 1]
+    let ok = base >= 0
+    for (let d = start - 1; ok && d < end; d++) ok = !m.changed[d] && m.toBase[d] === base + d - (start - 1)
+    if (!ok) {
+      toast('変更した行を含む範囲には、保存後にコメントできます')
+      return
+    }
+    editing.value = { kind: 'new', scope: 'line', path, start: base + 1, end: base + 1 + end - start, hash: s.baseHash }
   }
 
-  function onRowEnter(no?: number) {
-    if (dragging.current && no) setSel((s) => (s ? { ...s, focus: no } : s))
+  // Editing
+
+  /** The buffer with the caret the input actually shows; native keys move it without telling us. */
+  function current(): Buffer {
+    const s = sessionRef.current!
+    const ta = inputEl.current
+    if (!ta || s.mode !== 'insert' || isBlock(s.buf.sel) || composing.current) return s.buf
+    const line = s.buf.sel.head.line
+    const backward = ta.selectionDirection === 'backward'
+    const anchor = { line, col: backward ? ta.selectionEnd : ta.selectionStart }
+    const head = { line, col: backward ? ta.selectionStart : ta.selectionEnd }
+    return { lines: s.buf.lines, sel: { anchor, head } }
   }
 
-  async function saveDirectEdit() {
-    if (!file || saving) return
+  /** Applies a change made by the buffer and writes the caret back to the input. */
+  function commit(before: Buffer, next: Buffer, kind: EditKind | null, opts: { goal?: number; sync?: boolean } = {}) {
+    const s = sessionRef.current
+    if (!s) return
+    const history = kind && next.lines !== before.lines ? record(s.history, before, kind, Date.now()) : s.history
+    goal.current = opts.goal
+    setSession({
+      ...s,
+      buf: next,
+      history,
+      sync: opts.sync === false ? s.sync : s.sync + 1,
+      revealBlock: 'nearest',
+    })
+  }
+
+  function apply(op: (b: Buffer) => Buffer, kind: EditKind) {
+    if (savingRef.current) return
+    const before = current()
+    const next = op(before)
+    if (next !== before) commit(before, next, kind)
+  }
+
+  function undoRedo(redoing: boolean) {
+    const s = sessionRef.current
+    if (!s || savingRef.current) return
+    const cur = current()
+    const r = redoing ? redo(s.history, cur) : undo(s.history, cur)
+    if (!r) return
+    goal.current = undefined
+    setSession({ ...s, buf: r.buffer, history: r.history, sync: s.sync + 1, revealBlock: 'nearest' })
+  }
+
+  function beginEdit(no?: number, col?: number, block: 'center' | 'nearest' = 'center') {
+    if (!file || savingRef.current) return
+    const s = sessionRef.current ?? startSession(path, file)
+    const l = Math.max(0, Math.min((no ?? s.buf.sel.head.line + 1) - 1, s.buf.lines.length - 1))
+    const end = lineEnd(s.buf.lines[l])
+    const c = Math.min(col ?? end, end)
+    goal.current = undefined
+    setSession({
+      ...s,
+      mode: 'insert',
+      buf: { lines: s.buf.lines, sel: caretAt(l, c) },
+      sync: s.sync + 1,
+      reveal: s.reveal + 1,
+      revealBlock: block,
+    })
+  }
+
+  function toNormal(focusCode: boolean) {
+    const s = sessionRef.current
+    if (!s || s.mode !== 'insert') return
+    setSession({ ...s, buf: current(), mode: 'normal' })
+    if (focusCode) codeRef.current?.focus({ preventScroll: true })
+  }
+
+  function collapseTo(cur: Buffer, p: Pos) {
+    commit(cur, { lines: cur.lines, sel: caretAt(p.line, p.col) }, null)
+  }
+
+  /** Whether ArrowUp/Down stays inside a wrapped line, which the input handles natively. */
+  function movesWithinWrap(ta: HTMLTextAreaElement, col: number, dir: number): boolean {
+    if (!(wrap || showPreview)) return false
+    const layer = ta.previousElementSibling as HTMLElement | null
+    if (!layer) return false
+    const rects = layer.getClientRects()
+    if (rects.length <= 1) return false
+    const caret = caretRect(layer, col)
+    if (!caret) return false
+    return dir < 0 ? caret.top > rects[0].top + 2 : caret.top < rects[rects.length - 1].top - 2
+  }
+
+  function keyDown(e: KeyboardEvent, ta: HTMLTextAreaElement) {
+    const s = sessionRef.current
+    if (!s || s.mode !== 'insert') return
+    // Keys that confirm or cancel an IME conversion belong to the IME.
+    if (e.isComposing || e.keyCode === 229) return
+    const mod = e.ctrlKey || e.metaKey
+    const key = e.key
+    if (key !== 'ArrowUp' && key !== 'ArrowDown') goal.current = undefined
+    if (mod && !e.altKey && (key === 'z' || key === 'Z')) {
+      e.preventDefault()
+      undoRedo(e.shiftKey)
+      return
+    }
+    if (e.ctrlKey && !e.metaKey && !e.altKey && key === 'y') {
+      e.preventDefault()
+      undoRedo(true)
+      return
+    }
+    if (mod && !e.altKey && key === 'a') {
+      e.preventDefault()
+      const last = s.buf.lines.length - 1
+      commit(s.buf, { lines: s.buf.lines, sel: { anchor: { line: 0, col: 0 }, head: { line: last, col: lineEnd(s.buf.lines[last]) } } }, null)
+      return
+    }
+    if (mod || e.altKey) return
+    const cur = current()
+    const block = isBlock(cur.sel)
+    const head = cur.sel.head
+    switch (key) {
+      case 'Escape':
+        e.preventDefault()
+        if (block) collapseTo(cur, head)
+        else toNormal(true)
+        return
+      case 'Enter':
+        e.preventDefault()
+        apply(newline, 'other')
+        return
+      case 'Tab':
+        e.preventDefault()
+        apply(e.shiftKey ? outdent : indent, 'other')
+        return
+      case 'Backspace':
+        if (block || (isCollapsed(cur.sel) && head.col === 0)) {
+          e.preventDefault()
+          apply(deleteBackward, block ? 'other' : 'delete')
+        }
+        return
+      case 'Delete':
+        if (block || (isCollapsed(cur.sel) && head.col >= lineEnd(cur.lines[head.line]))) {
+          e.preventDefault()
+          apply(deleteForward, block ? 'other' : 'delete')
+        }
+        return
+      case 'ArrowUp':
+      case 'ArrowDown': {
+        const dir = key === 'ArrowUp' ? -1 : 1
+        if (!e.shiftKey && !block && isCollapsed(cur.sel) && movesWithinWrap(ta, head.col, dir)) {
+          goal.current = undefined
+          return
+        }
+        e.preventDefault()
+        const g = goal.current ?? head.col
+        commit(cur, moveVertical(cur, dir, g, e.shiftKey), null, { goal: g })
+        return
+      }
+      case 'ArrowLeft':
+      case 'ArrowRight': {
+        const left = key === 'ArrowLeft'
+        if (block && !e.shiftKey) {
+          e.preventDefault()
+          const [from, to] = ordered(cur.sel)
+          collapseTo(cur, left ? from : to)
+          return
+        }
+        const len = lineEnd(cur.lines[head.line])
+        const atEdge = left ? head.col === 0 && head.line > 0 : head.col === len && head.line < cur.lines.length - 1
+        if (block || ((e.shiftKey || isCollapsed(cur.sel)) && atEdge)) {
+          // Crossing a line, or extending a selection that already spans lines.
+          e.preventDefault()
+          let next: Pos
+          if (atEdge) next = left ? { line: head.line - 1, col: lineEnd(cur.lines[head.line - 1]) } : { line: head.line + 1, col: 0 }
+          else next = { line: head.line, col: head.col + (left ? -1 : 1) }
+          commit(cur, { lines: cur.lines, sel: { anchor: e.shiftKey ? cur.sel.anchor : next, head: next } }, null)
+        }
+        return
+      }
+      case 'Home':
+      case 'End':
+      case 'PageUp':
+      case 'PageDown':
+        // Leave a selection that spans lines before the input moves its caret.
+        if (block) collapseTo(cur, head)
+        return
+    }
+    // Typing over a selection that spans lines replaces it.
+    if (block && key.length === 1) {
+      e.preventDefault()
+      apply((b) => insertText(b, key), 'other')
+    }
+  }
+
+  function nativeInput(ta: HTMLTextAreaElement, inputType: string) {
+    const s = sessionRef.current
+    if (!s || s.mode !== 'insert') return
+    const l = s.buf.sel.head.line
+    // The input never holds the CR a line keeps in a file with mixed line endings.
+    const cr = s.buf.lines[l].slice(lineEnd(s.buf.lines[l]))
+    const value = ta.value
+    const before: Buffer = pendingBefore.current ?? s.buf
+    pendingBefore.current = null
+    goal.current = undefined
+    if (value + cr === s.buf.lines[l]) return
+    if (/[\r\n]/.test(value)) {
+      // A drop or an IME produced line breaks; split them into the buffer.
+      const whole: Buffer = { lines: s.buf.lines, sel: { anchor: { line: l, col: 0 }, head: { line: l, col: s.buf.lines[l].length } } }
+      const lines = insertText(whole, value + cr).lines
+      const pre = value.slice(0, ta.selectionStart).split(/\r\n|\r|\n/)
+      const head = { line: l + pre.length - 1, col: pre[pre.length - 1].length }
+      commit(before, { lines, sel: { anchor: head, head } }, 'other')
+      return
+    }
+    const lines = s.buf.lines.slice()
+    lines[l] = value + cr
+    const backward = ta.selectionDirection === 'backward'
+    const sel = {
+      anchor: { line: l, col: backward ? ta.selectionEnd : ta.selectionStart },
+      head: { line: l, col: backward ? ta.selectionStart : ta.selectionEnd },
+    }
+    const kind: EditKind = inputType.startsWith('delete') ? 'delete' : inputType === 'insertText' ? 'type' : 'other'
+    // The input already shows this; do not write it back.
+    commit(before, { lines, sel }, kind, { sync: false })
+  }
+
+  const inputHandlers: InputHandlers = {
+    mounted(ta) {
+      inputEl.current = ta
+    },
+    keyDown,
+    beforeInput(e) {
+      if (e.inputType === 'historyUndo' || e.inputType === 'historyRedo') {
+        e.preventDefault()
+        undoRedo(e.inputType === 'historyRedo')
+        return
+      }
+      if (savingRef.current) {
+        e.preventDefault()
+        return
+      }
+      if (!composing.current) pendingBefore.current = current()
+    },
+    input: nativeInput,
+    paste(e) {
+      e.preventDefault()
+      const text = e.clipboardData?.getData('text/plain') ?? ''
+      if (text) apply((b) => insertText(b, text), 'other')
+    },
+    copy(e, cut) {
+      const s = sessionRef.current
+      if (!s || !isBlock(s.buf.sel)) return
+      e.preventDefault()
+      e.clipboardData?.setData('text/plain', selectedText(s.buf))
+      if (cut) apply(deleteSelection, 'other')
+    },
+    compositionStart() {
+      composing.current = true
+      const s = sessionRef.current
+      if (!s) return
+      // A conversion cannot replace several lines; drop the selection to the caret.
+      if (isBlock(s.buf.sel)) setSession({ ...s, buf: { lines: s.buf.lines, sel: caretAt(s.buf.sel.head.line, s.buf.sel.head.col) } })
+      pendingBefore.current = current()
+    },
+    compositionEnd(ta) {
+      composing.current = false
+      nativeInput(ta, 'insertCompositionText')
+    },
+    mouseDown() {
+      // A click inside the line ends a selection that spans lines; the click then places the caret.
+      const s = sessionRef.current
+      if (s && isBlock(s.buf.sel)) commit(s.buf, { lines: s.buf.lines, sel: caretAt(s.buf.sel.head.line, s.buf.sel.head.col) }, null, { sync: false })
+    },
+    blur() {
+      const s = sessionRef.current
+      if (!s || s.mode !== 'insert') return
+      const buf = current()
+      setTimeout(() => {
+        const now = sessionRef.current
+        if (!now || now.mode !== 'insert' || !document.hasFocus()) return
+        if ((document.activeElement as HTMLElement | null)?.classList.contains('inline-input')) return
+        setSession({ ...now, buf: now.buf.lines === buf.lines ? buf : now.buf, mode: 'normal' })
+      }, 0)
+    },
+  }
+
+  const rowHandlerImpl: Omit<RowHandlers, 'input'> = {
+    gutterDown(e, no) {
+      e.preventDefault()
+      if (mapRef.current?.changed[no - 1]) {
+        toast(CHANGED_LINE)
+        return
+      }
+      if (e.shiftKey && newLineAt?.start && newLineAt.end && newLine && !newLine.createdId) {
+        const a = newLineAt.start
+        openComposer(Math.min(a, no), Math.max(newLineAt.end, no, a))
+        return
+      }
+      dragging.current = true
+      setSel({ anchor: no, focus: no })
+    },
+    rowEnter(no) {
+      if (dragging.current) setSel((s) => (s ? { ...s, focus: no } : s))
+    },
+    editLine(no) {
+      beginEdit(no)
+    },
+    toggleAnnotation(no) {
+      setAnnotationToggles((m) => {
+        const list = annotationsByEnd.get(no)
+        const open = m.get(no) ?? !!list?.some((a) => a.state === 'pending')
+        return new Map(m).set(no, !open)
+      })
+    },
+    textMouseDown(e, no) {
+      const s = sessionRef.current
+      if (!s || s.mode !== 'insert' || e.button !== 0) return
+      // In insert mode a click moves the caret to that line instead of selecting text.
+      e.preventDefault()
+      const col = colFromPoint(e.currentTarget as HTMLElement, e.clientX, e.clientY, lineEnd(s.buf.lines[no - 1]))
+      const cur = current()
+      const head = { line: no - 1, col }
+      commit(cur, { lines: cur.lines, sel: { anchor: e.shiftKey ? cur.sel.anchor : head, head } }, null)
+    },
+    textDblClick(e, no) {
+      if (sessionRef.current?.mode === 'insert') return
+      const len = lineEnd((sessionRef.current?.buf.lines ?? lines)[no - 1] ?? '')
+      const col = colFromPoint(e.currentTarget as HTMLElement, e.clientX, e.clientY, len)
+      // Drop the word the double click selected; the caret goes where it was clicked.
+      window.getSelection()?.removeAllRanges()
+      beginEdit(no, col, 'nearest')
+    },
+  }
+
+  // Rows are memoized, so their handlers must keep one identity and read the latest state.
+  const latest = useRef({ row: rowHandlerImpl, input: inputHandlers })
+  latest.current = { row: rowHandlerImpl, input: inputHandlers }
+  const handlers = useMemo<RowHandlers>(() => {
+    const row = () => latest.current.row
+    const input = () => latest.current.input
+    return {
+      gutterDown: (e, no) => row().gutterDown(e, no),
+      rowEnter: (no) => row().rowEnter(no),
+      editLine: (no) => row().editLine(no),
+      toggleAnnotation: (no) => row().toggleAnnotation(no),
+      textMouseDown: (e, no) => row().textMouseDown(e, no),
+      textDblClick: (e, no) => row().textDblClick(e, no),
+      input: {
+        mounted: (ta) => input().mounted(ta),
+        keyDown: (e, ta) => input().keyDown(e, ta),
+        beforeInput: (e) => input().beforeInput(e),
+        input: (ta, type) => input().input(ta, type),
+        paste: (e) => input().paste(e),
+        copy: (e, cut) => input().copy(e, cut),
+        compositionStart: () => input().compositionStart(),
+        compositionEnd: (ta) => input().compositionEnd(ta),
+        mouseDown: () => input().mouseDown(),
+        blur: () => input().blur(),
+      },
+    }
+  }, [])
+
+  async function save() {
+    const s = sessionRef.current
+    if (!s || savingRef.current) return
+    const content = draftContent(s)
+    if (content === s.baseContent) return
+    savingRef.current = true
     setSaving(true)
+    setEditError(null)
     try {
-      await api.saveFile(path, draft, file.hash)
-      const next = await api.file(path)
-      setFile(next)
-      setDraft(next.content)
-      setDirectEdit(false)
-      setTokens(await tokenize(next.content, path))
-      toast(`${path} を保存しました`, 'success')
+      const res = await api.saveFile(s.path, content, s.baseHash)
+      // Adopt what was written; the watcher's refresh then finds the same hash.
+      if (sessionRef.current?.path === s.path) {
+        setSession(null)
+        setReview(null)
+        setFile({ path: s.path, content, hash: res.hash })
+        highlight(content)
+      }
+      toast(`${s.path} を保存しました`, 'success')
     } catch (e) {
-      setError(e instanceof ApiError ? e.message : String(e))
+      const conflict = e instanceof ApiError && e.status === 409
+      setEditError({ message: e instanceof ApiError ? e.message : String(e), conflict })
+      if (conflict) api.file(s.path).then((f) => sessionRef.current?.path === s.path && setFile(f), () => {})
     } finally {
+      savingRef.current = false
       setSaving(false)
     }
   }
 
-  function beginDirectEdit(line?: number) {
-    if (!file) return
-    setDraft(file.content)
-    setEditLine(line)
-    setDirectEdit(true)
-    setError(null)
+  function discard(ask: boolean): boolean {
+    const s = sessionRef.current
+    if (!s) return true
+    if (ask && isDirty(s) && !confirm('編集内容を破棄しますか？')) return false
+    setSession(null)
+    setReview(null)
+    setEditError(null)
+    if (file) highlight(file.content)
+    return true
   }
 
-  if (error) return <div class="empty error">{error}</div>
+  async function reload() {
+    if (!discard(true)) return
+    try {
+      const f = await api.file(path)
+      setFile(f)
+      highlight(f.content)
+    } catch (e) {
+      setError(e instanceof ApiError ? e.message : String(e))
+    }
+  }
+
+  async function copyDraft() {
+    const s = sessionRef.current
+    if (!s) return
+    try {
+      await copyText(draftContent(s))
+      toast('下書きをコピーしました', 'success')
+    } catch (e) {
+      toast(`コピーできませんでした: ${String(e)}`, 'error')
+    }
+  }
+
+  const conflict = !!session && !!file && file.hash !== session.baseHash && !saving
+  const hunks = useMemo(() => {
+    if (!session || !review) return []
+    if (review === 'draft') return diffHunks(session.baseLines, session.buf.lines)
+    return file ? diffHunks(session.baseLines, parseContent(file.content).lines) : []
+  }, [review, session?.baseLines, draftLines, file])
+
+  const s = session
+  const insert = s?.mode === 'insert'
+  const head = s?.buf.sel.head
+  const [blockFirst, blockLast] = s && isBlock(s.buf.sel) ? selectedLines(s.buf.sel) : [-1, -1]
+  const inputState = useMemo<InputState | undefined>(() => {
+    if (!s || !insert) return undefined
+    const { anchor, head } = s.buf.sel
+    let start: number, end: number, backward: boolean
+    if (anchor.line === head.line) {
+      start = Math.min(anchor.col, head.col)
+      end = Math.max(anchor.col, head.col)
+      backward = head.col < anchor.col
+    } else if (head.line > anchor.line) {
+      ;[start, end, backward] = [0, head.col, false]
+    } else {
+      ;[start, end, backward] = [head.col, lineEnd(s.buf.lines[head.line]), true]
+    }
+    return { start, end, backward, sync: s.sync, reveal: s.reveal, revealBlock: s.revealBlock, readOnly: saving, wrap: wrap || showPreview }
+  }, [insert, s?.sync, s?.reveal, s?.revealBlock, s?.buf.sel, saving, wrap, showPreview])
+
+  if (error && !session) return <div class="empty error">{error}</div>
   if (!file) return <div class="empty">読み込み中…</div>
 
   return (
-    <div class={`file-view ${wrap || showPreview ? 'wrap' : ''} ${showPreview ? 'split' : ''}`}>
+    <div class={`file-view ${wrap || showPreview ? 'wrap' : ''} ${showPreview ? 'split' : ''} ${session ? 'editing' : ''}`}>
       <div class="file-head">
         <span class="file-path">{path}</span>
         <span class="spacer" />
@@ -268,291 +891,152 @@ export function FileView({ path, line }: { path: string; line?: number }) {
           />{' '}
           折り返し
         </label>
-        <button class="btn small" onClick={() => beginDirectEdit()}>
-          編集
-        </button>
+        {!session && (
+          <button class="btn small" onClick={() => beginEdit(targetLine)} title="行の✎か本文のダブルクリックでも編集できます">
+            編集
+          </button>
+        )}
         <button class="btn small" onClick={() => (editing.value = { kind: 'new', scope: 'file', path })}>
           ファイルにコメント
         </button>
+        {session && map && (
+          <EditBar
+            mode={session.mode}
+            changed={map.changedCount}
+            deleted={map.deletedCount}
+            dirty={map.dirty}
+            saving={saving}
+            conflict={conflict}
+            error={editError}
+            onReview={() => setReview('draft')}
+            onDiscard={() => discard(true)}
+            onShowExternal={() => setReview('external')}
+            onReload={() => void reload()}
+            onCopyDraft={() => void copyDraft()}
+            onDismissError={() => setEditError(null)}
+          />
+        )}
       </div>
       <CommentList path={path} />
 
-      {directEdit ? (
-        <DirectEditor
-          value={draft}
-          original={file.content}
-          path={path}
-          focusLine={editLine}
-          disabled={saving}
-          onChange={setDraft}
-          onSave={() => void saveDirectEdit()}
-          onCancel={() => setDirectEdit(false)}
-        />
-      ) : (
       <div class="file-body">
-      <div class="file-src">
-      {(scopeFile.length > 0 || newFile || lost.length > 0 || lostAnnotations.length > 0) && (
-        <div class="file-comments">
-          {scopeFile.map((c) => (
-            <Thread key={c.id} comment={c} />
-          ))}
-          {newFile && <Composer key="new-file" target={newFile} />}
-          {lost.length > 0 && (
-            <div class="lost">
-              <div class="lost-title">位置を特定できないコメント</div>
-              {lost.map((c) => (
+        <div class="file-src">
+          {(scopeFile.length > 0 || newFile || lost.length > 0 || lostAnnotations.length > 0 || (newLine && !newLineAt?.end)) && (
+            <div class="file-comments">
+              {scopeFile.map((c) => (
                 <Thread key={c.id} comment={c} />
               ))}
-            </div>
-          )}
-          {lostAnnotations.length > 0 && (
-            <details class="lost annotations-lost" open={lostAnnotations.some((a) => a.state === 'pending')}>
-              <summary class="lost-title">位置を特定できないAI指摘（{lostAnnotations.length}件）</summary>
-              <div class="lost-list">
-                {lostAnnotations.map((a) => (
-                  <AnnotationCard key={a.id} annotation={a} original={a.anchor?.lines} />
-                ))}
-              </div>
-            </details>
-          )}
-        </div>
-      )}
-
-      <div class={`code ${dragging.current ? 'selecting' : ''}`}>
-        {rows.map((r, i) => {
-          const no = r.no
-          const selected = no !== undefined && selRange && no >= selRange[0] && no <= selRange[1]
-          const threads = no !== undefined ? byEnd.get(no) : undefined
-          const composerHere = newLine && no === newLine.end
-          const cov = no !== undefined ? covered.get(no) : undefined
-          const lineAnnotations = no !== undefined ? annotationsByEnd.get(no) : undefined
-          const annotationOpen =
-            !!lineAnnotations &&
-            (annotationToggles.get(no) ?? lineAnnotations.some((a) => a.state === 'pending'))
-          return (
-            <>
-              <div
-                key={`r${i}`}
-                id={`L${no}`}
-                class={`row ${selected ? 'selected' : ''} ${cov ? 'covered' : ''} ${annotationCovered.has(no) ? 'annotation-covered' : ''} ${line !== undefined && line === no ? 'target' : ''}`}
-                onMouseEnter={() => onRowEnter(no)}
-              >
-                <span
-                  class={`ln ${no !== undefined ? 'clickable' : ''} ${lineAnnotations ? 'has-annotation' : ''}`}
-                  onMouseDown={no !== undefined ? (e) => onGutterDown(e, no) : undefined}
-                  title={no !== undefined ? 'クリックでコメント（Shift+クリックかドラッグで範囲選択）' : undefined}
-                >
-                  {no ?? ''}
-                  {lineAnnotations && (
-                    <button
-                      class={`annotation-marker severity-${highestSeverity(lineAnnotations)} ${confidenceClass(lineAnnotations)} ${annotationOpen ? 'open' : ''}`}
-                      title={`AI指摘 ${lineAnnotations.length}件`}
-                      onMouseDown={(e) => e.stopPropagation()}
-                      onClick={(e) => {
-                        e.stopPropagation()
-                        setAnnotationToggles((m) => new Map(m).set(no, !annotationOpen))
-                      }}
-                    >
-                      ◆{lineAnnotations.length > 1 ? lineAnnotations.length : ''}
-                    </button>
-                  )}
-                  {no !== undefined && (
-                    <button
-                      class="edit-marker"
-                      title="この行を編集"
-                      aria-label={`行${no}を編集`}
-                      onMouseDown={(e) => e.stopPropagation()}
-                      onClick={(e) => {
-                        e.stopPropagation()
-                        beginDirectEdit(no)
-                      }}
-                    >
-                      ✎
-                    </button>
-                  )}
-                  {no !== undefined && <span class="plus">+</span>}
-                </span>
-                <span class="text">
-                  {tokens && tokens[no - 1]
-                    ? tokens[no - 1].map((t) => (
-                        <span class="tok" style={t.style}>
-                          {t.content}
-                        </span>
-                      ))
-                    : r.text || ' '}
-                </span>
-                {cov ? <span class="cov" title={`${cov}件のコメント`} /> : null}
-              </div>
-              {(threads || composerHere) && (
-                <div class="inline-threads" key={`t${i}`}>
-                  {threads?.map((c) => (
+              {newFile && <Composer key="new-file" target={newFile} />}
+              {newLine && !newLineAt?.end && (
+                <Composer key={`new-${newLine.start}-${newLine.end}`} target={newLine} original={lines.slice(newLine.start! - 1, newLine.end!)} />
+              )}
+              {lost.length > 0 && (
+                <div class="lost">
+                  <div class="lost-title">位置を特定できないコメント</div>
+                  {lost.map((c) => (
                     <Thread key={c.id} comment={c} />
                   ))}
-                  {composerHere && (
-                    <Composer
-                      key={`new-${newLine!.start}-${newLine!.end}`}
-                      target={newLine!}
-                      original={lines.slice(newLine!.start! - 1, newLine!.end!)}
-                    />
+                </div>
+              )}
+              {lostAnnotations.length > 0 && (
+                <details class="lost annotations-lost" open={lostAnnotations.some((a) => a.state === 'pending')}>
+                  <summary class="lost-title">位置を特定できないAI指摘（{lostAnnotations.length}件）</summary>
+                  <div class="lost-list">
+                    {lostAnnotations.map((a) => (
+                      <AnnotationCard key={a.id} annotation={a} original={a.anchor?.lines} />
+                    ))}
+                  </div>
+                </details>
+              )}
+            </div>
+          )}
+
+          <div
+            class={`code ${dragging.current ? 'selecting' : ''}`}
+            ref={codeRef}
+            tabIndex={-1}
+            onKeyDown={(e) => {
+              // Normal mode: i returns to the line that was being edited.
+              if (e.target !== e.currentTarget || !sessionRef.current || e.ctrlKey || e.metaKey || e.altKey) return
+              if (e.key === 'i') {
+                e.preventDefault()
+                const h = sessionRef.current.buf.sel.head
+                beginEdit(h.line + 1, h.col, 'nearest')
+              }
+            }}
+          >
+            {displayLines.map((text, i) => {
+              const no = i + 1
+              const threads = byEnd.get(no)
+              const composerHere = newLine && newLineAt?.end === no
+              const lineAnnotations = annotationsByEnd.get(no)
+              const annotationOpen =
+                !!lineAnnotations && (annotationToggles.get(no) ?? lineAnnotations.some((a) => a.state === 'pending'))
+              const edited = !!map?.changed[i]
+              return (
+                <Fragment key={i}>
+                  <CodeRow
+                    no={no}
+                    text={text}
+                    tokens={tokens?.[i]}
+                    verifyTokens={!!session}
+                    selected={!!selRange && no >= selRange[0] && no <= selRange[1]}
+                    covered={covered.get(no) ?? 0}
+                    annotationCovered={annotationCovered.has(no)}
+                    target={targetLine === no}
+                    edited={edited}
+                    blockSelected={i >= blockFirst && i <= blockLast}
+                    cursor={!!s && !insert && head?.line === i}
+                    commentBlocked={edited ? CHANGED_LINE : undefined}
+                    annotationCount={lineAnnotations?.length ?? 0}
+                    annotationClass={
+                      lineAnnotations ? `severity-${highestSeverity(lineAnnotations)} ${confidenceClass(lineAnnotations)}` : ''
+                    }
+                    annotationOpen={annotationOpen}
+                    input={insert && head?.line === i ? inputState : undefined}
+                    handlers={handlers}
+                  />
+                  {(threads || composerHere) && (
+                    <div class="inline-threads">
+                      {threads?.map((c) => (
+                        <Thread key={c.id} comment={c} />
+                      ))}
+                      {composerHere && (
+                        <Composer
+                          key={`new-${newLine!.start}-${newLine!.end}`}
+                          target={newLine!}
+                          original={lines.slice(newLine!.start! - 1, newLine!.end!)}
+                        />
+                      )}
+                    </div>
                   )}
-                </div>
-              )}
-              {annotationOpen && (
-                <div class="inline-threads annotation-inline" key={`a${i}`}>
-                  {lineAnnotations!.map((a) => (
-                    <AnnotationCard key={a.id} annotation={a} original={lines.slice(a.loc!.start - 1, a.loc!.end)} />
-                  ))}
-                </div>
-              )}
-            </>
-          )
-        })}
-        {rows.length === 0 && <div class="empty">（空のファイル）</div>}
-      </div>
-      </div>
-      </div>
-      )}
-      {showPreview && file && <Preview path={path} content={file.content} scrollRatio={scrollRatio} />}
-    </div>
-  )
-}
-
-function DirectEditor({
-  value,
-  original,
-  path,
-  focusLine,
-  disabled,
-  onChange,
-  onSave,
-  onCancel,
-}: {
-  value: string
-  original: string
-  path: string
-  focusLine?: number
-  disabled: boolean
-  onChange: (value: string) => void
-  onSave: () => void
-  onCancel: () => void
-}) {
-  const [confirming, setConfirming] = useState(false)
-  const [highlighted, setHighlighted] = useState<Token[][]>()
-  const inputRef = useRef<HTMLTextAreaElement>(null)
-  const highlightRef = useRef<HTMLPreElement>(null)
-
-  useEffect(() => {
-    let cancelled = false
-    tokenize(value, path).then((tokens) => {
-      if (!cancelled) setHighlighted(tokens)
-    })
-    return () => { cancelled = true }
-  }, [value, path])
-
-  useEffect(() => {
-    const input = inputRef.current
-    if (!input || !focusLine) return
-    const lines = value.split('\n')
-    const start = lines.slice(0, focusLine - 1).reduce((n, line) => n + line.length + 1, 0)
-    const end = start + (lines[focusLine - 1]?.length ?? 0)
-    input.focus()
-    input.selectionStart = start
-    input.selectionEnd = end
-    input.scrollTop = Math.max(0, (focusLine - 3) * 20)
-    if (highlightRef.current) highlightRef.current.scrollTop = input.scrollTop
-  }, [focusLine])
-
-  function keyDown(e: KeyboardEvent) {
-    const ta = e.currentTarget as HTMLTextAreaElement
-    if (e.key === 'Tab') {
-      e.preventDefault()
-      const start = ta.selectionStart
-      const end = ta.selectionEnd
-      if (start !== end) {
-        const before = value.slice(0, start)
-        const selected = value.slice(start, end)
-        const lines = selected.split('\n').map((line) => e.shiftKey ? line.replace(/^\t/, '') : `\t${line}`)
-        const next = before + lines.join('\n') + value.slice(end)
-        onChange(next)
-        requestAnimationFrame(() => {
-          ta.selectionStart = start
-          ta.selectionEnd = start + lines.join('\n').length
-        })
-        return
-      }
-      const lineStart = value.lastIndexOf('\n', start - 1) + 1
-      const indent = value.slice(lineStart, start).match(/^[\t ]*/)?.[0] ?? ''
-      if (e.shiftKey) {
-        const remove = indent.endsWith('\t') ? 1 : indent.endsWith('  ') ? 2 : 0
-        if (remove) {
-          onChange(value.slice(0, lineStart + indent.length - remove) + value.slice(lineStart + indent.length))
-          requestAnimationFrame(() => { ta.selectionStart = ta.selectionEnd = start - remove })
-        }
-      } else {
-        onChange(value.slice(0, start) + '\t' + value.slice(start))
-        requestAnimationFrame(() => { ta.selectionStart = ta.selectionEnd = start + 1 })
-      }
-      return
-    }
-    if (e.key === 'Enter' && ta.selectionStart === ta.selectionEnd) {
-      e.preventDefault()
-      const start = ta.selectionStart
-      const lineStart = value.lastIndexOf('\n', start - 1) + 1
-      const indent = value.slice(lineStart, start).match(/^[\t ]*/)?.[0] ?? ''
-      const next = value.slice(0, start) + '\n' + indent + value.slice(start)
-      onChange(next)
-      requestAnimationFrame(() => { ta.selectionStart = ta.selectionEnd = start + 1 + indent.length })
-    }
-  }
-
-  return (
-    <div class="direct-editor">
-      <p class="muted small">補完や構文解析はありません。Tabでハードタブを入力できます。</p>
-      <div class="direct-editor-layer" onScroll={(e) => {
-        const top = (e.currentTarget as HTMLDivElement).scrollTop
-        if (inputRef.current) inputRef.current.scrollTop = top
-        if (highlightRef.current) highlightRef.current.scrollTop = top
-      }}>
-        <pre class="direct-editor-highlight" ref={highlightRef} aria-hidden="true">
-          {highlighted ? highlighted.map((line, i) => (
-            <span key={i}>{line.map((token) => <span style={token.style}>{token.content}</span>)}{'\n'}</span>
-          )) : value}
-        </pre>
-        <textarea
-          class="direct-editor-input"
-          ref={inputRef}
-          value={value}
-          disabled={disabled}
-          spellcheck={false}
-          onInput={(e) => onChange(e.currentTarget.value)}
-          onKeyDown={keyDown}
-          onScroll={(e) => {
-            if (highlightRef.current) highlightRef.current.scrollTop = e.currentTarget.scrollTop
-          }}
-        />
-      </div>
-      {confirming && (
-        <div class="direct-diff">
-          <strong>変更内容を確認</strong>
-          <pre>{diffLines(original, value).map((part) => {
-            const cls = part.added ? 'diff-new' : part.removed ? 'diff-old' : 'diff-same'
-            const sign = part.added ? '+ ' : part.removed ? '- ' : '  '
-            return <span class={cls}>{part.value.split('\n').map((line, i, all) => line || i < all.length - 1 ? `${sign}${line}\n` : '')}</span>
-          })}</pre>
+                  {annotationOpen && (
+                    <div class="inline-threads annotation-inline">
+                      {lineAnnotations!.map((a) => (
+                        <AnnotationCard key={a.id} annotation={a} original={lines.slice(a.loc!.start - 1, a.loc!.end)} />
+                      ))}
+                    </div>
+                  )}
+                </Fragment>
+              )
+            })}
+            {displayLines.length === 0 && <div class="empty">（空のファイル）</div>}
+          </div>
         </div>
-      )}
-      <div class="direct-editor-actions">
-        <button class="btn" disabled={disabled} onClick={onCancel}>破棄</button>
-        <span class="spacer" />
-        {confirming ? (
-          <>
-            <button class="btn" disabled={disabled} onClick={() => setConfirming(false)}>編集に戻る</button>
-            <button class="btn primary" disabled={disabled || value === original} onClick={onSave}>保存</button>
-          </>
-        ) : (
-          <button class="btn primary" disabled={disabled || value === original} onClick={() => setConfirming(true)}>差分を確認</button>
-        )}
+        {showPreview && file && <Preview path={path} content={previewDraft ?? file.content} scrollRatio={scrollRatio} />}
       </div>
+      {session && review && (
+        <EditReview
+          kind={review}
+          hunks={hunks}
+          format={session.format}
+          dirty={!!map?.dirty}
+          saving={saving}
+          conflict={conflict}
+          onClose={() => setReview(null)}
+          onSave={() => void save()}
+        />
+      )}
     </div>
   )
 }
@@ -571,4 +1055,95 @@ function confidenceClass(list: Annotation[]): string {
 function splitLines(s: string): string[] {
   if (s === '') return []
   return s.replace(/\n$/, '').split('\n').map((l) => l.replace(/\r$/, ''))
+}
+
+/**
+ * Lines up tokens computed for one version of the lines with another, by
+ * their common leading and trailing lines. Lines in between get none.
+ */
+function alignTokens(from: string[], tokens: Token[][], to: string[]): (Token[] | undefined)[] {
+  if (from === to) return tokens
+  const n = to.length
+  const m = from.length
+  let head = 0
+  while (head < n && head < m && to[head] === from[head]) head++
+  let tail = 0
+  while (tail < n - head && tail < m - head && to[n - 1 - tail] === from[m - 1 - tail]) tail++
+  const out: (Token[] | undefined)[] = new Array(n)
+  for (let i = 0; i < head; i++) out[i] = tokens[i]
+  for (let i = n - tail; i < n; i++) out[i] = tokens[i - n + m]
+  return out
+}
+
+/** Keeps the previous token arrays of lines whose tokens did not change, so their rows skip rendering. */
+function stabilizeTokens(prev: Token[][] | undefined, next: Token[][] | undefined): Token[][] | undefined {
+  if (!prev || !next) return next
+  return next.map((line, i) => (prev[i] && sameTokens(prev[i], line) ? prev[i] : line))
+}
+
+function sameTokens(a: Token[], b: Token[]): boolean {
+  if (a.length !== b.length) return false
+  for (let i = 0; i < a.length; i++) {
+    if (a[i].content !== b[i].content) return false
+    const sa = a[i].style
+    const sb = b[i].style
+    if (sa === sb) continue
+    if (!sa || !sb) return false
+    const ka = Object.keys(sa)
+    if (ka.length !== Object.keys(sb).length || ka.some((k) => sa[k] !== sb[k])) return false
+  }
+  return true
+}
+
+/** Text nodes under el with the offset each starts at. */
+function textOffset(el: HTMLElement, node: Node, offset: number): number | undefined {
+  const walker = document.createTreeWalker(el, NodeFilter.SHOW_TEXT)
+  let n = 0
+  while (walker.nextNode()) {
+    const t = walker.currentNode as Text
+    if (t === node) return n + offset
+    n += t.length
+  }
+  return undefined
+}
+
+/** The column under a point in a line's text, clamped to the line. */
+function colFromPoint(el: HTMLElement, x: number, y: number, len: number): number {
+  const doc = document as Document & {
+    caretPositionFromPoint?: (x: number, y: number) => { offsetNode: Node; offset: number } | null
+    caretRangeFromPoint?: (x: number, y: number) => Range | null
+  }
+  let node: Node | undefined
+  let offset = 0
+  const pos = doc.caretPositionFromPoint?.(x, y)
+  if (pos) {
+    node = pos.offsetNode
+    offset = pos.offset
+  } else {
+    const r = doc.caretRangeFromPoint?.(x, y)
+    if (r) {
+      node = r.startContainer
+      offset = r.startOffset
+    }
+  }
+  if (!node || !el.contains(node)) return len
+  if (node.nodeType !== Node.TEXT_NODE) return x < el.getBoundingClientRect().left + 4 ? 0 : len
+  return Math.min(len, textOffset(el, node, offset) ?? len)
+}
+
+/** The on-screen box of the caret at col in a rendered line. */
+function caretRect(layer: HTMLElement, col: number): DOMRect | undefined {
+  const walker = document.createTreeWalker(layer, NodeFilter.SHOW_TEXT)
+  let n = 0
+  while (walker.nextNode()) {
+    const t = walker.currentNode as Text
+    if (col <= n + t.length) {
+      const r = document.createRange()
+      r.setStart(t, col - n)
+      r.setEnd(t, col - n)
+      return r.getClientRects()[0] ?? r.getBoundingClientRect()
+    }
+    n += t.length
+  }
+  return undefined
 }

@@ -27,6 +27,10 @@ var ErrOutside = errors.New("path is outside of the project")
 // ErrNotText is returned for binary or oversized files.
 var ErrNotText = errors.New("not a reviewable text file")
 
+// ErrChanged is returned by Write when the file no longer has the hash the
+// caller based its edit on.
+var ErrChanged = errors.New("file changed since it was opened")
+
 // File describes a reviewable file.
 type File struct {
 	Path string `json:"path"` // slash-separated, relative to the root
@@ -295,7 +299,8 @@ func (p *Project) Read(rel string) ([]byte, error) {
 
 // Write replaces a reviewable text file only when its current content has the
 // expected hash. It writes beside the file and renames atomically so a failed
-// save cannot leave a partial file behind.
+// save cannot leave a partial file behind. A write by another program between
+// the hash check and the rename is not detected.
 func (p *Project) Write(rel, expectedHash string, content []byte) error {
 	abs, err := p.Resolve(rel)
 	if err != nil {
@@ -312,7 +317,7 @@ func (p *Project) Write(rel, expectedHash string, content []byte) error {
 		return err
 	}
 	if expectedHash == "" || HashBytes(current) != expectedHash {
-		return fmt.Errorf("file changed since it was opened")
+		return ErrChanged
 	}
 	info, err := os.Stat(abs)
 	if err != nil {

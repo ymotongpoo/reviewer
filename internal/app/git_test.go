@@ -330,14 +330,60 @@ func TestSaveFileChecksHashAndReanchors(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if err := a.SaveFile(SaveFileInput{Path: "ch1.md", Content: "# ch1\nchanged\n", Hash: "stale"}); errCode(err) != http.StatusConflict {
+	if _, err := a.SaveFile(SaveFileInput{Path: "ch1.md", Content: "# ch1\nchanged\n", Hash: "stale"}); errCode(err) != http.StatusConflict {
 		t.Fatalf("stale save = %v", err)
 	}
-	if err := a.SaveFile(SaveFileInput{Path: "ch1.md", Content: "# ch1\nchanged\n", Hash: view.Hash}); err != nil {
+	res, err := a.SaveFile(SaveFileInput{Path: "ch1.md", Content: "# ch1\nchanged\n", Hash: view.Hash})
+	if err != nil {
 		t.Fatal(err)
 	}
 	got, err := a.File("ch1.md")
 	if err != nil || got.Content != "# ch1\nchanged\n" {
 		t.Fatalf("saved file = %+v, %v", got, err)
+	}
+	if res.Hash != got.Hash {
+		t.Fatalf("returned hash %s, file hash %s", res.Hash, got.Hash)
+	}
+	// The returned hash is usable as the base of the next save.
+	if _, err := a.SaveFile(SaveFileInput{Path: "ch1.md", Content: "# ch1\nagain\n", Hash: res.Hash}); err != nil {
+		t.Fatalf("save with returned hash: %v", err)
+	}
+}
+
+func TestSaveFileConflictKeepsExternalChange(t *testing.T) {
+	a, top, _ := gitSetup(t)
+	write(t, top, "docs/ch1.md", "# ch1\nline\n")
+	view, err := a.File("ch1.md")
+	if err != nil {
+		t.Fatal(err)
+	}
+	// Another program writes while the reviewer is editing.
+	write(t, top, "docs/ch1.md", "# ch1\nexternal\n")
+	if _, err := a.SaveFile(SaveFileInput{Path: "ch1.md", Content: "# ch1\nmine\n", Hash: view.Hash}); errCode(err) != http.StatusConflict {
+		t.Fatalf("save over external change = %v", err)
+	}
+	b, _ := os.ReadFile(filepath.Join(top, "docs/ch1.md"))
+	if string(b) != "# ch1\nexternal\n" {
+		t.Fatalf("external change overwritten: %q", b)
+	}
+}
+
+func TestSaveFileReanchorsCommentsBelowInsertedLines(t *testing.T) {
+	a, top, _ := gitSetup(t)
+	write(t, top, "docs/ch1.md", "# ch1\n\nfirst\n\nsecond paragraph\n\nend\n")
+	view, err := a.File("ch1.md")
+	if err != nil {
+		t.Fatal(err)
+	}
+	c, err := a.CreateComment(NewComment{Scope: "line", Path: "ch1.md", Start: 5, End: 5, Label: "must", Body: "x", Hash: view.Hash})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := a.SaveFile(SaveFileInput{Path: "ch1.md", Content: "# ch1\n\nfirst\nadded\nadded too\n\nsecond paragraph\n\nend\n", Hash: view.Hash}); err != nil {
+		t.Fatal(err)
+	}
+	got, _ := a.Store.Comment(c.ID)
+	if got.Loc == nil || got.Loc.Start != 7 || got.Loc.End != 7 {
+		t.Fatalf("loc after save = %+v", got.Loc)
 	}
 }

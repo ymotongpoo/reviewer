@@ -17,7 +17,30 @@ function parse(): Route {
 }
 
 export const route = signal<Route>(parse())
-window.addEventListener('hashchange', () => (route.value = parse()))
+
+/** Returns false to keep the current page, e.g. when unsaved edits would be lost. */
+export type NavigationGuard = (next: Route) => boolean
+const guards = new Set<NavigationGuard>()
+
+/** Registers a guard consulted before the route changes; returns a function that removes it. */
+export function addNavigationGuard(g: NavigationGuard): () => void {
+  guards.add(g)
+  return () => guards.delete(g)
+}
+
+let currentHash = location.hash
+window.addEventListener('hashchange', () => {
+  const next = parse()
+  for (const g of guards) {
+    if (!g(next)) {
+      // The URL already changed; put it back without another hashchange.
+      history.replaceState(history.state, '', currentHash || location.pathname + location.search)
+      return
+    }
+  }
+  currentHash = location.hash
+  route.value = next
+})
 
 export function fileHref(path: string, line?: number): string {
   return `#/file/${path.split('/').map(encodeURIComponent).join('/')}${line ? `:L${line}` : ''}`
