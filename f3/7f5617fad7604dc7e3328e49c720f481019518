@@ -1,0 +1,64 @@
+internal/server/dist/assets/c-C_4oXFOq.js
+  h_bf0ada3931f770 1
+internal/server/dist/assets/cpp-axv3tFMd.js
+  h_bf0ada3931f770 1
+internal/server/dist/assets/css-Dwn3Xln0.js
+  h_bf0ada3931f770 1
+internal/server/dist/assets/dist-eAqVWdKs.js
+  h_bf0ada3931f770 1-2,47
+internal/server/dist/assets/graphql-DMCKVAJO.js
+  h_bf0ada3931f770 1
+internal/server/dist/assets/html-B9r0EIEe.js
+  h_bf0ada3931f770 1
+internal/server/dist/assets/html-derivative-BT-WDmzU.js
+  h_bf0ada3931f770 1
+internal/server/dist/assets/index-tjb4RXro.css
+  h_bf0ada3931f770 1
+internal/server/dist/assets/index-vuiHrDOO.js
+  h_bf0ada3931f770 1-2,81,88-90,98-99,101,118-119,121,123,127,130-131,144,146,236,239-243
+internal/server/dist/assets/java-B3CVU6H5.js
+  h_bf0ada3931f770 1
+internal/server/dist/assets/jsx-BpCw6xgS.js
+  h_bf0ada3931f770 1
+internal/server/dist/assets/lua-BwLYBNAh.js
+  h_bf0ada3931f770 1
+internal/server/dist/assets/php-ovJSvx6A.js
+  h_bf0ada3931f770 1
+internal/server/dist/assets/rst-BCmwuuFZ.js
+  h_bf0ada3931f770 1
+internal/server/dist/assets/ruby-DmiHZ6Fr.js
+  h_bf0ada3931f770 1
+internal/server/dist/assets/sql-CQM0cnlj.js
+  h_bf0ada3931f770 1
+internal/server/dist/assets/tsx-TJnccxqI.js
+  h_bf0ada3931f770 1
+internal/server/dist/assets/typescript-CzLmuJbd.js
+  h_bf0ada3931f770 1
+internal/server/dist/assets/vue-n3aYCtYB.js
+  h_bf0ada3931f770 1
+internal/server/dist/assets/xml-1Xosj40L.js
+  h_bf0ada3931f770 1
+internal/server/dist/index.html
+  h_bf0ada3931f770 8-9
+web/src/components/Header.tsx
+  h_bf0ada3931f770 101
+web/src/components/Settings.tsx
+  h_bf0ada3931f770 1-121
+web/src/main.tsx
+  h_bf0ada3931f770 12,34-36
+web/src/router.ts
+  h_bf0ada3931f770 7,15
+web/src/style.css
+  h_bf0ada3931f770 925-970
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "f37f5617fad7604dc7e3328e49c720f481019518",
+  "prompts": {},
+  "humans": {
+    "h_bf0ada3931f770": {
+      "author": "Yoshi Yamaguchi <ymotongpoo@gmail.com>"
+    }
+  }
+}
