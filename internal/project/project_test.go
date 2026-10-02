@@ -56,6 +56,34 @@ func TestWalkAndIgnore(t *testing.T) {
 	}
 }
 
+func TestWriteChecksHashAndPreservesMode(t *testing.T) {
+	root := t.TempDir()
+	write(t, root, "main.go", "package main\n\n")
+	p, err := New(root, filepath.Join(root, ".reviewer"), nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	before, err := p.Read("main.go")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := p.Write("main.go", "stale", []byte("changed\n")); err == nil {
+		t.Fatal("stale write succeeded")
+	}
+	if err := p.Write("main.go", HashBytes(before), []byte("package main\n\nfunc main() {}\n")); err != nil {
+		t.Fatal(err)
+	}
+	got, err := p.Read("main.go")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if string(got) != "package main\n\nfunc main() {}\n" {
+		t.Fatalf("content = %q", got)
+	}
+	if err := p.Write("main.go", HashBytes(got), []byte("a\x00b")); err != ErrNotText {
+		t.Fatalf("binary write error = %v", err)
+	}
+}
 func TestResolveRejectsOutside(t *testing.T) {
 	root := t.TempDir()
 	outside := t.TempDir()

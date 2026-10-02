@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'preact/hooks'
+import { diffLines } from 'diff'
 import { api, ApiError } from '../api'
 import {
   annotationSeverity,
@@ -49,6 +50,9 @@ export function FileView({ path, line }: { path: string; line?: number }) {
   const [scrollRatio, setScrollRatio] = useState(0)
   const [tokens, setTokens] = useState<Token[][] | undefined>()
   const [error, setError] = useState<string | null>(null)
+  const [directEdit, setDirectEdit] = useState(false)
+  const [draft, setDraft] = useState('')
+  const [saving, setSaving] = useState(false)
   const [sel, setSel] = useState<Selection | null>(null)
   // AI annotations remain expanded until they are adopted or dismissed.
   const [annotationToggles, setAnnotationToggles] = useState<Map<number, boolean>>(new Map())
@@ -178,6 +182,31 @@ export function FileView({ path, line }: { path: string; line?: number }) {
     if (dragging.current && no) setSel((s) => (s ? { ...s, focus: no } : s))
   }
 
+  async function saveDirectEdit() {
+    if (!file || saving) return
+    setSaving(true)
+    try {
+      await api.saveFile(path, draft, file.hash)
+      const next = await api.file(path)
+      setFile(next)
+      setDraft(next.content)
+      setDirectEdit(false)
+      setTokens(await tokenize(next.content, path))
+      toast(`${path} を保存しました`, 'success')
+    } catch (e) {
+      setError(e instanceof ApiError ? e.message : String(e))
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  function beginDirectEdit() {
+    if (!file) return
+    setDraft(file.content)
+    setDirectEdit(true)
+    setError(null)
+  }
+
   if (error) return <div class="empty error">{error}</div>
   if (!file) return <div class="empty">読み込み中…</div>
 
@@ -237,12 +266,25 @@ export function FileView({ path, line }: { path: string; line?: number }) {
           />{' '}
           折り返し
         </label>
+        <button class="btn small" onClick={beginDirectEdit}>
+          編集
+        </button>
         <button class="btn small" onClick={() => (editing.value = { kind: 'new', scope: 'file', path })}>
           ファイルにコメント
         </button>
       </div>
       <CommentList path={path} />
 
+      {directEdit ? (
+        <DirectEditor
+          value={draft}
+          original={file.content}
+          disabled={saving}
+          onChange={setDraft}
+          onSave={() => void saveDirectEdit()}
+          onCancel={() => setDirectEdit(false)}
+        />
+      ) : (
       <div class="file-body">
       <div class="file-src">
       {(scopeFile.length > 0 || newFile || lost.length > 0 || lostAnnotations.length > 0) && (
@@ -350,7 +392,105 @@ export function FileView({ path, line }: { path: string; line?: number }) {
         {rows.length === 0 && <div class="empty">（空のファイル）</div>}
       </div>
       </div>
+      </div>
+      )}
       {showPreview && file && <Preview path={path} content={file.content} scrollRatio={scrollRatio} />}
+    </div>
+  )
+}
+
+function DirectEditor({
+  value,
+  original,
+  disabled,
+  onChange,
+  onSave,
+  onCancel,
+}: {
+  value: string
+  original: string
+  disabled: boolean
+  onChange: (value: string) => void
+  onSave: () => void
+  onCancel: () => void
+}) {
+  const [confirming, setConfirming] = useState(false)
+
+  function keyDown(e: KeyboardEvent) {
+    const ta = e.currentTarget as HTMLTextAreaElement
+    if (e.key === 'Tab') {
+      e.preventDefault()
+      const start = ta.selectionStart
+      const end = ta.selectionEnd
+      if (start !== end) {
+        const before = value.slice(0, start)
+        const selected = value.slice(start, end)
+        const lines = selected.split('\n').map((line) => e.shiftKey ? line.replace(/^\t/, '') : `\t${line}`)
+        const next = before + lines.join('\n') + value.slice(end)
+        onChange(next)
+        requestAnimationFrame(() => {
+          ta.selectionStart = start
+          ta.selectionEnd = start + lines.join('\n').length
+        })
+        return
+      }
+      const lineStart = value.lastIndexOf('\n', start - 1) + 1
+      const indent = value.slice(lineStart, start).match(/^[\t ]*/)?.[0] ?? ''
+      if (e.shiftKey) {
+        const remove = indent.endsWith('\t') ? 1 : indent.endsWith('  ') ? 2 : 0
+        if (remove) {
+          onChange(value.slice(0, lineStart + indent.length - remove) + value.slice(lineStart + indent.length))
+          requestAnimationFrame(() => { ta.selectionStart = ta.selectionEnd = start - remove })
+        }
+      } else {
+        onChange(value.slice(0, start) + '\t' + value.slice(start))
+        requestAnimationFrame(() => { ta.selectionStart = ta.selectionEnd = start + 1 })
+      }
+      return
+    }
+    if (e.key === 'Enter' && ta.selectionStart === ta.selectionEnd) {
+      e.preventDefault()
+      const start = ta.selectionStart
+      const lineStart = value.lastIndexOf('\n', start - 1) + 1
+      const indent = value.slice(lineStart, start).match(/^[\t ]*/)?.[0] ?? ''
+      const next = value.slice(0, start) + '\n' + indent + value.slice(start)
+      onChange(next)
+      requestAnimationFrame(() => { ta.selectionStart = ta.selectionEnd = start + 1 + indent.length })
+    }
+  }
+
+  return (
+    <div class="direct-editor">
+      <p class="muted small">補完や構文解析はありません。Tabでハードタブを入力できます。</p>
+      <textarea
+        class="direct-editor-input"
+        value={value}
+        disabled={disabled}
+        spellcheck={false}
+        onInput={(e) => onChange(e.currentTarget.value)}
+        onKeyDown={keyDown}
+      />
+      {confirming && (
+        <div class="direct-diff">
+          <strong>変更内容を確認</strong>
+          <pre>{diffLines(original, value).map((part) => {
+            const cls = part.added ? 'diff-new' : part.removed ? 'diff-old' : 'diff-same'
+            const sign = part.added ? '+ ' : part.removed ? '- ' : '  '
+            return <span class={cls}>{part.value.split('\n').map((line, i, all) => line || i < all.length - 1 ? `${sign}${line}\n` : '')}</span>
+          })}</pre>
+        </div>
+      )}
+      <div class="direct-editor-actions">
+        <button class="btn" disabled={disabled} onClick={onCancel}>破棄</button>
+        <span class="spacer" />
+        {confirming ? (
+          <>
+            <button class="btn" disabled={disabled} onClick={() => setConfirming(false)}>編集に戻る</button>
+            <button class="btn primary" disabled={disabled || value === original} onClick={onSave}>保存</button>
+          </>
+        ) : (
+          <button class="btn primary" disabled={disabled || value === original} onClick={() => setConfirming(true)}>差分を確認</button>
+        )}
       </div>
     </div>
   )

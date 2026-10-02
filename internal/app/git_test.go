@@ -322,3 +322,22 @@ func TestGitSettingsMergeConfig(t *testing.T) {
 		t.Fatalf("fallback = %+v", g)
 	}
 }
+
+func TestSaveFileChecksHashAndReanchors(t *testing.T) {
+	a, top, _ := gitSetup(t)
+	write(t, top, "docs/ch1.md", "# ch1\nline\n")
+	view, err := a.File("ch1.md")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := a.SaveFile(SaveFileInput{Path: "ch1.md", Content: "# ch1\nchanged\n", Hash: "stale"}); errCode(err) != http.StatusConflict {
+		t.Fatalf("stale save = %v", err)
+	}
+	if err := a.SaveFile(SaveFileInput{Path: "ch1.md", Content: "# ch1\nchanged\n", Hash: view.Hash}); err != nil {
+		t.Fatal(err)
+	}
+	got, err := a.File("ch1.md")
+	if err != nil || got.Content != "# ch1\nchanged\n" {
+		t.Fatalf("saved file = %+v, %v", got, err)
+	}
+}

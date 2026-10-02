@@ -92,6 +92,7 @@ func (p *Project) Handler() http.Handler {
 		mux.HandleFunc("GET /api/project", p.handleProject)
 		mux.HandleFunc("GET /api/tree", p.handleTree)
 		mux.HandleFunc("GET /api/file", p.handleFile)
+		mux.HandleFunc("PUT /api/file", p.handleSaveFile)
 		mux.HandleFunc("GET /api/rounds/{n}/changes", p.handleRoundChanges)
 		mux.HandleFunc("GET /api/rounds/{n}/diff", p.handleRoundDiff)
 		mux.HandleFunc("GET /api/blob/{hash}", p.handleBlob)
@@ -272,6 +273,15 @@ func (p *Project) handleTree(w http.ResponseWriter, r *http.Request) {
 func (p *Project) handleFile(w http.ResponseWriter, r *http.Request) {
 	fv, err := p.App.File(r.URL.Query().Get("path"))
 	respond(w, fv, err)
+}
+
+func (p *Project) handleSaveFile(w http.ResponseWriter, r *http.Request) {
+	var req app.SaveFileInput
+	if err := decode(r, &req); err != nil {
+		writeError(w, err)
+		return
+	}
+	respond(w, map[string]bool{"ok": true}, p.App.SaveFile(req))
 }
 
 func roundParam(r *http.Request) int {

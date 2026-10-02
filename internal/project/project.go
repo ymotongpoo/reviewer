@@ -293,6 +293,55 @@ func (p *Project) Read(rel string) ([]byte, error) {
 	return b, nil
 }
 
+// Write replaces a reviewable text file only when its current content has the
+// expected hash. It writes beside the file and renames atomically so a failed
+// save cannot leave a partial file behind.
+func (p *Project) Write(rel, expectedHash string, content []byte) error {
+	abs, err := p.Resolve(rel)
+	if err != nil {
+		return err
+	}
+	if p.Ignored(rel, false) {
+		return ErrOutside
+	}
+	if int64(len(content)) > MaxFileSize || !IsText(content) {
+		return ErrNotText
+	}
+	current, err := p.Read(rel)
+	if err != nil {
+		return err
+	}
+	if expectedHash == "" || HashBytes(current) != expectedHash {
+		return fmt.Errorf("file changed since it was opened")
+	}
+	info, err := os.Stat(abs)
+	if err != nil {
+		return err
+	}
+	tmp, err := os.CreateTemp(filepath.Dir(abs), ".reviewer-save-*")
+	if err != nil {
+		return err
+	}
+	tmpName := tmp.Name()
+	defer os.Remove(tmpName)
+	if err := tmp.Chmod(info.Mode().Perm()); err != nil {
+		tmp.Close()
+		return err
+	}
+	if _, err := tmp.Write(content); err != nil {
+		tmp.Close()
+		return err
+	}
+	if err := tmp.Sync(); err != nil {
+		tmp.Close()
+		return err
+	}
+	if err := tmp.Close(); err != nil {
+		return err
+	}
+	return os.Rename(tmpName, abs)
+}
+
 // IsText reports whether b looks like text (no NUL byte in the first 8KB).
 func IsText(b []byte) bool {
 	head := b
