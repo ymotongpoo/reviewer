@@ -583,9 +583,29 @@ button.chip {
 .row .ln.clickable {
   cursor: pointer;
 }
+.row .ln .edit-marker {
+  position: absolute;
+  left: 3px;
+  top: 1px;
+  width: 18px;
+  height: 18px;
+  padding: 0;
+  border: 0;
+  border-radius: 4px;
+  background: var(--warn);
+  color: var(--bg);
+  font: inherit;
+  line-height: 17px;
+  text-align: center;
+  cursor: pointer;
+  display: none;
+}
+.row:hover .ln.clickable .edit-marker {
+  display: block;
+}
 .row .ln .plus {
   position: absolute;
-  left: 4px;
+  left: 25px;
   top: 1px;
   width: 18px;
   height: 18px;

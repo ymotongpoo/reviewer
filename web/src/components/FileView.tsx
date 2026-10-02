@@ -53,6 +53,7 @@ export function FileView({ path, line }: { path: string; line?: number }) {
   const [directEdit, setDirectEdit] = useState(false)
   const [draft, setDraft] = useState('')
   const [saving, setSaving] = useState(false)
+  const [editLine, setEditLine] = useState<number | undefined>()
   const [sel, setSel] = useState<Selection | null>(null)
   // AI annotations remain expanded until they are adopted or dismissed.
   const [annotationToggles, setAnnotationToggles] = useState<Map<number, boolean>>(new Map())
@@ -200,9 +201,10 @@ export function FileView({ path, line }: { path: string; line?: number }) {
     }
   }
 
-  function beginDirectEdit() {
+  function beginDirectEdit(line?: number) {
     if (!file) return
     setDraft(file.content)
+    setEditLine(line)
     setDirectEdit(true)
     setError(null)
   }
@@ -266,7 +268,7 @@ export function FileView({ path, line }: { path: string; line?: number }) {
           />{' '}
           折り返し
         </label>
-        <button class="btn small" onClick={beginDirectEdit}>
+        <button class="btn small" onClick={() => beginDirectEdit()}>
           編集
         </button>
         <button class="btn small" onClick={() => (editing.value = { kind: 'new', scope: 'file', path })}>
@@ -279,6 +281,7 @@ export function FileView({ path, line }: { path: string; line?: number }) {
         <DirectEditor
           value={draft}
           original={file.content}
+          focusLine={editLine}
           disabled={saving}
           onChange={setDraft}
           onSave={() => void saveDirectEdit()}
@@ -352,6 +355,20 @@ export function FileView({ path, line }: { path: string; line?: number }) {
                       ◆{lineAnnotations.length > 1 ? lineAnnotations.length : ''}
                     </button>
                   )}
+                  {no !== undefined && (
+                    <button
+                      class="edit-marker"
+                      title="この行を編集"
+                      aria-label={`行${no}を編集`}
+                      onMouseDown={(e) => e.stopPropagation()}
+                      onClick={(e) => {
+                        e.stopPropagation()
+                        beginDirectEdit(no)
+                      }}
+                    >
+                      ✎
+                    </button>
+                  )}
                   {no !== undefined && <span class="plus">+</span>}
                 </span>
                 <span class="text">
@@ -402,6 +419,7 @@ export function FileView({ path, line }: { path: string; line?: number }) {
 function DirectEditor({
   value,
   original,
+  focusLine,
   disabled,
   onChange,
   onSave,
@@ -409,12 +427,25 @@ function DirectEditor({
 }: {
   value: string
   original: string
+  focusLine?: number
   disabled: boolean
   onChange: (value: string) => void
   onSave: () => void
   onCancel: () => void
 }) {
   const [confirming, setConfirming] = useState(false)
+  const inputRef = useRef<HTMLTextAreaElement>(null)
+
+  useEffect(() => {
+    const input = inputRef.current
+    if (!input || !focusLine) return
+    const lines = value.split('\n')
+    const start = lines.slice(0, focusLine - 1).reduce((n, line) => n + line.length + 1, 0)
+    const end = start + (lines[focusLine - 1]?.length ?? 0)
+    input.focus()
+    input.selectionStart = start
+    input.selectionEnd = end
+  }, [focusLine])
 
   function keyDown(e: KeyboardEvent) {
     const ta = e.currentTarget as HTMLTextAreaElement
@@ -464,6 +495,7 @@ function DirectEditor({
       <p class="muted small">補完や構文解析はありません。Tabでハードタブを入力できます。</p>
       <textarea
         class="direct-editor-input"
+        ref={inputRef}
         value={value}
         disabled={disabled}
         spellcheck={false}
