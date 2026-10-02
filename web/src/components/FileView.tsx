@@ -514,7 +514,9 @@ function DirectEditor({
         if (highlightRef.current) highlightRef.current.scrollTop = top
       }}>
         <pre class="direct-editor-highlight" ref={highlightRef} aria-hidden="true">
-          {highlighted ? highlighted.map((line) => <span>{line.map((token) => <span style={token.style}>{token.content}</span>)}\n</span>) : value}
+          {highlighted ? highlighted.map((line, i) => (
+            <span key={i}>{line.map((token) => <span style={token.style}>{token.content}</span>)}{'\n'}</span>
+          )) : value}
         </pre>
         <textarea
           class="direct-editor-input"
