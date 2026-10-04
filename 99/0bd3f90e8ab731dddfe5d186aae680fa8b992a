@@ -1,0 +1,78 @@
+internal/server/dist/assets/lua-DUE11QcF.js
+  s_0aa2e04615d891::t_1b8ae0f7b4c022 1
+internal/server/dist/assets/cpp-Bt9ilhIp.js
+  s_0aa2e04615d891::t_1b8ae0f7b4c022 1
+web/src/media.ts
+  s_0aa2e04615d891::t_bcea4a158f450c 1-19
+internal/server/dist/assets/java-_APbE6dS.js
+  s_0aa2e04615d891::t_1b8ae0f7b4c022 1
+internal/server/dist/assets/dist-Ds44B5iG.js
+  s_0aa2e04615d891::t_1b8ae0f7b4c022 1-63
+web/src/main.tsx
+  s_0aa2e04615d891::t_bcea4a158f450c 4,17,20-21
+web/e2e/mobile/viewport.e2e.ts
+  s_0aa2e04615d891::t_120d1b5ac891a8 31-32
+  s_0aa2e04615d891::t_8431faa90ec26a 1-30,33-81
+internal/server/dist/assets/vue-9rbri7Y6.js
+  s_0aa2e04615d891::t_1b8ae0f7b4c022 1
+web/src/responsive.css
+  s_0aa2e04615d891::t_bcea4a158f450c 1-15
+internal/server/dist/assets/php-BBz5Ho2p.js
+  s_0aa2e04615d891::t_1b8ae0f7b4c022 1
+internal/server/dist/assets/xml-5no_EVPQ.js
+  s_0aa2e04615d891::t_1b8ae0f7b4c022 1
+internal/server/dist/assets/index-D_ladMwV.js
+  s_0aa2e04615d891::t_1b8ae0f7b4c022 1-252
+internal/server/dist/assets/jsx-Bdb19yjW.js
+  s_0aa2e04615d891::t_1b8ae0f7b4c022 1
+web/src/media.test.ts
+  s_0aa2e04615d891::t_57f09ce1a7b32a 1
+  s_0aa2e04615d891::t_4ffe6fa27e294e 6-11
+  s_0aa2e04615d891::t_165ba7a27923d4 2-5,12-70
+internal/server/dist/index.html
+  s_0aa2e04615d891::t_1b8ae0f7b4c022 5,8-9
+internal/server/dist/assets/rst-dgVtvpha.js
+  s_0aa2e04615d891::t_1b8ae0f7b4c022 1
+internal/server/dist/assets/sql-0xpEXF3J.js
+  s_0aa2e04615d891::t_1b8ae0f7b4c022 1
+internal/server/dist/assets/graphql-DQfQYr1L.js
+  s_0aa2e04615d891::t_1b8ae0f7b4c022 1
+web/src/viewport.ts
+  s_0aa2e04615d891::t_bcea4a158f450c 1-37
+internal/server/dist/assets/tsx-iZ3BKiuL.js
+  s_0aa2e04615d891::t_1b8ae0f7b4c022 1
+web/index.html
+  s_0aa2e04615d891::t_bcea4a158f450c 5
+internal/server/dist/assets/html-G4I1J1nJ.js
+  s_0aa2e04615d891::t_1b8ae0f7b4c022 1
+internal/server/dist/assets/index-BpiIWpWS.css
+  s_0aa2e04615d891::t_1b8ae0f7b4c022 1
+web/src/viewport.test.ts
+  s_0aa2e04615d891::t_165ba7a27923d4 1-120
+internal/server/dist/assets/ruby-CBdCItse.js
+  s_0aa2e04615d891::t_1b8ae0f7b4c022 1
+internal/server/dist/assets/html-derivative-D5qs_Fde.js
+  s_0aa2e04615d891::t_1b8ae0f7b4c022 1
+internal/server/dist/assets/css-ByAxJVrR.js
+  s_0aa2e04615d891::t_1b8ae0f7b4c022 1
+internal/server/dist/assets/typescript-DxZfqhGk.js
+  s_0aa2e04615d891::t_1b8ae0f7b4c022 1
+internal/server/dist/assets/c-BexkC1mM.js
+  s_0aa2e04615d891::t_1b8ae0f7b4c022 1
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "990bd3f90e8ab731dddfe5d186aae680fa8b992a",
+  "prompts": {},
+  "sessions": {
+    "s_0aa2e04615d891": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a104b1-86d5-71c0-b1b2-667a5c3f6a0f",
+        "model": "gpt-6-astra"
+      },
+      "human_author": "Yoshi Yamaguchi <ymotongpoo@gmail.com>"
+    }
+  }
+}
