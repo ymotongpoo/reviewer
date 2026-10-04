@@ -632,7 +632,10 @@ func (p *Project) handleEvents(w http.ResponseWriter, r *http.Request) {
 		select {
 		case <-r.Context().Done():
 			return
-		case ev := <-ch:
+		case ev, ok := <-ch:
+			if !ok {
+				return
+			}
 			b, _ := json.Marshal(ev)
 			fmt.Fprintf(w, "data: %s\n\n", b)
 			fl.Flush()
@@ -660,6 +663,9 @@ func (h *Hub) Publish(ev app.Event) {
 		select {
 		case ch <- ev:
 		default:
+			// Disconnect slow subscribers so they can reconnect and resync.
+			delete(h.subs, ch)
+			close(ch)
 		}
 	}
 }
@@ -673,9 +679,11 @@ func (h *Hub) Subscribe() chan app.Event {
 	return ch
 }
 
-// Unsubscribe removes a subscriber.
+// Unsubscribe removes a subscriber. Only Publish closes channels on overflow.
 func (h *Hub) Unsubscribe(ch chan app.Event) {
 	h.mu.Lock()
-	delete(h.subs, ch)
+	if h.subs[ch] {
+		delete(h.subs, ch)
+	}
 	h.mu.Unlock()
 }
