@@ -1,0 +1,81 @@
+internal/server/dist/assets/css-th2B3sOA.js
+  s_b5394861c1e1c4::t_f4ee62f631fae3 1
+web/src/drafts.ts
+  s_b5394861c1e1c4::t_6b269bec0edffe 44-53,55-61,64
+  s_b5394861c1e1c4::t_0d02f078d13568 54
+  s_b5394861c1e1c4::t_d6354c81fce55e 62-63
+internal/server/dist/assets/tsx-BwSahZo9.js
+  s_b5394861c1e1c4::t_f4ee62f631fae3 1
+internal/server/dist/assets/graphql-CF65Eai7.js
+  s_b5394861c1e1c4::t_f4ee62f631fae3 1
+web/src/drafts.test.ts
+  s_b5394861c1e1c4::t_0d02f078d13568 4,8,72-93
+  s_b5394861c1e1c4::t_411d9a5c34dace 94
+internal/server/dist/assets/html-derivative-CoJyBWwT.js
+  s_b5394861c1e1c4::t_f4ee62f631fae3 1
+web/e2e/mobile/edit-drafts.e2e.ts
+  s_b5394861c1e1c4::t_31c8ffbee63ebd 195-231,233,235-237,239-246
+  s_b5394861c1e1c4::t_b7fc431816ef8e 1-62,66-194
+  s_b5394861c1e1c4::t_868df653e3c2e7 63-65
+  s_b5394861c1e1c4::t_58dd2ac4edf58c 232,234,238
+internal/server/dist/assets/html-Vd5KRsea.js
+  s_b5394861c1e1c4::t_f4ee62f631fae3 1
+internal/server/dist/assets/java-BLpiGucG.js
+  s_b5394861c1e1c4::t_f4ee62f631fae3 1
+internal/server/dist/assets/rst-DABkC6_9.js
+  s_b5394861c1e1c4::t_f4ee62f631fae3 1
+internal/server/dist/assets/jsx-BZ_Qcuan.js
+  s_b5394861c1e1c4::t_f4ee62f631fae3 1
+internal/server/dist/assets/index-PY-hGMB5.js
+  s_b5394861c1e1c4::t_f4ee62f631fae3 1-252
+web/src/components/FileView.tsx
+  s_b5394861c1e1c4::t_0d02f078d13568 1000
+  s_b5394861c1e1c4::t_fac333c6c6ccf4 867-891,894,897-898,902,905,907,909-916,918-948,952-963,969-971,1103-1104,1114-1120,1238
+  s_b5394861c1e1c4::t_d6354c81fce55e 3-4,8,73,92,112-119,154-155,164-167,177-178,181-194,197-226,246,250-253,524,544,549-552
+internal/server/dist/assets/php-Dt9CqBqt.js
+  s_b5394861c1e1c4::t_f4ee62f631fae3 1
+internal/server/dist/assets/lua-BVxjm-Ik.js
+  s_b5394861c1e1c4::t_f4ee62f631fae3 1
+internal/server/dist/assets/c-PPxib8ln.js
+  s_b5394861c1e1c4::t_f4ee62f631fae3 1
+internal/server/dist/assets/dist-BHTE61_C.js
+  s_b5394861c1e1c4::t_f4ee62f631fae3 1-63
+internal/server/dist/assets/vue-b0ySH1hj.js
+  s_b5394861c1e1c4::t_f4ee62f631fae3 1
+internal/server/dist/index.html
+  s_b5394861c1e1c4::t_f4ee62f631fae3 8
+internal/server/dist/assets/ruby-BZjiuIOM.js
+  s_b5394861c1e1c4::t_f4ee62f631fae3 1
+internal/server/dist/assets/cpp-DoSZmDzM.js
+  s_b5394861c1e1c4::t_f4ee62f631fae3 1
+internal/server/dist/assets/xml-BvS49WHX.js
+  s_b5394861c1e1c4::t_f4ee62f631fae3 1
+internal/server/dist/assets/typescript-CQGoLHXN.js
+  s_b5394861c1e1c4::t_f4ee62f631fae3 1
+internal/server/dist/assets/sql-DGD4zpcf.js
+  s_b5394861c1e1c4::t_f4ee62f631fae3 1
+web/e2e/desktop/edit.e2e.ts
+  s_b5394861c1e1c4::t_f855a56f3c7b28 4,6
+  s_b5394861c1e1c4::t_9b1e79e971adb7 183-188,199
+  s_b5394861c1e1c4::t_478b94363e5a95 200
+  s_b5394861c1e1c4::t_b63e634601fe16 169-182,189-198,201-233
+  s_b5394861c1e1c4::t_113eb1b0ee3d9a 68-168
+web/src/components/EditBar.tsx
+  s_b5394861c1e1c4::t_fac333c6c6ccf4 17-18,33-34,66,71,73,78,95,105,143
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "49e993fdfecc165d3d002a10599c9a516ef67ceb",
+  "prompts": {},
+  "sessions": {
+    "s_b5394861c1e1c4": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a10516-937c-78e1-a1f4-5703db792c5d",
+        "model": "gpt-6-astra"
+      },
+      "human_author": "Yoshi Yamaguchi <ymotongpoo@gmail.com>"
+    }
+  }
+}
