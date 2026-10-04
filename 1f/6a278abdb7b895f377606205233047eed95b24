@@ -1,0 +1,50 @@
+web/e2e/mobile/shell.e2e.ts
+  s_0b327b07f6d2dc::t_4c5b406c4e36cf 1-27,31-66,80-132,136-139,142-168
+  s_0b327b07f6d2dc::t_03c2c65fedcb79 67-77,133-135
+  s_0b327b07f6d2dc::t_aa338c16a1aaa8 29-30,78-79,140-141
+  s_0b327b07f6d2dc::t_cfa1bff92c4f4d 28
+web/src/components/Sheet.tsx
+  s_0b327b07f6d2dc::t_8faa74c602a502 25,33,49-52,62,64,67
+  s_0b327b07f6d2dc::t_b929632978b14c 68-69
+  s_0b327b07f6d2dc::t_89329a9bcc8760 1-24,26-32,34-48,53-61,63,65-66,70-79
+web/src/responsive.css
+  s_0b327b07f6d2dc::t_b929632978b14c 16-115
+web/src/main.tsx
+  s_0b327b07f6d2dc::t_89329a9bcc8760 18-20,27-30,44-49,52
+web/src/ui.ts
+  s_0b327b07f6d2dc::t_89329a9bcc8760 1-11
+web/src/components/Agent.tsx
+  s_0b327b07f6d2dc::t_89329a9bcc8760 1,101,103,136
+web/src/components/Git.tsx
+  s_0b327b07f6d2dc::t_89329a9bcc8760 1,178,270
+web/e2e/mobile/header.e2e.ts
+  s_0b327b07f6d2dc::t_aa338c16a1aaa8 1-2,5,7,22-25
+  s_0b327b07f6d2dc::t_4c5b406c4e36cf 3-4,6,8-21,26-29
+web/src/components/Portal.tsx
+  s_0b327b07f6d2dc::t_89329a9bcc8760 1-16,18
+  s_0b327b07f6d2dc::t_240b082b407c94 17
+web/src/components/Header.tsx
+  s_0b327b07f6d2dc::t_89329a9bcc8760 1,217,219,299
+  s_0b327b07f6d2dc::t_b929632978b14c 9-11,40,50-51,55,92-94,100-103,109-110,113-120,155-158
+web/src/components/Annotate.tsx
+  s_0b327b07f6d2dc::t_89329a9bcc8760 1,139,256
+web/e2e/boundary/layout.e2e.ts
+  s_0b327b07f6d2dc::t_4c5b406c4e36cf 1-27,32
+  s_0b327b07f6d2dc::t_03c2c65fedcb79 28-31
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "1f6a278abdb7b895f377606205233047eed95b24",
+  "prompts": {},
+  "sessions": {
+    "s_0b327b07f6d2dc": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a104be-ff87-7e62-9786-cbae0a34aa25",
+        "model": "gpt-6-astra"
+      },
+      "human_author": "Yoshi Yamaguchi <ymotongpoo@gmail.com>"
+    }
+  }
+}
