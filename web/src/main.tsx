@@ -1,6 +1,7 @@
 import { render } from 'preact'
 import { useEffect } from 'preact/hooks'
 import './style.css'
+import './responsive.css'
 import './theme'
 import { connectEvents, fatal, info, refreshAll, toasts } from './state'
 import { route } from './router'
@@ -13,8 +14,11 @@ import { Settings } from './components/Settings'
 import { Home } from './components/Home'
 import { projectId } from './api'
 import { initInputLog } from './inputlog'
+import { initViewport } from './viewport'
 
 initInputLog()
+const stopViewport = initViewport()
+import.meta.hot?.dispose(stopViewport)
 
 function App() {
   useEffect(() => {

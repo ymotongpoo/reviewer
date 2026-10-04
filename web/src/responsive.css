@@ -1,0 +1,15 @@
+/* Responsive layout. Rules for existing selectors live only inside these media
+   queries; the queries must match web/src/media.ts. */
+@media (max-width: 839.98px), (hover: none) and (pointer: coarse) {
+  .layout { height: 100dvh; }
+  .app-header {
+    padding-top: max(8px, env(safe-area-inset-top));
+    padding-left: max(16px, env(safe-area-inset-left));
+    padding-right: max(16px, env(safe-area-inset-right));
+  }
+  .toasts {
+    right: max(8px, env(safe-area-inset-right));
+    bottom: calc(16px + env(safe-area-inset-bottom) + var(--kb-inset, 0px));
+  }
+  .code { padding-bottom: 40dvh; }
+}
