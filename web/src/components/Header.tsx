@@ -2,7 +2,7 @@ import { Portal } from './Portal'
 import { useEffect, useState } from 'preact/hooks'
 import { api, projectId } from '../api'
 import { copyText } from '../clipboard'
-import { agentInfo, comments, draftCount, dismissResponseBanner, info, refreshAll, responseBanner, toast } from '../state'
+import { agentInfo, comments, dirtyReplies, draftCount, flushComposers, refreshComments, dismissResponseBanner, info, refreshAll, responseBanner, toast } from '../state'
 import { connState } from '../connection'
 import { AgentChip } from './Agent'
 import { AnnotateButton } from './Annotate'
@@ -211,6 +211,23 @@ function SubmitDialog({
   setState: (s: 'confirm' | SubmitResult | null) => void
 }) {
   const [busy, setBusy] = useState(false)
+  const [preparing, setPreparing] = useState(state === 'confirm')
+  const [saveError, setSaveError] = useState('')
+  useEffect(() => {
+    if (state !== 'confirm') return
+    let active = true
+    setPreparing(true)
+    void (async () => {
+      try {
+        const result = await flushComposers()
+        await refreshComments()
+        if (active && !result.ok) setSaveError('保存できていないコメントがあります。コメント欄で再試行するか、端末に保存してください。')
+      } catch (e) {
+        if (active) setSaveError(`コメントを確認できませんでした: ${(e as Error).message}`)
+      } finally { if (active) setPreparing(false) }
+    })()
+    return () => { active = false }
+  }, [state])
   const ag = agentInfo.value
   const canSend = !!ag?.available && !!ag.binding
   const [send, setSend] = useState(canSend && !!ag?.autoSend)
@@ -223,6 +240,7 @@ function SubmitDialog({
   const empty = drafts.length === 0 && carried.length === 0
 
   async function submit() {
+    if (preparing || saveError) return
     setBusy(true)
     try {
       const res = await api.submit(canSend && send)
@@ -243,7 +261,7 @@ function SubmitDialog({
         {state === 'confirm' ? (
           <>
             <h2>ラウンド{i.round}を提出</h2>
-            <ul class="submit-summary">
+            {preparing ? <p role="status">保存中…</p> : <ul class="submit-summary">
               <li>
                 新しいコメント: <b>{drafts.length}</b>件
               </li>
@@ -253,14 +271,16 @@ function SubmitDialog({
               <li>
                 前ラウンドから持ち越す未解決コメント: <b>{carried.length}</b>件
               </li>
-            </ul>
-            {untouched.length > 0 && (
+            </ul>}
+            {saveError && <div class="banner error" role="alert">{saveError}</div>}
+            {dirtyReplies.value > 0 && <div class="banner warn">保存していない返信が {dirtyReplies.value} 件あります（提出に含まれません）</div>}
+            {!preparing && untouched.length > 0 && (
               <div class="banner warn">
                 エージェントが「対応済み」「対応しない」と返答したまま、解決も返信もしていないコメントが{untouched.length}
                 件あります（{untouched.map((c) => c.id).join(', ')}）。納得できるものは「解決」にすると、持ち越されません。
               </div>
             )}
-            {empty && <div class="banner warn">提出するコメントがありません。</div>}
+            {!preparing && empty && <div class="banner warn">提出するコメントがありません。</div>}
             <p class="muted">
               提出すると、この時点のファイル内容を保存し、<code>feedback.md</code> と <code>feedback.json</code> を書き出します。
             </p>
@@ -279,7 +299,7 @@ function SubmitDialog({
               <button class="btn" onClick={() => setState(null)}>
                 キャンセル
               </button>
-              <button class="btn primary" disabled={busy || empty} onClick={() => void submit()}>
+              <button class="btn primary" disabled={busy || preparing || !!saveError || empty} onClick={() => void submit()}>
                 {busy ? '提出中…' : '提出する'}
               </button>
             </div>

@@ -145,3 +145,24 @@ it('wraps fetch rejection in NetworkError without changing its message; HTTP err
     expect((http as Error).message).toBe('server error')
   }
 })
+
+describe('composer flush registry', () => {
+  it('waits for all mounted composers and counts failures without rejecting', async () => {
+    const pending = deferred<'saved'>()
+    const unregister = [
+      state.registerComposerFlusher(() => pending.promise),
+      state.registerComposerFlusher(async () => 'empty'),
+      state.registerComposerFlusher(async () => 'failed'),
+      state.registerComposerFlusher(async () => 'unknown'),
+      state.registerComposerFlusher(() => { throw new Error('unexpected') }),
+    ]
+    let done = false
+    const flush = state.flushComposers().then((v) => { done = true; return v })
+    await Promise.resolve()
+    expect(done).toBe(false)
+    pending.resolve('saved')
+    expect(await flush).toEqual({ ok: false, failed: 3 })
+    unregister.forEach((fn) => fn())
+    expect(await state.flushComposers()).toEqual({ ok: true, failed: 0 })
+  })
+})

@@ -1,5 +1,7 @@
 import { batch, computed, signal } from '@preact/signals'
 import { api, ApiError, projectBase, projectId } from './api'
+import { createDraftStore } from './localstore'
+import type { SaveOutcome } from './drafts'
 import { connectionGeneration, createConnection } from './connection'
 import type {
   AgentInfo,
@@ -105,6 +107,22 @@ export function toast(text: string, kind: Toast['kind'] = 'info') {
   const id = ++toastSeq
   toasts.value = [...toasts.value, { id, text, kind }]
   setTimeout(() => (toasts.value = toasts.value.filter((t) => t.id !== id)), kind === 'error' ? 8000 : 4000)
+}
+
+export const draftStore = createDraftStore(() => toast('端末への保存を使えません', 'error'))
+export const composerJournalVersion = signal(0)
+export const dirtyReplies = signal(0)
+const composerFlushers = new Set<() => Promise<SaveOutcome | 'empty'>>()
+
+export function registerComposerFlusher(fn: () => Promise<SaveOutcome | 'empty'>): () => void {
+  composerFlushers.add(fn)
+  return () => { composerFlushers.delete(fn) }
+}
+
+export async function flushComposers(): Promise<{ ok: boolean; failed: number }> {
+  const results = await Promise.allSettled([...composerFlushers].map((fn) => Promise.resolve().then(fn)))
+  const failed = results.filter((r) => r.status === 'rejected' || r.value === 'failed' || r.value === 'unknown').length
+  return { ok: failed === 0, failed }
 }
 
 /** Response of the agent that arrived while this page was open. */
