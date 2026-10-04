@@ -1,0 +1,94 @@
+docs/mobile/perf.md
+  s_61911cc013c3b6::t_59d3be4ed44e5d 1-11
+internal/server/dist/assets/dist-DDVMKPrq.js
+  s_61911cc013c3b6::t_a6fa16af0948d4 1-63
+internal/server/dist/assets/html-B5MsjLh2.js
+  s_61911cc013c3b6::t_a6fa16af0948d4 1
+internal/server/dist/assets/vue-AGXs7-67.js
+  s_61911cc013c3b6::t_a6fa16af0948d4 1
+internal/server/dist/index.html
+  s_61911cc013c3b6::t_a6fa16af0948d4 8-9
+web/src/components/FileView.tsx
+  s_61911cc013c3b6::t_d4164f4f1260e9 821
+  s_61911cc013c3b6::t_c13e752b479d94 441-442,444-448
+  s_61911cc013c3b6::t_cb78ba8d65deb5 2-5,161-162,286-299,387,391,811-818,844,882,1217,1267-1277
+internal/server/dist/assets/sql-di655TZH.js
+  s_61911cc013c3b6::t_a6fa16af0948d4 1
+internal/server/dist/assets/typescript-BPW2R9o3.js
+  s_61911cc013c3b6::t_a6fa16af0948d4 1
+web/e2e/mobile/composer-drafts.e2e.ts
+  s_61911cc013c3b6::t_44014e3fed4008 9-10
+internal/server/dist/assets/c-DvXIavPz.js
+  s_61911cc013c3b6::t_a6fa16af0948d4 1
+web/src/touchselect.ts
+  s_61911cc013c3b6::t_2bc671fc966193 1-22
+web/e2e/mobile/touch-lines.e2e.ts
+  s_61911cc013c3b6::t_f3631d904ad257 4,186-194,199-245
+  s_61911cc013c3b6::t_d6095466ee9c22 15
+  s_61911cc013c3b6::t_b638d5509296cf 1-3,5-14,16-18,22-94,100-137,139-167,169-178,181-185,246
+  s_61911cc013c3b6::t_62dd88d937de9a 138,168
+  s_61911cc013c3b6::t_c13e752b479d94 95-99
+  s_61911cc013c3b6::t_d4164f4f1260e9 179-180
+  s_61911cc013c3b6::t_6d30630050f0a7 19-21
+  s_61911cc013c3b6::t_68650ac6102ec4 195-198
+internal/server/dist/assets/graphql-BQTCaKcj.js
+  s_61911cc013c3b6::t_a6fa16af0948d4 1
+internal/server/dist/assets/cpp-DvsioaKV.js
+  s_61911cc013c3b6::t_a6fa16af0948d4 1
+internal/server/dist/assets/index-BGrwg4w5.css
+  s_61911cc013c3b6::t_a6fa16af0948d4 1
+internal/server/dist/assets/jsx-DOCRsOTG.js
+  s_61911cc013c3b6::t_a6fa16af0948d4 1
+web/src/responsive.css
+  s_61911cc013c3b6::t_62dd88d937de9a 12
+  s_61911cc013c3b6::t_bf206590e64e7e 36-43,45-65,72,74-88
+  s_61911cc013c3b6::t_d4164f4f1260e9 73
+  s_61911cc013c3b6::t_68650ac6102ec4 18-35
+  s_61911cc013c3b6::t_59d3be4ed44e5d 17,44,66-71
+  s_61911cc013c3b6::t_c33154f680005c 89-90
+web/e2e/desktop/interactions.e2e.ts
+  s_61911cc013c3b6::t_b638d5509296cf 7-19
+web/src/components/CodeRow.tsx
+  s_61911cc013c3b6::t_cb78ba8d65deb5 9,47,81-82,117-124,126,131,145-148,161-169,173,175-177
+internal/server/dist/assets/html-derivative-D0abKduk.js
+  s_61911cc013c3b6::t_a6fa16af0948d4 1
+internal/server/dist/assets/index-DrCjrAxh.js
+  s_61911cc013c3b6::t_a6fa16af0948d4 1-252
+internal/server/dist/assets/tsx-D7u5-FFi.js
+  s_61911cc013c3b6::t_a6fa16af0948d4 1
+internal/server/dist/assets/rst-Bld5IHo7.js
+  s_61911cc013c3b6::t_a6fa16af0948d4 1
+web/src/touchselect.test.ts
+  s_61911cc013c3b6::t_59d3be4ed44e5d 1-43
+internal/server/dist/assets/xml-C4MmggGB.js
+  s_61911cc013c3b6::t_a6fa16af0948d4 1
+internal/server/dist/assets/java-DT3V2qX9.js
+  s_61911cc013c3b6::t_a6fa16af0948d4 1
+web/src/components/SelectionBar.tsx
+  s_61911cc013c3b6::t_2bc671fc966193 1-30,33-36,42-60
+  s_61911cc013c3b6::t_62dd88d937de9a 31-32,37-41
+internal/server/dist/assets/css-DmdE7ihQ.js
+  s_61911cc013c3b6::t_a6fa16af0948d4 1
+internal/server/dist/assets/ruby-Btob02QP.js
+  s_61911cc013c3b6::t_a6fa16af0948d4 1
+internal/server/dist/assets/php-DPagoUsu.js
+  s_61911cc013c3b6::t_a6fa16af0948d4 1
+internal/server/dist/assets/lua-Bn5n8Wzd.js
+  s_61911cc013c3b6::t_a6fa16af0948d4 1
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "dbecc42c6c6e6d67cbd75a20674e4192bf67578f",
+  "prompts": {},
+  "sessions": {
+    "s_61911cc013c3b6": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a10534-0d74-79e3-a6bc-07d1c8f73561",
+        "model": "gpt-6-astra"
+      },
+      "human_author": "Yoshi Yamaguchi <ymotongpoo@gmail.com>"
+    }
+  }
+}
