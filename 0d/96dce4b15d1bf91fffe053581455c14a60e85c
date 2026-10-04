@@ -1,0 +1,47 @@
+web/e2e/mobile/acceptance.e2e.ts
+  s_ada54569954fae::t_41b76746849286 18,173
+  s_ada54569954fae::t_5200635bf56ebc 193
+  s_ada54569954fae::t_b2a62315e7e290 1-8,12-14,19-77,79-148,150-172,174-192,194-293,296-306
+  s_ada54569954fae::t_a6ae57437cab6f 15-17,78,149
+  s_ada54569954fae::t_cd4eb726697dd6 294-295
+  s_ada54569954fae::t_39b3e71101c977 10-11
+  s_ada54569954fae::t_38d02807978583 9
+docs/mobile/known-limitations.md
+  s_ada54569954fae::t_de6d529780943d 42-51
+  s_ada54569954fae::t_44d783cbd010d3 62-78
+  s_ada54569954fae::t_8487c2a2d96ba1 89-492
+  s_ada54569954fae::t_8399b030596283 1-41
+  s_ada54569954fae::t_35e96dd0745bb6 52-61
+  s_ada54569954fae::t_5873cf890d6310 79-88
+web/e2e/mobile/tap-targets.e2e.ts
+  s_ada54569954fae::t_a630e6e08f7cf6 1-89,92-102,106-137
+  s_ada54569954fae::t_a6ae57437cab6f 90-91
+  s_ada54569954fae::t_266f7aded85b78 103-105
+web/e2e/perf/perf.e2e.ts
+  s_ada54569954fae::t_a6ae57437cab6f 1,112-114
+  s_ada54569954fae::t_cd4eb726697dd6 2-111,116-117
+  s_ada54569954fae::t_fd08dbc5766a08 115
+web/package.json
+  s_ada54569954fae::t_cd4eb726697dd6 14
+  s_ada54569954fae::t_f278ff4b010466 15
+docs/mobile/perf.md
+  s_ada54569954fae::t_0ad46282e0c3a2 28-34,37-68
+  s_ada54569954fae::t_1bd80cfbc26952 12-27
+  s_ada54569954fae::t_3728f6f6ed21d1 35-36
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "0d96dce4b15d1bf91fffe053581455c14a60e85c",
+  "prompts": {},
+  "sessions": {
+    "s_ada54569954fae": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a105c5-aea6-70e1-897b-dadf81126116",
+        "model": "gpt-6-astra"
+      },
+      "human_author": "Yoshi Yamaguchi <ymotongpoo@gmail.com>"
+    }
+  }
+}
