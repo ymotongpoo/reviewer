@@ -1,3 +1,4 @@
+import { Portal } from './Portal'
 import { useEffect, useState } from 'preact/hooks'
 import { api } from '../api'
 import { agentInfo, agentRuns, info, refreshAgent, showAgentRound, toast } from '../state'
@@ -97,8 +98,9 @@ export function SessionPicker({
     (s) => !filter || s.title.toLowerCase().includes(filter.toLowerCase()) || (s.preview ?? '').toLowerCase().includes(filter.toLowerCase()),
   )
   return (
+    <Portal onClose={onClose}>
     <div class="modal-backdrop" onClick={(e) => e.target === e.currentTarget && onClose()}>
-      <div class="modal" role="dialog" aria-modal="true">
+      <div class="modal" role="dialog" aria-modal="true" aria-label={title}>
         <h2>{title}</h2>
         <p class="muted">
           {description ??
@@ -131,6 +133,7 @@ export function SessionPicker({
         </div>
       </div>
     </div>
+    </Portal>
   )
 }
 

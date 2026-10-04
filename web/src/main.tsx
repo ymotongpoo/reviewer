@@ -15,12 +15,19 @@ import { Home } from './components/Home'
 import { projectId } from './api'
 import { initInputLog } from './inputlog'
 import { initViewport } from './viewport'
+import { isNarrow } from './media'
+import { closeTransientUI, drawerOpen, headerMenuOpen } from './ui'
+import { useDismiss } from './components/Sheet'
 
 initInputLog()
 const stopViewport = initViewport()
 import.meta.hot?.dispose(stopViewport)
 
 function App() {
+  const narrow = isNarrow.value
+  const drawer = narrow && drawerOpen.value
+  const sidebar = useDismiss(drawer, closeTransientUI, { focus: true, returnTo: '.drawer-toggle' })
+  useEffect(() => { if (!narrow) closeTransientUI() }, [narrow])
   useEffect(() => {
     refreshAll()
       .then(connectEvents)
@@ -34,10 +41,15 @@ function App() {
     <div class="layout">
       <Header />
       <div class="body">
-        <aside class="sidebar">
+        {drawer && <div class="drawer-backdrop" aria-hidden="true" onClick={closeTransientUI} />}
+        <aside ref={sidebar} id="file-drawer" class={`sidebar${drawer ? ' open' : ''}`}
+          role={drawer ? 'dialog' : undefined} aria-modal={drawer ? 'true' : undefined}
+          aria-label={drawer ? 'ファイル一覧' : undefined} tabIndex={narrow ? -1 : undefined}
+          inert={narrow && !drawer}
+          onClick={(e) => { if (narrow && (e.target as Element).closest('a.tree-row')) closeTransientUI() }}>
           <Tree />
         </aside>
-        <main class="main">
+        <main class="main" inert={drawer || (narrow && headerMenuOpen.value)}>
           {r.page === 'settings' ? (
             <Settings />
           ) : r.page === 'file' ? (

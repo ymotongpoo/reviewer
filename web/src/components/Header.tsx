@@ -1,3 +1,4 @@
+import { Portal } from './Portal'
 import { useEffect, useState } from 'preact/hooks'
 import { api, projectId } from '../api'
 import { copyText } from '../clipboard'
@@ -5,6 +6,9 @@ import { agentInfo, comments, draftCount, info, refreshAll, responseBanner, toas
 import { AgentChip } from './Agent'
 import { AnnotateButton } from './Annotate'
 import { GitButton } from './Git'
+import { isCompact, isNarrow } from '../media'
+import { closeTransientUI, drawerOpen, headerMenuOpen } from '../ui'
+import { SheetBackdrop, useDismiss } from './Sheet'
 import type { ProjectSummary, SubmitResult } from '../types'
 
 export function CopyPrompt({ prompt, label = '指示文をコピー' }: { prompt: string; label?: string }) {
@@ -33,6 +37,7 @@ export function CopyPrompt({ prompt, label = '指示文をコピー' }: { prompt
 /** Project name with a menu of recent projects. */
 function ProjectSwitcher({ name, root }: { name: string; root: string }) {
   const [open, setOpen] = useState(false)
+  const dismiss = useDismiss(open, () => setOpen(false))
   const [list, setList] = useState<ProjectSummary[] | null>(null)
   useEffect(() => {
     document.title = `${name} - reviewer`
@@ -42,12 +47,12 @@ function ProjectSwitcher({ name, root }: { name: string; root: string }) {
     setOpen(!open)
   }
   return (
-    <span class="switcher">
-      <button class="project" title={root} onClick={() => void toggle()}>
+    <span class="switcher" ref={dismiss}>
+      <button class="project" title={root} aria-expanded={open} aria-controls="project-menu" onClick={() => void toggle()}>
         {name} ▾
       </button>
       {open && (
-        <div class="switcher-menu" onMouseLeave={() => setOpen(false)}>
+        <div id="project-menu" class="switcher-menu" onMouseLeave={() => setOpen(false)}>
           {list === null && <div class="muted small">読み込み中…</div>}
           {list
             ?.filter((p) => p.exists)
@@ -84,20 +89,35 @@ function ProjectSwitcher({ name, root }: { name: string; root: string }) {
 export function Header() {
   const i = info.value
   const [dialog, setDialog] = useState<'confirm' | SubmitResult | null>(null)
+  const narrow = isNarrow.value
+  const menu = narrow && headerMenuOpen.value
+  const actions = useDismiss(menu, closeTransientUI, { focus: true, returnTo: '.header-menu-toggle' })
   if (!i) return null
   const submitted = i.roundStatus === 'submitted'
 
   return (
     <>
-      <header class="app-header">
+      <header class="app-header" inert={narrow && drawerOpen.value}>
+        <button class="btn icon drawer-toggle" style={{ display: narrow ? undefined : 'none' }}
+          aria-label="ファイル一覧" aria-controls="file-drawer" aria-expanded={narrow && drawerOpen.value}
+          onClick={() => { closeTransientUI(); drawerOpen.value = true }}>☰</button>
         <a class="brand" href="/" title="ディレクトリの選択画面へ">
           reviewer
         </a>
         <ProjectSwitcher name={i.name} root={i.root} />
         <span class={`round-chip ${i.roundStatus}`}>
-          ラウンド {i.round} · {submitted ? '提出済み' : '下書き中'}
+          <span class="long" hidden={isCompact.value}>ラウンド {i.round} · {submitted ? '提出済み' : '下書き中'}</span>
+          <span class="short" hidden={!isCompact.value} title={submitted ? '提出済み' : '下書き中'}>R{i.round}</span>
         </span>
         <span class="spacer" />
+        {menu && <SheetBackdrop onClose={closeTransientUI} />}
+        <span ref={actions} id="header-actions" class={`header-actions${menu ? ' open' : ''}`}
+          style={{ display: narrow ? undefined : 'contents' }}
+          role={menu ? 'dialog' : undefined} aria-modal={menu ? 'true' : undefined}
+          aria-label={menu ? 'その他の操作' : undefined} tabIndex={narrow ? -1 : undefined}
+          onClick={(e) => {
+            if (narrow && e.currentTarget.contains(e.target as Node) && (e.target as Element).closest('button, a')) closeTransientUI()
+          }}>
         <a class="btn small settings-link" href="#/settings" title="設定">⚙ 設定</a>
         <GitButton />
         <AnnotateButton />
@@ -132,6 +152,10 @@ export function Header() {
             📋 指示文をコピー
           </button>
         )}
+        </span>
+        <button class="btn icon header-menu-toggle" style={{ display: narrow ? undefined : 'none' }}
+          aria-label="その他の操作" aria-controls="header-actions" aria-expanded={menu}
+          onClick={() => { closeTransientUI(); headerMenuOpen.value = true }}>⋯</button>
         {!submitted && (
           <button class="btn primary" onClick={() => setDialog('confirm')}>
             レビューを提出
@@ -190,8 +214,9 @@ function SubmitDialog({
   }
 
   return (
+    <Portal onClose={() => setState(null)}>
     <div class="modal-backdrop" onClick={(e) => e.target === e.currentTarget && setState(null)}>
-      <div class="modal" role="dialog" aria-modal="true">
+      <div class="modal" role="dialog" aria-modal="true" aria-label={`ラウンド${i.round}を提出`}>
         {state === 'confirm' ? (
           <>
             <h2>ラウンド{i.round}を提出</h2>
@@ -271,5 +296,6 @@ function SubmitDialog({
         )}
       </div>
     </div>
+    </Portal>
   )
 }

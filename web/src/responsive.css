@@ -13,3 +13,103 @@
   }
   .code { padding-bottom: 40dvh; }
 }
+
+@media (max-width: 839.98px) {
+  .body { display: block; }
+  .main { height: 100%; }
+  .sidebar {
+    position: fixed;
+    inset: 0 auto 0 0;
+    width: min(85vw, 320px);
+    max-width: none;
+    resize: none;
+    transform: translateX(-100%);
+    transition: transform .2s;
+    z-index: 40;
+    padding: env(safe-area-inset-top) 0 env(safe-area-inset-bottom) env(safe-area-inset-left);
+    visibility: hidden;
+  }
+  .sidebar.open { transform: none; visibility: visible; }
+  .drawer-backdrop, .sheet-backdrop {
+    position: fixed;
+    inset: 0;
+    z-index: 39;
+    background: rgba(0, 0, 0, .4);
+  }
+  .sheet-backdrop { z-index: 44; }
+  .drawer-toggle, .header-menu-toggle { display: inline-flex; justify-content: center; }
+  .header-actions { display: none; }
+  .header-actions.open {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    position: fixed;
+    left: 0;
+    right: 0;
+    bottom: var(--kb-inset, 0px);
+    z-index: 45;
+    padding: 12px max(12px, env(safe-area-inset-right)) calc(12px + env(safe-area-inset-bottom)) max(12px, env(safe-area-inset-left));
+    background: var(--bg);
+    border-radius: 12px 12px 0 0;
+    max-height: min(70dvh, var(--vvh, 70dvh));
+    overflow: auto;
+  }
+  .header-actions > .btn, .header-actions > .agent-chip { width: 100%; max-width: none; flex-shrink: 0; }
+  .app-header { gap: 6px; }
+  .app-header > .spacer { display: none; }
+  .switcher { flex: 1; min-width: 0; }
+  .switcher .project { display: block; width: 100%; max-width: none; min-width: 0; text-align: left; }
+  .round-chip { flex: none; white-space: nowrap; }
+  .switcher-menu {
+    position: fixed;
+    left: max(8px, env(safe-area-inset-left));
+    right: max(8px, env(safe-area-inset-right));
+    top: auto;
+    min-width: 0;
+    overflow-wrap: anywhere;
+  }
+  .switcher-foot { flex-wrap: wrap; }
+  .modal-backdrop { padding: 24px 16px; align-items: center; }
+  .modal {
+    max-height: calc(100dvh - 48px);
+    overflow: auto;
+    overflow-wrap: anywhere;
+  }
+  .modal > * { flex-shrink: 0; }
+  .modal-actions {
+    position: sticky;
+    bottom: 0;
+    background: var(--bg);
+    padding-bottom: env(safe-area-inset-bottom);
+    flex-wrap: wrap;
+    z-index: 1;
+    margin-top: auto;
+  }
+  .modal .field-row, .modal .preset-save { flex-wrap: wrap; }
+  .modal input, .modal select, .modal textarea { min-width: 0; max-width: 100%; }
+  .modal .copy-prompt pre { overflow: auto; }
+}
+
+@media (max-width: 839.98px), (hover: none) and (pointer: coarse) {
+  .app-header .btn, .app-header button.project, .header-actions .agent-chip,
+  .sidebar .tree-row, .modal .btn, .modal .session-row, .modal select,
+  .switcher-item, .switcher-foot a, .switcher-foot button {
+    min-height: 44px;
+    min-width: 44px;
+  }
+}
+
+@media (max-width: 599.98px) {
+  .brand { display: none; }
+  .round-chip { padding: 2px 6px; }
+  .app-header > .btn { padding-left: 6px; padding-right: 6px; flex-shrink: 0; }
+  .modal-backdrop { padding: 0; align-items: stretch; }
+  .modal {
+    width: 100%;
+    height: 100dvh;
+    max-height: none;
+    border-radius: 0;
+    padding: calc(12px + env(safe-area-inset-top)) max(16px, env(safe-area-inset-right)) 0 max(16px, env(safe-area-inset-left));
+  }
+  .modal h2 { position: sticky; top: 0; background: var(--bg); z-index: 1; }
+}

@@ -1,3 +1,4 @@
+import { Portal } from './Portal'
 import { useEffect, useMemo, useRef, useState } from 'preact/hooks'
 import { api, ApiError } from '../api'
 import {
@@ -135,6 +136,7 @@ function AnnotateDialog({ onClose }: { onClose: () => void }) {
   }
 
   return (
+    <Portal onClose={onClose}>
     <div class="modal-backdrop" onClick={(e) => e.target === e.currentTarget && onClose()}>
       <div class="modal annotate-modal" role="dialog" aria-modal="true" aria-label="AIに確認を依頼">
         <h2>🔍 AIに確認を依頼</h2>
@@ -251,6 +253,7 @@ function AnnotateDialog({ onClose }: { onClose: () => void }) {
         />
       )}
     </div>
+    </Portal>
   )
 }
 
