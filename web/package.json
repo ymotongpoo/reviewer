@@ -7,7 +7,11 @@
     "dev": "vite",
     "build": "tsc --noEmit && vite build",
     "typecheck": "tsc --noEmit",
-    "test": "vitest run"
+    "test": "vitest run",
+    "e2e": "playwright test --project=desktop --project=boundary --project=mobile-360 --project=mobile-412 --project=tablet-768 --project=tablet-landscape --project=sse",
+    "e2e:desktop": "playwright test --project=desktop --project=boundary",
+    "e2e:spike": "playwright test --project=spike --pass-with-no-tests",
+    "typecheck:e2e": "tsc -p e2e/tsconfig.json --noEmit"
   },
   "dependencies": {
     "@preact/signals": "^2.11.2",
@@ -23,7 +27,9 @@
     "zenn-markdown-html": "^0.5.4"
   },
   "devDependencies": {
+    "@playwright/test": "1.63.0",
     "@preact/preset-vite": "^2.10.6",
+    "@types/node": "26.6.4",
     "typescript": "^7.0.2",
     "vite": "^8.3.1",
     "vitest": "^4.1.11"
