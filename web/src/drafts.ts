@@ -41,3 +41,24 @@ export function matchesDraft(c: Comment, t: NewTarget, body: string): boolean {
     (t.scope !== 'line' || (c.origStart === t.start && c.origEnd === t.end)) &&
     composerKey('', { ...t, range: c.range }) === composerKey('', t)
 }
+
+export interface EditDraft {
+  path: string
+  baseHash: string
+  baseContent: string
+  lines: string[]
+  savedAt: number
+  revision: number
+}
+
+export function restorePlan(draft: Pick<EditDraft, 'baseHash'>, file: { hash: string }): 'same-base' | 'conflict' {
+  return draft.baseHash === file.hash ? 'same-base' : 'conflict'
+}
+
+export function afterSave(sentRev: number, currentRev: number): 'clear' | 'rebase' {
+  return sentRev === currentRev ? 'clear' : 'rebase'
+}
+
+export function shouldDropEditDraft(baseContent: string, content: string): boolean {
+  return content === baseContent
+}

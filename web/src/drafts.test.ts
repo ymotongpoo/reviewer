@@ -1,10 +1,11 @@
 import { describe, expect, it, vi } from 'vitest'
 import { createDraftStore, memoryDraftStore } from './localstore'
 import type { Comment, TextRange } from './types'
+import { parseContent, serializeContent } from './editbuffer'
 
 vi.stubGlobal('location', { pathname: '/p/abc/' })
 const { ApiError, NetworkError } = await import('./api')
-const { composerKey, shouldDropJournal, classifySaveError, matchesDraft } = await import('./drafts')
+const { composerKey, shouldDropJournal, classifySaveError, matchesDraft, restorePlan, afterSave, shouldDropEditDraft } = await import('./drafts')
 const range: TextRange = { startLine: 3, startColumn: 1, endLine: 4, endColumn: 2, text: '選択' }
 const target = { kind: 'new' as const, scope: 'line' as const, path: 'guide.md', start: 3, end: 4 }
 const journal = { key: 'abc:new:line:guide.md:3-4:', target, body: '本文', label: 'must', rev: 2, savedAt: 1 }
@@ -66,5 +67,28 @@ describe('local store', () => {
     expect(await store.get('composer', journal.key)).toEqual(journal)
     expect(store.persistent).toBe(false)
     expect(warn).toHaveBeenCalledTimes(1)
+  })
+})
+
+describe('edit drafts', () => {
+  it('restores against the saved base, without adopting external changes', () => {
+    const draft = { baseHash: 'original' }
+    expect(restorePlan(draft, { hash: 'original' })).toBe('same-base')
+    expect(restorePlan(draft, { hash: 'external' })).toBe('conflict')
+    expect(draft.baseHash).toBe('original')
+  })
+  it('clears only the sent revision; newer input or undo must be rebased', () => {
+    expect(afterSave(3, 3)).toBe('clear')
+    expect(afterSave(3, 4)).toBe('rebase')
+    expect(afterSave(3, 5)).toBe('rebase')
+    expect(afterSave(3, 2)).toBe('rebase')
+  })
+  it.each(['# CRLF\r\n本文\r\n', '\uFEFF本文\n', '末尾改行なし', 'a\r\nb\nc\r\n', ''])('drops reverted drafts only when their bytes match: %j', (base) => {
+    const { format, lines } = parseContent(base)
+    expect(shouldDropEditDraft(base, serializeContent(format, [...lines]))).toBe(true)
+    const changed = [...lines]
+    changed[0] += 'X'
+    expect(shouldDropEditDraft(base, serializeContent(format, changed))).toBe(false)
+    expect(shouldDropEditDraft(base, base + '\n')).toBe(false)
   })
 })

@@ -1,9 +1,11 @@
 import { Fragment } from 'preact'
 import { useEffect, useMemo, useRef, useState } from 'preact/hooks'
-import { api, ApiError } from '../api'
+import { api, ApiError, projectId } from '../api'
+import { afterSave, classifySaveError, restorePlan, shouldDropEditDraft, type EditDraft } from '../drafts'
 import {
   annotationSeverity,
   comments,
+  draftStore,
   editing,
   fileVersion,
   setAnnotationSeverity,
@@ -68,6 +70,7 @@ interface Selection {
  * hash and the server refuses to overwrite.
  */
 interface EditSession {
+  rev: number
   path: string
   baseHash: string
   baseContent: string
@@ -86,6 +89,7 @@ interface EditSession {
 function startSession(path: string, file: FileData): EditSession {
   const { format, lines } = parseContent(file.content)
   return {
+    rev: 0,
     path,
     baseHash: file.hash,
     baseContent: file.content,
@@ -105,7 +109,14 @@ function draftContent(s: EditSession): string {
 }
 
 function isDirty(s: EditSession): boolean {
-  return s.buf.lines !== s.baseLines && draftContent(s) !== s.baseContent
+  return s.buf.lines !== s.baseLines && !shouldDropEditDraft(s.baseContent, draftContent(s))
+}
+
+interface EditAttempt {
+  generation: number
+  path: string
+  content: string
+  sentRev: number
 }
 
 function isBlock(sel: Sel): boolean {
@@ -140,6 +151,8 @@ export function FileView({ path, line }: { path: string; line?: number }) {
   const [review, setReview] = useState<'draft' | 'external' | null>(null)
   const [editError, setEditError] = useState<EditError | null>(null)
   const [saving, setSaving] = useState(false)
+  const [recovery, setRecovery] = useState<EditDraft | null>(null)
+  const [unknownSave, setUnknownSave] = useState<EditAttempt | null>(null)
   const [previewDraft, setPreviewDraft] = useState<string | null>(null)
   const [sel, setSel] = useState<Selection | null>(null)
   // AI annotations remain expanded until they are adopted or dismissed.
@@ -148,6 +161,10 @@ export function FileView({ path, line }: { path: string; line?: number }) {
   const lastPath = useRef(path)
   const sessionRef = useRef<EditSession | null>(null)
   const savingRef = useRef(false)
+  const unknownRef = useRef<EditAttempt | null>(null)
+  const generation = useRef(0)
+  const recoveryLoading = useRef(true)
+  const journalTimer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined)
   const inputEl = useRef<HTMLTextAreaElement | null>(null)
   const codeRef = useRef<HTMLDivElement>(null)
   const composing = useRef(false)
@@ -157,9 +174,55 @@ export function FileView({ path, line }: { path: string; line?: number }) {
   const fv = fileVersion.value
 
   function setSession(s: EditSession | null) {
+    const prev = sessionRef.current
+    if (!s || !prev || s.path !== prev.path) generation.current++
     sessionRef.current = s
     setSessionState(s)
+    if (s?.buf.lines !== prev?.buf.lines || s?.baseHash !== prev?.baseHash) {
+      clearTimeout(journalTimer.current)
+      if (s) journalTimer.current = setTimeout(() => void persistDraft(s), 500)
+    }
   }
+
+  function persistDraft(s: EditSession) {
+    const key = `${projectId}:${s.path}`
+    if (!isDirty(s)) return draftStore.del('edit', key)
+    const draft: EditDraft = {
+      path: s.path, baseHash: s.baseHash, baseContent: s.baseContent,
+      lines: s.buf.lines, savedAt: Date.now(), revision: s.rev,
+    }
+    return draftStore.put('edit', key, draft)
+  }
+
+  function flushDraft() {
+    clearTimeout(journalTimer.current)
+    const s = sessionRef.current
+    if (s) void persistDraft(s)
+  }
+
+  useEffect(() => {
+    const hidden = () => { if (document.visibilityState === 'hidden') flushDraft() }
+    document.addEventListener('visibilitychange', hidden)
+    window.addEventListener('pagehide', flushDraft)
+    return () => {
+      flushDraft()
+      generation.current++
+      document.removeEventListener('visibilitychange', hidden)
+      window.removeEventListener('pagehide', flushDraft)
+    }
+  }, [])
+
+  useEffect(() => {
+    let cancelled = false
+    recoveryLoading.current = true
+    setRecovery(null)
+    void draftStore.get<EditDraft>('edit', `${projectId}:${path}`).then((draft) => {
+      if (cancelled) return
+      recoveryLoading.current = false
+      if (!sessionRef.current) setRecovery(draft ?? null)
+    })
+    return () => { cancelled = true }
+  }, [path])
 
   /** Highlights content; only the latest request is applied. */
   function highlight(content: string, lines?: string[]) {
@@ -180,9 +243,14 @@ export function FileView({ path, line }: { path: string; line?: number }) {
       setSel(null)
       setFile(null)
       setHl({})
+      flushDraft()
       setSession(null)
       setReview(null)
       setEditError(null)
+      unknownRef.current = null
+      setUnknownSave(null)
+      savingRef.current = false
+      setSaving(false)
     }
     if (!pathChanged && fv.n > 0 && !fv.paths.includes(path) && !fv.paths.includes('*') && file) return
     ;(async () => {
@@ -453,6 +521,7 @@ export function FileView({ path, line }: { path: string; line?: number }) {
       ...s,
       buf: next,
       history,
+      rev: s.rev + (next.lines !== s.buf.lines ? 1 : 0),
       sync: opts.sync === false ? s.sync : s.sync + 1,
       revealBlock: 'nearest',
     })
@@ -472,11 +541,15 @@ export function FileView({ path, line }: { path: string; line?: number }) {
     const r = redoing ? redo(s.history, cur) : undo(s.history, cur)
     if (!r) return
     goal.current = undefined
-    setSession({ ...s, buf: r.buffer, history: r.history, sync: s.sync + 1, revealBlock: 'nearest' })
+    setSession({ ...s, buf: r.buffer, history: r.history, rev: s.rev + (r.buffer.lines !== s.buf.lines ? 1 : 0), sync: s.sync + 1, revealBlock: 'nearest' })
   }
 
   function beginEdit(no?: number, col?: number, block: 'center' | 'nearest' = 'center') {
     if (!file || savingRef.current) return
+    if (!sessionRef.current && (recoveryLoading.current || recovery)) {
+      toast('端末の編集下書きを復元するか、破棄してください')
+      return
+    }
     const s = sessionRef.current ?? startSession(path, file)
     const l = Math.max(0, Math.min((no ?? s.buf.sel.head.line + 1) - 1, s.buf.lines.length - 1))
     const end = lineEnd(s.buf.lines[l])
@@ -791,32 +864,101 @@ export function FileView({ path, line }: { path: string; line?: number }) {
     }
   }, [])
 
+  function ownsAttempt(attempt: EditAttempt) {
+    return generation.current === attempt.generation && sessionRef.current?.path === attempt.path
+  }
+
+  function saved(attempt: EditAttempt, hash: string) {
+    if (!ownsAttempt(attempt)) return
+    const s = sessionRef.current!
+    unknownRef.current = null
+    setUnknownSave(null)
+    setEditError(null)
+    setReview(null)
+    setFile({ path: attempt.path, content: attempt.content, hash })
+    if (afterSave(attempt.sentRev, s.rev) === 'clear') {
+      setSession(null)
+      void draftStore.del('edit', `${projectId}:${s.path}`)
+      highlight(attempt.content)
+    } else {
+      // A late input (including an IME commit) belongs to the next save.
+      const next = { ...s, baseHash: hash, baseContent: attempt.content, baseLines: parseContent(attempt.content).lines }
+      setSession(next)
+      flushDraft()
+    }
+    toast(`${attempt.path} を保存しました`, 'success')
+  }
+
   async function save() {
     const s = sessionRef.current
-    if (!s || savingRef.current) return
+    if (!s || savingRef.current || unknownRef.current) return
     const content = draftContent(s)
     if (content === s.baseContent) return
+    const sentRev = s.rev
+    const attempt: EditAttempt = { generation: generation.current, path: s.path, content, sentRev }
     savingRef.current = true
     setSaving(true)
     setEditError(null)
+    flushDraft()
     try {
       const res = await api.saveFile(s.path, content, s.baseHash)
-      // Adopt what was written; the watcher's refresh then finds the same hash.
-      if (sessionRef.current?.path === s.path) {
-        setSession(null)
-        setReview(null)
-        setFile({ path: s.path, content, hash: res.hash })
-        highlight(content)
-      }
-      toast(`${s.path} を保存しました`, 'success')
+      saved(attempt, res.hash)
     } catch (e) {
+      if (!ownsAttempt(attempt)) return
       const conflict = e instanceof ApiError && e.status === 409
-      setEditError({ message: e instanceof ApiError ? e.message : String(e), conflict })
-      if (conflict) api.file(s.path).then((f) => sessionRef.current?.path === s.path && setFile(f), () => {})
+      if (classifySaveError(e) === 'unknown') {
+        unknownRef.current = attempt
+        setUnknownSave(attempt)
+        setEditError({ message: '保存結果を確認できません。サーバーの内容を確認してください', conflict: false })
+      } else {
+        setEditError({ message: e instanceof ApiError ? e.message : String(e), conflict })
+      }
+      if (conflict) api.file(s.path).then((f) => ownsAttempt(attempt) && setFile(f), () => {})
     } finally {
-      savingRef.current = false
-      setSaving(false)
+      // Clearing this session also advances the generation. A different path
+      // can have its own request in flight, which this response must not unlock.
+      if (generation.current === attempt.generation || (!sessionRef.current && lastPath.current === attempt.path)) {
+        savingRef.current = false
+        setSaving(false)
+      }
     }
+  }
+
+  async function checkServer() {
+    const attempt = unknownRef.current
+    if (!attempt || savingRef.current || !ownsAttempt(attempt)) return
+    savingRef.current = true
+    setSaving(true)
+    try {
+      const f = await api.file(attempt.path)
+      if (!ownsAttempt(attempt)) return
+      if (f.content === attempt.content) saved(attempt, f.hash)
+      else {
+        setFile(f)
+        unknownRef.current = null
+        setUnknownSave(null)
+        setEditError({ message: 'サーバーの内容が送信した内容と一致しません', conflict: f.hash !== sessionRef.current!.baseHash })
+      }
+    } catch {
+      if (ownsAttempt(attempt)) setEditError({ message: '保存結果を確認できません。サーバーの内容を確認してください', conflict: false })
+    } finally {
+      if (generation.current === attempt.generation || (!sessionRef.current && lastPath.current === attempt.path)) {
+        savingRef.current = false
+        setSaving(false)
+      }
+    }
+  }
+
+  function restoreDraft() {
+    if (!recovery || !file || sessionRef.current) return
+    const s = startSession(path, { path, hash: recovery.baseHash, content: recovery.baseContent })
+    setSession({ ...s, buf: { lines: recovery.lines, sel: caretAt(0, 0) }, rev: recovery.revision })
+    setRecovery(null)
+  }
+
+  function discardRecovery() {
+    void draftStore.del('edit', `${projectId}:${path}`)
+    setRecovery(null)
   }
 
   function discard(ask: boolean): boolean {
@@ -824,6 +966,9 @@ export function FileView({ path, line }: { path: string; line?: number }) {
     if (!s) return true
     if (ask && isDirty(s) && !confirm('編集内容を破棄しますか？')) return false
     setSession(null)
+    void draftStore.del('edit', `${projectId}:${s.path}`)
+    unknownRef.current = null
+    setUnknownSave(null)
     setReview(null)
     setEditError(null)
     if (file) highlight(file.content)
@@ -852,7 +997,7 @@ export function FileView({ path, line }: { path: string; line?: number }) {
     }
   }
 
-  const conflict = !!session && !!file && file.hash !== session.baseHash && !saving
+  const conflict = !!session && !!file && restorePlan(session, file) === 'conflict' && !saving
   const hunks = useMemo(() => {
     if (!session || !review) return []
     if (review === 'draft') return diffHunks(session.baseLines, session.buf.lines)
@@ -955,6 +1100,8 @@ export function FileView({ path, line }: { path: string; line?: number }) {
             saving={saving}
             conflict={conflict}
             error={editError}
+            unknown={!!unknownSave}
+            onCheckServer={() => void checkServer()}
             onReview={() => setReview('draft')}
             onDiscard={() => discard(true)}
             onShowExternal={() => setReview('external')}
@@ -964,6 +1111,13 @@ export function FileView({ path, line }: { path: string; line?: number }) {
           />
         )}
       </div>
+      {!session && recovery && recovery.path === path && (
+        <div class="banner warn edit-recovery">
+          <span>端末に保存された編集下書きがあります（{new Date(recovery.savedAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}）</span>
+          <button class="btn small" onClick={restoreDraft}>復元</button>
+          <button class="btn small" onClick={discardRecovery}>破棄</button>
+        </div>
+      )}
       <CommentList path={path} />
 
       <div class="file-body">
@@ -1081,6 +1235,7 @@ export function FileView({ path, line }: { path: string; line?: number }) {
           dirty={!!map?.dirty}
           saving={saving}
           conflict={conflict}
+          unknown={!!unknownSave}
           onClose={() => setReview(null)}
           onSave={() => void save()}
         />
