@@ -1,3 +1,5 @@
+import { isNarrow, isTouchUI } from '../media'
+import { useDismiss } from './Sheet'
 import type { DiffLine, Format } from '../editbuffer'
 
 export interface EditError {
@@ -40,7 +42,7 @@ export function EditBar({
   onDismissError: () => void
 }) {
   return (
-    <div class="edit-bar-wrap">
+    <div class="edit-bar-wrap" style={{ order: 5 }}>
       <div class="edit-bar">
         <span class={`edit-mode ${mode}`}>{mode === 'insert' ? '-- INSERT --' : '-- NORMAL --'}</span>
         <span class="edit-count">
@@ -53,7 +55,7 @@ export function EditBar({
         <button class="btn small primary" disabled={!dirty || saving} onClick={onReview}>
           差分を確認
         </button>
-        <button class="btn small" disabled={saving} onClick={onDiscard}>
+        <button class="btn small edit-discard" disabled={saving} onClick={onDiscard}>
           破棄
         </button>
       </div>
@@ -106,8 +108,10 @@ export function EditReview({
   onClose: () => void
   onSave: () => void
 }) {
+  const mobile = isNarrow.value || isTouchUI.value
+  const panel = useDismiss(mobile, onClose, { focus: true })
   return (
-    <div class="edit-review" role="dialog" aria-label={kind === 'draft' ? '変更内容の確認' : '外部の変更'}>
+    <div class="edit-review" ref={(el) => { panel.current = el }} role="dialog" aria-label={kind === 'draft' ? '変更内容の確認' : '外部の変更'}>
       <div class="edit-review-head">
         <strong>{kind === 'draft' ? '変更内容を確認' : '編集開始後に外部で加えられた変更'}</strong>
         <span class="muted small">

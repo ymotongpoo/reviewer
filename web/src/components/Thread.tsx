@@ -1,3 +1,4 @@
+import { useKeyboardReveal } from './useKeyboardReveal'
 import { useLayoutEffect, useState } from 'preact/hooks'
 import { api } from '../api'
 import { dirtyReplies, editing, info, removeComment, toast, upsertComment } from '../state'
@@ -168,6 +169,7 @@ function ReplyView({ comment, reply: r }: { comment: Comment; reply: Reply }) {
 }
 
 function ReplyForm({ comment, reply, onDone }: { comment: Comment; reply?: Reply; onDone: () => void }) {
+  const formRef = useKeyboardReveal()
   const [body, setBody] = useState(reply?.body ?? '')
   const [busy, setBusy] = useState(false)
   const dirty = !!body.trim() && body !== (reply?.body ?? '')
@@ -190,7 +192,7 @@ function ReplyForm({ comment, reply, onDone }: { comment: Comment; reply?: Reply
     }
   }
   return (
-    <div class="reply-form">
+    <div ref={formRef} class="reply-form">
       <textarea
         value={body}
         rows={3}

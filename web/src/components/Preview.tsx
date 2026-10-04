@@ -1,11 +1,11 @@
-import { useEffect, useRef, useState } from 'preact/hooks'
+import { useEffect, useLayoutEffect, useRef, useState } from 'preact/hooks'
 import { detectRenderer, renderInto, splitFrontmatter, type Renderer } from '../preview/render'
 import { isDark } from '../theme'
 
 const rendererText: Record<Renderer, string> = { zenn: 'Zenn', markdown: 'Markdown' }
 
 /** Rendered preview of a Markdown file, shown beside the source. */
-export function Preview({ path, content, scrollRatio }: { path: string; content: string; scrollRatio: number }) {
+export function Preview({ path, content, scrollRatio, tabbed = false, hidden = false, onReady }: { path: string; content: string; scrollRatio: number; tabbed?: boolean; hidden?: boolean; onReady?: () => void }) {
   const auto = detectRenderer(path, content)
   const [override, setOverride] = useState<Renderer | null>(null)
   const renderer = override ?? auto
@@ -38,11 +38,13 @@ export function Preview({ path, content, scrollRatio }: { path: string; content:
     }
   }, [content, renderer])
 
+  useLayoutEffect(() => { if (!busy) onReady?.() }, [busy])
+
   // Follow the source scroll position proportionally.
   useEffect(() => {
     const p = pane.current
-    if (p) p.scrollTop = scrollRatio * (p.scrollHeight - p.clientHeight)
-  }, [scrollRatio])
+    if (p && !tabbed) p.scrollTop = scrollRatio * (p.scrollHeight - p.clientHeight)
+  }, [scrollRatio, tabbed])
 
   const title = fm?.fields.find(([k]) => k === 'title')?.[1]
   const emoji = fm?.fields.find(([k]) => k === 'emoji')?.[1]
@@ -54,10 +56,11 @@ export function Preview({ path, content, scrollRatio }: { path: string; content:
     .filter(Boolean)
 
   return (
-    <div class="preview-pane" ref={pane} data-theme={dark ? 'dark' : 'light'}>
+    <div class="preview-pane" ref={pane} id="file-panel-preview" hidden={hidden}
+      role={tabbed ? 'tabpanel' : undefined} aria-labelledby={tabbed ? 'file-tab-preview' : undefined} data-theme={dark ? 'dark' : 'light'}>
       <div class="preview-bar">
         <span class="muted small">プレビュー</span>
-        <select value={renderer} onChange={(e) => setOverride(e.currentTarget.value as Renderer)} title="レンダラー">
+        <select value={renderer} onChange={(e) => setOverride(e.currentTarget.value as Renderer)} title="レンダラー" aria-label="レンダラー">
           {(['zenn', 'markdown'] as Renderer[]).map((r) => (
             <option value={r}>
               {rendererText[r]}

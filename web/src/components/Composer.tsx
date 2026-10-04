@@ -1,3 +1,4 @@
+import { useKeyboardReveal } from './useKeyboardReveal'
 import { useEffect, useLayoutEffect, useRef, useState } from 'preact/hooks'
 import { api, projectId } from '../api'
 import { comments, composerJournalVersion, draftStore, editing, labels, refreshComments, registerComposerFlusher, removeComment, toast, upsertComment, type EditTarget } from '../state'
@@ -46,6 +47,7 @@ export function Composer({ target, comment, original, onClosed }: Props) {
   const inFlight = useRef(false)
   const closed = useRef(false)
   const latest = useRef({ label, body })
+  const formRef = useKeyboardReveal()
   const ta = useRef<HTMLTextAreaElement>(null)
   const caret = useRef<number | null>(null)
 
@@ -330,7 +332,7 @@ export function Composer({ target, comment, original, onClosed }: Props) {
   }
 
   return (
-    <div class="composer" onKeyDown={onKeyDown}>
+    <div ref={formRef} class="composer" onKeyDown={onKeyDown}>
       {recovery && (
         <div class="banner warn composer-recovery"><div>
           端末に保存された下書き（{new Date(recovery.savedAt).toLocaleTimeString('ja-JP', { hour: '2-digit', minute: '2-digit' })}）があります

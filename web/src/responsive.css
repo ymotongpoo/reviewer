@@ -187,3 +187,102 @@
   }
   .modal h2 { position: sticky; top: 0; background: var(--bg); z-index: 1; }
 }
+
+/* File controls retain their desktop flex order through display:contents. */
+@media (max-width: 839.98px) {
+  .main { overflow-x: hidden; }
+  .file-view:not(.wrap) { min-width: 0; }
+  .file-view:not(.wrap) .code { overflow-x: auto; }
+  .inline-threads { position: sticky; left: 0; width: 100%; max-width: 100vw; }
+  .file-head { gap: 8px; }
+  .file-head > .file-path {
+    flex-basis: 100%; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+  }
+  .file-head > .spacer { display: none; }
+  .file-edit-toggle { order: 0; }
+  .file-comment-toggle { order: 1; }
+  .file-preview-toggle { order: 2; }
+  .file-menu-toggle { order: 3; }
+  .file-options { display: none; }
+  .file-options.open { display: flex; flex-wrap: wrap; gap: 8px 16px; flex-basis: 100%; order: 4; }
+  .file-options .compact-select { max-width: 100%; }
+  .edit-review {
+    left: 0; right: 0; width: auto; border-radius: 12px 12px 0 0;
+    max-height: min(75dvh, var(--vvh, 75dvh));
+    padding-bottom: env(safe-area-inset-bottom);
+  }
+  .round-history { flex-direction: column; }
+  .history-side { width: 100%; border-right: 0; border-bottom: 1px solid var(--border); }
+}
+
+@media (max-width: 839.98px), (hover: none) and (pointer: coarse) {
+  .main { padding-bottom: calc(var(--kb-inset, 0px) + env(safe-area-inset-bottom)); }
+  .file-head .btn, .file-options .toggle, .file-options select,
+  .preview-bar select, .composer .tabs button, .edit-bar .btn, .edit-banner .btn,
+  .edit-review .btn, .settings-page .btn, .settings-page select, .overview .btn,
+  .overview .seg button, .history-file, .history-mode-links .btn,
+  .home .btn, .home .dir-name, .comment-list .btn, .comment-list-card {
+    min-width: 44px; min-height: 44px;
+  }
+  .edit-bar, .edit-banner, .edit-review-actions, .composer-bottom, .thread-actions,
+  .section-head, .settings-head, .settings-actions, .browser-head, .run-head,
+  .approval-actions, .annotation-request-actions, .comment-list-head { flex-wrap: wrap; gap: 8px; }
+  .edit-hint { display: none; }
+  .edit-discard { order: -1; margin-right: auto; }
+  .edit-bar .spacer, .composer-bottom .spacer { display: none; }
+  .edit-review {
+    bottom: calc(env(safe-area-inset-bottom) + var(--kb-inset, 0px) + var(--bottom-ui, 0px) + var(--bottom-ui-extra, 0px));
+    max-height: min(75dvh, var(--vvh, 75dvh));
+  }
+  .edit-review-head, .edit-review-actions { flex-shrink: 0; }
+  .composer textarea, .reply-form textarea { max-height: min(32dvh, 180px); }
+  .composer-top { flex-wrap: wrap; }
+  .file-src, .preview-pane, .thread, .composer, .card, .copy-prompt pre,
+  .settings-row > span, .path-row input, .dir-name, .project-name { min-width: 0; }
+  .overview, .home-body, .settings-page, .round-summary, .thread, .composer,
+  .comment-list, .edit-banner, .edit-review-head { overflow-wrap: anywhere; }
+  .copy-prompt pre, .md pre, .preview-pane pre, .request-prompt pre, .approval-cmd { max-width: 100%; overflow-x: auto; }
+  .md table, .preview-pane table, .rounds { display: block; max-width: 100%; overflow-x: auto; }
+  .md img, .preview-pane img { max-width: 100%; }
+  .preview-pane { height: calc(100dvh - 120px); padding: 0 16px 40dvh; }
+  .preview-bar { flex-wrap: wrap; }
+  .preview-bar select { min-width: 0; max-width: 100%; }
+  .summary-row { flex-wrap: wrap; }
+  .summary-row .snippet { min-width: 0; flex-basis: 100%; }
+  .project-actions, .approval-actions { gap: 8px; }
+  .project-actions .danger-text, .approval-actions .danger-text,
+  .annotation-request-actions .danger-text { margin-left: auto; }
+  .browser-head code { overflow-wrap: anywhere; min-width: 0; }
+  .dir-name { overflow-wrap: anywhere; }
+  .comment-list-items { max-height: 42dvh; }
+  .toasts { max-width: calc(100vw - 16px); overflow-wrap: anywhere; }
+}
+
+@media (max-width: 599.98px) {
+  .file-head { padding: 8px; gap: 8px 4px; }
+  .file-head > .btn { padding-left: 6px; padding-right: 6px; }
+  .file-view.tabbed .file-body { display: block; }
+  .file-view.tabbed .file-src { border-right: 0; }
+  .file-view.tabbed .preview-pane { position: static; height: auto; padding: 0 16px 40dvh; }
+  .preview-tabs { display: flex; background: var(--bg); border-bottom: 1px solid var(--border); }
+  .preview-tabs button {
+    flex: 1; min-height: 44px; border: 0; border-bottom: 3px solid transparent;
+    background: var(--bg); color: var(--fg); font: inherit; cursor: pointer;
+  }
+  .preview-tabs button[aria-selected='true'] { border-bottom-color: var(--accent); color: var(--accent); font-weight: 600; }
+  .preview-tabs button:focus-visible { outline: 2px solid var(--accent); outline-offset: -3px; }
+  .file-view .inline-threads, .file-view.split .inline-threads, .inline-threads.history { padding-left: 8px; padding-right: 8px; }
+  .thread, .composer { width: 100%; }
+  .settings-row { flex-direction: column; align-items: stretch; gap: 8px; }
+  .settings-row select { width: 100%; max-width: 100%; min-width: 0; }
+  .overview, .settings-page, .home-body, .round-summary { padding: 16px 12px 80px; }
+  .card { padding: 12px; }
+  .copy-prompt { flex-direction: column; align-items: stretch; }
+  .latest dl { grid-template-columns: minmax(0, 1fr); }
+  .project-row { flex-direction: column; align-items: stretch; }
+  .project-actions { flex-wrap: wrap; }
+  .dir-list li { flex-wrap: wrap; }
+  .dir-name { flex: 1; }
+  .comment-list { margin: 8px; }
+  .comment-list-excerpt { white-space: normal; overflow-wrap: anywhere; }
+}

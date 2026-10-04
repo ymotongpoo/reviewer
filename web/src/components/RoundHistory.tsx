@@ -155,7 +155,7 @@ function DiffPane({ round, path, phase, notes }: { round: number; path: string; 
   return (
     <div class="file-view wrap">
       <div class="file-head">
-        <span class="file-path">{path}</span>
+        <span class="file-path" title={path}>{path}</span>
         <span class={`chip kind-${diff.kind}`}>{kindText[diff.kind]}</span>
         <span class="muted small">{rangeText(diff)}</span>
         <span class="spacer" />

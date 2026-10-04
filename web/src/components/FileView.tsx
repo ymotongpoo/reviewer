@@ -1,6 +1,7 @@
 import { Fragment } from 'preact'
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'preact/hooks'
-import { isTouchUI } from '../media'
+import { isCompact, isNarrow, isTouchUI } from '../media'
+import { useDismiss } from './Sheet'
 import { isValid, lineRange, tapLine, type SelToken, type TouchSel } from '../touchselect'
 import { SelectionBar } from './SelectionBar'
 import { api, ApiError, projectId } from '../api'
@@ -146,6 +147,33 @@ export function FileView({ path, line }: { path: string; line?: number }) {
       return false
     }
   })
+  const compact = isCompact.value
+  const narrow = isNarrow.value
+  const [optionsOpen, setOptionsOpen] = useState(false)
+  const optionsRef = useDismiss(narrow && optionsOpen, () => setOptionsOpen(false), { returnTo: '.file-menu-toggle' })
+  useLayoutEffect(() => {
+    if (narrow && optionsOpen) document.getElementById('file-options')?.focus({ preventScroll: true })
+  }, [narrow, optionsOpen])
+  const [previewTab, setPreviewTab] = useState<'source' | 'preview'>('source')
+  const tabScroll = useRef<number | null>(null)
+  useEffect(() => { setOptionsOpen(false); setPreviewTab('source') }, [path])
+  useEffect(() => { if (!narrow) setOptionsOpen(false) }, [narrow])
+  useLayoutEffect(() => {
+    const main = document.querySelector<HTMLElement>('.main')
+    if (main && tabScroll.current !== null) {
+      main.scrollTop = tabScroll.current * Math.max(0, main.scrollHeight - main.clientHeight)
+      if (previewTab !== 'preview' || !main.querySelector('.preview-pane .spinner')) tabScroll.current = null
+    }
+  }, [previewTab])
+  function switchTab(next: 'source' | 'preview') {
+    if (next === previewTab) return
+    const main = document.querySelector<HTMLElement>('.main')
+    if (main) tabScroll.current = main.scrollTop / Math.max(1, main.scrollHeight - main.clientHeight)
+    cancelSelectionRead()
+    setTouchSel({ kind: 'none' })
+    window.getSelection()?.removeAllRanges()
+    setPreviewTab(next)
+  }
   const [scrollRatio, setScrollRatio] = useState(0)
   // Tokens, and the draft lines they were computed from while editing.
   const [hl, setHl] = useState<{ tokens?: Token[][]; lines?: string[] }>({})
@@ -1096,10 +1124,12 @@ export function FileView({ path, line }: { path: string; line?: number }) {
   if (!file) return <div class="empty">読み込み中…</div>
 
   return (
-    <div class={`file-view ${wrap || showPreview ? 'wrap' : ''} ${showPreview ? 'split' : ''} ${session ? 'editing' : ''}`}>
-      <div class="file-head">
-        <span class="file-path">{path}</span>
+    <div class={`file-view ${wrap || showPreview ? 'wrap' : ''} ${showPreview ? 'split' : ''} ${showPreview && compact ? 'tabbed' : ''} ${session ? 'editing' : ''}`}>
+      <div class="file-head" ref={(el) => { optionsRef.current = el }}>
+        <span class="file-path" title={path}>{path}</span>
         <span class="spacer" />
+        <span id="file-options" role={narrow ? 'group' : undefined} aria-label={narrow ? 'ファイルの補助操作' : undefined}
+          tabIndex={narrow ? -1 : undefined} class={`file-options ${optionsOpen ? 'open' : ''}`} style={narrow ? undefined : { display: 'contents' }}>
         <select
           class="compact-select"
           aria-label="AI指摘の重要度"
@@ -1120,23 +1150,7 @@ export function FileView({ path, line }: { path: string; line?: number }) {
           />{' '}
           却下済みも表示
         </label>
-        {isMarkdown(path) && (
-          <button
-            class={`btn small ${showPreview ? 'primary' : ''}`}
-            onClick={() => {
-              setPreview(!preview)
-              try {
-                localStorage.setItem('reviewer.preview', !preview ? '1' : '0')
-              } catch {
-                // storage unavailable
-              }
-            }}
-            title="右側にレンダリング結果を表示"
-          >
-            プレビュー
-          </button>
-        )}
-        <label class="toggle">
+        <label class="toggle file-wrap-toggle" style={narrow ? undefined : { order: 2 }}>
           <input
             type="checkbox"
             checked={wrap}
@@ -1151,14 +1165,35 @@ export function FileView({ path, line }: { path: string; line?: number }) {
           />{' '}
           折り返し
         </label>
+        </span>
+        {isMarkdown(path) && (
+          <button
+            style={narrow ? undefined : { order: 1 }}
+            class={`btn small file-preview-toggle ${showPreview ? 'primary' : ''}`}
+            onClick={() => {
+              setPreview(!preview)
+              try {
+                localStorage.setItem('reviewer.preview', !preview ? '1' : '0')
+              } catch {
+                // storage unavailable
+              }
+            }}
+            aria-pressed={showPreview}
+            title={compact ? "ソースとプレビューのタブを表示" : "右側にレンダリング結果を表示"}
+          >
+            プレビュー
+          </button>
+        )}
         {!session && (
-          <button class="btn small" onClick={() => beginEdit(targetLine)} title="行の✎か本文のダブルクリックでも編集できます">
+          <button class="btn small file-edit-toggle" style={narrow ? undefined : { order: 3 }} onClick={() => { setPreviewTab('source'); beginEdit(targetLine) }} title="行の✎か本文のダブルクリックでも編集できます">
             編集
           </button>
         )}
-        <button class="btn small" onClick={() => (editing.value = { kind: 'new', scope: 'file', path })}>
+        <button class="btn small file-comment-toggle" style={narrow ? undefined : { order: 4 }} onClick={() => { setPreviewTab('source'); editing.value = { kind: 'new', scope: 'file', path } }}>
           ファイルにコメント
         </button>
+        <button class={`small file-menu-toggle ${narrow ? 'btn' : ''}`} style={{ display: narrow ? undefined : 'none' }} hidden={!narrow} aria-label="ファイルのその他の操作"
+          aria-controls="file-options" aria-expanded={optionsOpen} onClick={() => setOptionsOpen(!optionsOpen)}>⋯</button>
         {session && map && (
           <EditBar
             mode={session.mode}
@@ -1186,10 +1221,23 @@ export function FileView({ path, line }: { path: string; line?: number }) {
           <button class="btn small" onClick={discardRecovery}>破棄</button>
         </div>
       )}
-      <CommentList path={path} />
+      <CommentList path={path} revealSource={showPreview && compact ? () => setPreviewTab('source') : undefined} />
 
+      {showPreview && compact && <div class="preview-tabs" role="tablist" aria-label="ファイルの表示">
+        {(['source', 'preview'] as const).map((tab) => <button id={`file-tab-${tab}`} role="tab"
+          aria-selected={previewTab === tab} aria-controls={`file-panel-${tab}`} tabIndex={previewTab === tab ? 0 : -1}
+          onClick={() => switchTab(tab)} onKeyDown={(e) => {
+            if (!['ArrowLeft', 'ArrowRight', 'Home', 'End'].includes(e.key)) return
+            e.preventDefault()
+            const next = e.key === 'Home' ? 'source' : e.key === 'End' ? 'preview' : tab === 'source' ? 'preview' : 'source'
+            switchTab(next)
+            document.getElementById(`file-tab-${next}`)?.focus({ preventScroll: true })
+          }}>{tab === 'source' ? 'ソース' : 'プレビュー'}</button>)}
+      </div>}
       <div class="file-body">
-        <div class="file-src">
+        <div class="file-src" id="file-panel-source" role={showPreview && compact ? 'tabpanel' : undefined}
+          aria-labelledby={showPreview && compact ? 'file-tab-source' : undefined}
+          hidden={showPreview && compact && previewTab !== 'source'}>
           {(scopeFile.length > 0 || newFile || lost.length > 0 || lostAnnotations.length > 0 || (newLine && !newLineAt?.end)) && (
             <div class="file-comments">
               {scopeFile.map((c) => (
@@ -1294,9 +1342,15 @@ export function FileView({ path, line }: { path: string; line?: number }) {
             {displayLines.length === 0 && <div class="empty">（空のファイル）</div>}
           </div>
         </div>
-        {showPreview && file && <Preview path={path} content={previewDraft ?? file.content} scrollRatio={scrollRatio} />}
+        {showPreview && file && <Preview path={path} content={previewDraft ?? file.content} scrollRatio={scrollRatio} tabbed={compact} hidden={compact && previewTab !== 'preview'} onReady={() => {
+          const main = document.querySelector<HTMLElement>('.main')
+          if (compact && previewTab === 'preview' && main && tabScroll.current !== null) {
+            main.scrollTop = tabScroll.current * Math.max(0, main.scrollHeight - main.clientHeight)
+            tabScroll.current = null
+          }
+        }} />}
       </div>
-      {touchUI && <SelectionBar selection={touchSel} insert={session?.mode === 'insert'}
+      {touchUI && <SelectionBar selection={touchSel} insert={session?.mode === 'insert' || !!review || (showPreview && compact && previewTab === 'preview')}
         onClear={() => { cancelSelectionRead(); setTouchSel({ kind: 'none' }) }}
         onEdit={() => {
           if (touchSel.kind === 'lines' && isValid(touchSel, selectionToken)) rowHandlerImpl.editLine(touchSel.anchor)

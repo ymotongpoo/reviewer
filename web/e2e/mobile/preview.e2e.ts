@@ -1,0 +1,80 @@
+import { writeFile } from 'node:fs/promises'
+import { join } from 'node:path'
+import { test, expect } from '../support/fixtures'
+
+test('C11 preview tabs preserve scroll ratio and source draft; larger widths retain split panes', async ({ page, project, openFile }, info) => {
+  await writeFile(join(project.dir, 'tabs.md'), Array.from({ length: 80 }, (_, i) => `## 見出し ${i}\n\n説明文です。\n`).join('\n'))
+  await openFile('tabs.md')
+  await page.locator('.file-preview-toggle').tap()
+  await expect(page.locator('.preview-pane .spinner')).toHaveCount(0)
+  await expect(page.locator('.preview-pane .md')).toContainText('見出し 79')
+  const compact = page.viewportSize()!.width < 600
+  if (compact) {
+    const source = page.getByRole('tab', { name: 'ソース', exact: true })
+    const preview = page.getByRole('tab', { name: 'プレビュー', exact: true })
+    await expect(source).toHaveAttribute('aria-selected', 'true')
+    await expect(page.locator('.preview-pane')).toBeHidden()
+    await page.locator('.main').evaluate((el) => { el.scrollTop = (el.scrollHeight - el.clientHeight) * 0.45 })
+    // Activation must not scroll the tab into view before measuring the ratio.
+    await preview.evaluate((el: HTMLButtonElement) => el.click())
+    await expect(preview).toHaveAttribute('aria-selected', 'true')
+    await expect.poll(() => page.locator('.main').evaluate((el) => el.scrollTop / (el.scrollHeight - el.clientHeight))).toBeCloseTo(0.45, 2)
+    await expect(page.locator('.file-src')).toBeHidden()
+    await source.evaluate((el: HTMLButtonElement) => el.click())
+    await expect.poll(() => page.locator('.main').evaluate((el) => el.scrollTop / (el.scrollHeight - el.clientHeight))).toBeCloseTo(0.45, 2)
+    await page.locator('.main').evaluate((el) => { el.scrollTop = 0 })
+    await source.focus()
+    await source.press('ArrowRight')
+    await expect(preview).toBeFocused()
+    await expect(preview).toHaveAttribute('aria-selected', 'true')
+    const compactShot = info.outputPath('compact-preview-tab.png')
+    await page.screenshot({ path: compactShot })
+    await info.attach('compact-preview-tab', { path: compactShot, contentType: 'image/png' })
+    await preview.press('Home')
+    await expect(source).toBeFocused()
+    await page.locator('.file-comment-toggle').tap()
+    await page.locator('.composer textarea').fill('タブを切り替えても保持する下書き')
+    await preview.tap()
+    await source.tap()
+    await expect(page.locator('.composer textarea')).toHaveValue('タブを切り替えても保持する下書き')
+    await expect(source).toHaveCSS('min-height', '44px')
+    await page.setViewportSize({ width: 768, height: 1024 })
+    await expect(page.locator('.preview-tabs')).toHaveCount(0)
+    await expect(page.locator('.preview-pane')).toBeVisible()
+    await expect(page.locator('.file-src')).toBeVisible()
+  } else {
+    await expect(page.locator('.preview-tabs')).toHaveCount(0)
+    await expect(page.locator('.file-body')).toHaveCSS('display', 'grid')
+    const src = await page.locator('.file-src').boundingBox(), preview = await page.locator('.preview-pane').boundingBox()
+    expect(src!.x + src!.width).toBeCloseTo(preview!.x, 0)
+  }
+  const path = info.outputPath('preview-layout.png')
+  await page.screenshot({ path })
+  await info.attach('preview-layout', { path, contentType: 'image/png' })
+})
+
+test('C11 file menu exposes auxiliary controls with Escape and focus return', async ({ page, openFile }) => {
+  await openFile('guide.md')
+  const menu = page.getByRole('button', { name: 'ファイルのその他の操作' })
+  if (page.viewportSize()!.width < 840) {
+    await expect(page.getByLabel('AI指摘の重要度')).toBeHidden()
+    await menu.tap()
+    await expect(menu).toHaveAttribute('aria-expanded', 'true')
+    await expect(page.getByRole('group', { name: 'ファイルの補助操作' })).toBeFocused()
+    await page.keyboard.press('Tab')
+    await expect(page.getByLabel('AI指摘の重要度')).toBeFocused()
+    await page.getByLabel('AI指摘の重要度').selectOption('major')
+    await page.getByLabel('折り返し', { exact: true }).uncheck()
+    await page.getByLabel('却下済みも表示', { exact: true }).check()
+    await page.keyboard.press('Escape')
+    await expect(menu).toHaveAttribute('aria-expanded', 'false')
+    await expect(menu).toBeFocused()
+    await menu.tap()
+    await expect(page.getByLabel('AI指摘の重要度')).toHaveValue('major')
+    await page.locator('#L1 .text').tap()
+    await expect(menu).toHaveAttribute('aria-expanded', 'false')
+  } else {
+    await expect(menu).toBeHidden()
+    await expect(page.getByLabel('AI指摘の重要度')).toBeVisible()
+  }
+})
