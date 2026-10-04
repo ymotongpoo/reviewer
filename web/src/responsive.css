@@ -9,9 +9,83 @@
   }
   .toasts {
     right: max(8px, env(safe-area-inset-right));
-    bottom: calc(16px + env(safe-area-inset-bottom) + var(--kb-inset, 0px));
+    bottom: calc(16px + env(safe-area-inset-bottom) + var(--kb-inset, 0px) + var(--bottom-ui, 0px) + var(--bottom-ui-extra, 0px));
   }
   .code { padding-bottom: 40dvh; }
+}
+
+@media (hover: none) and (pointer: coarse) {
+  .selection-bar {
+    position: fixed;
+    left: 0;
+    right: 0;
+    bottom: calc(env(safe-area-inset-bottom) + var(--kb-inset, 0px));
+    min-height: 56px;
+    z-index: 30;
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 4px 16px;
+    padding: 6px max(8px, env(safe-area-inset-right)) 6px max(8px, env(safe-area-inset-left));
+    background: var(--bg);
+    border-top: 1px solid var(--border);
+  }
+  .selection-bar-label { font-size: 13px; }
+  .selection-bar-actions { display: flex; flex-wrap: wrap; gap: 8px; }
+  .selection-bar-actions .btn { min-width: 44px; min-height: 44px; }
+  .row { min-height: 44px; }
+  .row .ln.clickable {
+    width: 88px;
+    padding-right: 0;
+    position: sticky;
+    left: 0;
+    z-index: 1;
+    display: flex;
+    flex-wrap: wrap;
+    align-items: flex-start;
+  }
+  .row .ln .edit-marker {
+    display: block;
+    position: static;
+    flex: 0 0 44px;
+    width: 44px;
+    height: 44px;
+    line-height: 44px;
+  }
+  .row .ln .line-hit {
+    position: relative;
+    flex: 0 0 44px;
+    min-width: 44px;
+    min-height: 44px;
+    padding: 0;
+    border: 0;
+    background: inherit;
+    color: inherit;
+    font: inherit;
+    cursor: pointer;
+  }
+  .row .ln .annotation-marker {
+    position: static;
+    order: 1;
+    flex: 0 0 88px;
+    min-height: 44px;
+  }
+  .row .ln .plus, .row:hover .ln.has-annotation .plus, .row:hover .ln.no-comment .plus {
+    display: block;
+    left: auto;
+    right: 0;
+    top: 0;
+    width: 12px;
+    height: 12px;
+    font-size: 10px;
+    line-height: 12px;
+    pointer-events: none;
+  }
+  .tree-row, .thread-actions .btn, .composer-bottom .btn,
+  .label-picker .chip, .file-head .btn { min-height: 44px; min-width: 44px; }
+  .composer-bottom, .thread-actions { gap: 8px; }
+  .composer-bottom .danger-text { order: -1; margin-right: auto; }
+  .thread-actions .danger-text { margin-left: auto; }
 }
 
 @media (max-width: 839.98px) {

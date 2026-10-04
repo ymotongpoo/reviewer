@@ -1,5 +1,8 @@
 import { Fragment } from 'preact'
-import { useEffect, useMemo, useRef, useState } from 'preact/hooks'
+import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'preact/hooks'
+import { isTouchUI } from '../media'
+import { isValid, lineRange, tapLine, type SelToken, type TouchSel } from '../touchselect'
+import { SelectionBar } from './SelectionBar'
 import { api, ApiError, projectId } from '../api'
 import { afterSave, classifySaveError, restorePlan, shouldDropEditDraft, type EditDraft } from '../drafts'
 import {
@@ -155,6 +158,8 @@ export function FileView({ path, line }: { path: string; line?: number }) {
   const [unknownSave, setUnknownSave] = useState<EditAttempt | null>(null)
   const [previewDraft, setPreviewDraft] = useState<string | null>(null)
   const [sel, setSel] = useState<Selection | null>(null)
+  const [touchSel, setTouchSel] = useState<TouchSel>({ kind: 'none' })
+  const touchUI = isTouchUI.value
   // AI annotations remain expanded until they are adopted or dismissed.
   const [annotationToggles, setAnnotationToggles] = useState<Map<number, boolean>>(new Map())
   const dragging = useRef(false)
@@ -278,6 +283,20 @@ export function FileView({ path, line }: { path: string; line?: number }) {
   const lines = useMemo(() => (file ? splitLines(file.content) : []), [file])
   const draftLines = session?.buf.lines
   const displayLines = draftLines ?? lines
+  const displayGen = useRef(0)
+  const displayed = useRef({ lines: displayLines, hash: file?.hash })
+  // A disk update also invalidates selections while an edit keeps its base hash.
+  if (displayed.current.lines !== displayLines || displayed.current.hash !== file?.hash) {
+    displayGen.current++
+    displayed.current = { lines: displayLines, hash: file?.hash }
+  }
+  const selectionToken: SelToken = { path, hash: session?.baseHash ?? file?.hash ?? '', gen: displayGen.current }
+  useLayoutEffect(() => {
+    if (!isValid(touchSel, selectionToken)) {
+      setTouchSel({ kind: 'none' })
+      toast('ファイルが更新されたため選択を解除しました')
+    }
+  }, [path, selectionToken.hash, selectionToken.gen, touchSel])
   const map = useMemo(
     () => (session ? mapLines(session.baseLines, session.buf.lines) : null),
     [session?.baseLines, draftLines],
@@ -365,11 +384,11 @@ export function FileView({ path, line }: { path: string; line?: number }) {
   // The new comment's range is in lines on disk; show it where those lines are now.
   const newLineAt = newLine ? { start: toDraft(newLine.start!), end: toDraft(newLine.end!) } : null
   // A new range comment shows its characters rather than whole lines.
-  const selRange = sel
+  const selRange = (isValid(touchSel, selectionToken) ? lineRange(touchSel) : null) ?? (sel
     ? [Math.min(sel.anchor, sel.focus), Math.max(sel.anchor, sel.focus)]
     : newLineAt?.start && newLineAt.end && !newLine?.range
       ? [newLineAt.start, newLineAt.end]
-      : null
+      : null)
 
   // Characters of range comments, by the row they are shown on.
   const diskText = useMemo(() => textLines(lines), [lines])
@@ -419,8 +438,14 @@ export function FileView({ path, line }: { path: string; line?: number }) {
         return null
       })
     }
+    // Cancelling pointerdown suppresses compatibility mouseup in Chromium.
+    const pointerUp = (e: PointerEvent) => { if (e.pointerType === 'mouse') up() }
     window.addEventListener('mouseup', up)
-    return () => window.removeEventListener('mouseup', up)
+    window.addEventListener('pointerup', pointerUp)
+    return () => {
+      window.removeEventListener('mouseup', up)
+      window.removeEventListener('pointerup', pointerUp)
+    }
   })
 
   // Leaving the file or the page with a draft asks first.
@@ -783,8 +808,17 @@ export function FileView({ path, line }: { path: string; line?: number }) {
   }
 
   const rowHandlerImpl: Omit<RowHandlers, 'input'> = {
+    gutterTap(no) {
+      toNormal(false)
+      if (mapRef.current?.changed[no - 1]) {
+        toast(CHANGED_LINE)
+        return
+      }
+      setTouchSel((s) => tapLine(s, no, selectionToken))
+    },
     gutterDown(e, no) {
       e.preventDefault()
+      if (touchSel.kind !== 'none') setTouchSel({ kind: 'none' })
       // Text selected in the rows wins over the line; the gutter keeps the selection.
       const t = textSelection()
       if (t) {
@@ -807,6 +841,7 @@ export function FileView({ path, line }: { path: string; line?: number }) {
       if (dragging.current) setSel((s) => (s ? { ...s, focus: no } : s))
     },
     editLine(no) {
+      setTouchSel({ kind: 'none' })
       beginEdit(no)
     },
     toggleAnnotation(no) {
@@ -844,6 +879,7 @@ export function FileView({ path, line }: { path: string; line?: number }) {
     const input = () => latest.current.input
     return {
       gutterDown: (e, no) => row().gutterDown(e, no),
+      gutterTap: (no) => row().gutterTap(no),
       rowEnter: (no) => row().rowEnter(no),
       editLine: (no) => row().editLine(no),
       toggleAnnotation: (no) => row().toggleAnnotation(no),
@@ -1178,6 +1214,7 @@ export function FileView({ path, line }: { path: string; line?: number }) {
                 <Fragment key={i}>
                   <CodeRow
                     no={no}
+                    touchUI={touchUI}
                     text={text}
                     tokens={tokens?.[i]}
                     verifyTokens={!!session}
@@ -1227,6 +1264,17 @@ export function FileView({ path, line }: { path: string; line?: number }) {
         </div>
         {showPreview && file && <Preview path={path} content={previewDraft ?? file.content} scrollRatio={scrollRatio} />}
       </div>
+      {touchUI && <SelectionBar selection={touchSel} insert={session?.mode === 'insert'}
+        onClear={() => setTouchSel({ kind: 'none' })}
+        onEdit={() => {
+          if (touchSel.kind === 'lines' && isValid(touchSel, selectionToken)) rowHandlerImpl.editLine(touchSel.anchor)
+        }}
+        onComment={() => {
+          if (!isValid(touchSel, selectionToken)) return
+          const range = lineRange(touchSel)
+          if (range && openComposer(...range)) setTouchSel({ kind: 'none' })
+        }}
+      />}
       {session && review && (
         <EditReview
           kind={review}

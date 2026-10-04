@@ -6,7 +6,8 @@ import type { Comment } from '../../src/types'
 import type { Page } from '@playwright/test'
 
 async function openLine(page: Page) {
-  await page.locator('#L3 .ln').tap({ position: { x: 40, y: 10 } })
+  await page.locator('#L3 .line-hit').tap()
+  await page.locator('.selection-bar').getByRole('button', { name: 'この行にコメント' }).tap()
   await expect(page.locator('.composer textarea')).toBeVisible()
 }
 

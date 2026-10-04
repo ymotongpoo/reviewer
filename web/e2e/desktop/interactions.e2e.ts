@@ -4,6 +4,19 @@ import { test, expect } from '../support/fixtures'
 import { json } from '../support/project'
 import type { Comment } from '../../src/types'
 
+test('C9 leaves fine-pointer gutters and selection UI unchanged, including narrow windows', async ({ page, openFile }) => {
+  await openFile('guide.md')
+  for (const width of [1440, 599]) {
+    await page.setViewportSize({ width, height: 900 })
+    await expect(page.locator('.line-hit, .selection-bar')).toHaveCount(0)
+    await expect(page.locator('#L3 .ln')).toHaveCSS('width', '56px')
+    await page.locator('#L3 .ln').click({ position: { x: 40, y: 10 } })
+    await expect(page.locator('.composer')).toBeVisible()
+    await expect(page.locator('.selection-bar')).toHaveCount(0)
+    await page.locator('.composer').getByRole('button', { name: '破棄', exact: true }).click()
+  }
+})
+
 test('gutter click and Shift-click extend a line comment', async ({ page, openFile, api, project }) => {
   await openFile('guide.md')
   await page.locator('#L3 .ln').click({ position: { x: 40, y: 10 } })
