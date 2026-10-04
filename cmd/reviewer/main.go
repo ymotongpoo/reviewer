@@ -116,6 +116,7 @@ func serve(args []string) error {
 	configPath := fs.String("config", "", "サーバー設定ファイル（既定: ~/.config/reviewer/config.toml）")
 	port := fs.Int("port", 0, "待ち受けポート（既定: 7777。使用中なら次の空きポート）")
 	bind := fs.String("bind", "", "待ち受けアドレス（既定: all = 全インターフェースの IPv4/IPv6。127.0.0.1 でこのマシンからのみ）")
+	publicURL := fs.String("public-url", "", "公開 URL（既定: 設定ファイルの public_url。起動表示と通知に使用）")
 	token := fs.String("token", os.Getenv("REVIEWER_TOKEN"), "アクセストークン（既定: $REVIEWER_TOKEN、なければ ~/.local/state/reviewer/token）")
 	dir, err := parseOptional(fs, args)
 	if err != nil {
@@ -125,6 +126,11 @@ func serve(args []string) error {
 	if err != nil {
 		return err
 	}
+	fs.Visit(func(f *flag.Flag) {
+		if f.Name == "public-url" {
+			cfg.PublicURL = *publicURL
+		}
+	})
 	portSet := *port != 0
 	if !portSet {
 		*port = cfg.Port
@@ -145,7 +151,8 @@ func serve(args []string) error {
 	}
 	actualPort := ln.Addr().(*net.TCPAddr).Port
 	urls := accessURLs(host, actualPort, *token, hostname(), interfaceAddrs())
-	base := strings.TrimSuffix(strings.SplitN(urls[0], "?", 2)[0], "/")
+	base := baseURL(cfg.PublicURL, urls)
+	urls = preferPublicURL(cfg.PublicURL, *token, urls)
 
 	conn := connectAgent(cfg)
 	reg, err := server.NewRegistry(cfg.Roots, config.StateDir(), base, conn.setup)
@@ -182,7 +189,7 @@ func serve(args []string) error {
 	} else if conn.reason != "" {
 		fmt.Printf("  agent: 未接続（%s）\n", conn.reason)
 	}
-	if isLoopback(host) {
+	if isLoopback(host) && cfg.PublicURL == "" {
 		fmt.Printf("  (このマシンからのみ開けます。他のマシンから開くには --bind all で起動してください)\n")
 	}
 

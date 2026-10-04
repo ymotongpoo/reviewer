@@ -95,6 +95,69 @@ reviewer status [DIR]                         # ラウンドと未解決コメ�
 reviewer export [DIR] [--round N] [--format md|json]
 ```
 
+## モバイル（Android Chrome）で使う
+
+モバイル対応は未完了（実機ゲート未実施）です。[実機ゲート記録](docs/mobile/phase0-device-report.md)の項目は未検証で、自動テストは実機の代わりになりません。最終受け入れ E2E と実装後の性能評価も未実施です。
+
+### 接続と公開 URL
+
+Android からの接続には、Tailscale の MagicDNS と HTTPS を推奨します。同じ tailnet にサーバーと Android を接続し、[Tailscale Serve](https://tailscale.com/docs/reference/tailscale-cli/serve) でローカルの reviewer を公開する構成です。次のコマンドは設定例です。この実装作業では実行していません。
+
+```sh
+# サーバー側の例。Serve は別のターミナルで実行します。
+reviewer serve --bind 127.0.0.1 --port 7777
+tailscale serve --bg http://127.0.0.1:7777
+```
+
+Serve が表示する HTTPS URL を、グローバル設定の `public_url` に指定して reviewer を起動します。以下のホスト名は例なので、実際の URL に置き換えてください。
+
+```toml
+# ~/.config/reviewer/config.toml（[agent] などのテーブルより前に記述）
+bind = "127.0.0.1"
+port = 7777
+public_url = "https://devbox.example.ts.net"
+```
+
+`public_url` には、トークン、クエリ、フラグメント、`/p/<id>/` を含めず、サーバーのルート URL を指定します。末尾の `/` は除かれます。この設定は表示と通知に使う URL を指定するもので、HTTPS の設定や待ち受けアドレスの変更は行いません。
+
+```sh
+reviewer serve --public-url https://devbox.example.ts.net
+reviewer url
+```
+
+`--public-url` は設定ファイルより優先します。`--public-url=` で、その起動だけ公開 URL の設定を無効にできます。起動表示と `reviewer url` は公開 URL を先頭に出し、従来の直接接続用 URL も続けて表示します。`reviewer url` はグローバル設定を読むため、起動時だけ渡した `--public-url` や別の `--config` の値は反映しません。両方の表示をそろえるにはグローバル設定に記述してください。未設定時の URL の順序と通知先は従来どおりです。
+
+Android Chrome で、先頭に表示されたトークン付き URL を開いて認証します。通知のプロジェクト URL は公開 URL を基点に生成され、トークンを含みません。
+
+| 接続項目 | 注意と確認状況 |
+|---|---|
+| Tailscale の MagicDNS と HTTPS | Android からの到達性と、この経路での SSE は未検証（実機ゲート未実施）。D-NET-04、05 が対象です。 |
+| Discord などの通知リンク | Cookie は [SameSite=Strict](https://developer.mozilla.org/en-US/docs/Web/HTTP/Reference/Headers/Set-Cookie#samesitesamesite-value) のため、別サイトから開いた最初の表示が 401 になることがあります。そのページの URL をもう一度開くか、Chrome のアドレスバーから直接開いてください。[S-08](docs/mobile/phase0-spike-report.md#s-08-別サイトからのcookie) では別サイトからの遷移が 401、続く直接アクセスが 200 でした。Discord 内ブラウザーと Android Chrome での結果は未検証（実機ゲート未実施、D-NET-01）。 |
+| オリジンと認証 | ホスト名、HTTP か HTTPS か、ポートを変えたら、新しい入口のトークン付き URL を開き直してください。Cookie が引き継がれない場合があります。Cookie 自体はオリジン単位の保存ではありませんが、ホスト名が変われば別の Cookie になり、reviewer の待ち受けポートを変えると Cookie 名も変わります。Chrome 再起動後の保持を含め、未検証（実機ゲート未実施、D-NET-05、06）。 |
+| トークン付き URL | 認証情報なのでチャットに貼らないでください。認証後は URL からトークンを除くリダイレクトを行いますが、履歴や共有先に残らない保証はありません。実機でどこに残るかは未検証（実機ゲート未実施、D-NET-07）。 |
+| mDNS と LAN | Android の `.local` の名前解決は環境によって不安定なため、標準の入口には推奨しません。mDNS と LAN の IP による HTTP 接続は未検証（実機ゲート未実施、D-NET-02、03）。 |
+
+### タッチ操作
+
+| 操作 | 手順 | 実機の確認状況 |
+|---|---|---|
+| ファイルと補助操作 | 狭い画面では ☰ でファイル一覧を開き、ファイルをタップします。設定や AI 確認などはヘッダーの ⋯ から開きます。 | 未検証（実機ゲート未実施）。 |
+| 行範囲コメント | 開始行の行番号をタップし、終了行をタップして、画面下の選択バーで「コメント」を押します。1 行なら最初のタップ後に「この行にコメント」を押します。「解除」で選択を外せます。 | 未検証（実機ゲート未実施）。 |
+| 行の編集 | 行の ✎、または 1 行を選んだときの「この行を編集」を押します。本文のダブルタップでは編集を開始しません。変更した行も ✎ から編集できますが、未保存の変更行へのコメントはできません。 | Gboard の入力と確定後の操作は未検証（実機ゲート未実施、D-IME）。 |
+| 文字範囲コメント | 本文を長押しして選択し、ハンドルで範囲を調整して、画面下の選択バーで「コメント」を押します。ファイルが更新されると選択は解除されます。 | Android 標準の選択メニューとの重なりを含め、未検証（実機ゲート未実施、D-SEL）。 |
+| プレビュー | 幅 600px 未満では「プレビュー」を有効にすると「ソース」「プレビュー」のタブが表示されます。600px 以上では左右分割です。 | 回転時を含め、未検証（実機ゲート未実施）。 |
+
+### 下書きと既知の制限
+
+コメントの保存に失敗したら、コメント欄の「再試行」「端末に保存して閉じる」「編集を続ける」から選びます。保存結果が不明なときは自動で再送しません。編集で「サーバーを確認」が出た場合は、その操作で内容を確認してください。提出前にはコメントの保存を待ちますが、返信は「下書き保存」を押す必要があります。キーボード表示中に各ボタンを押せるかは未検証（実機ゲート未実施、D-CMP）。
+
+- PWA、Service Worker、Web Push は未対応です。オフラインでのレビューや、オフライン中の変更を復帰後に自動送信する機能も未対応です。
+- 端末に保存したコメントや編集の下書きは、その端末とブラウザーの同じオリジンでだけ復元できます。別端末や別の入口には移りません。ブラウザーのサイトデータを消すと失われます。Android のプロセス終了後の保持は未検証（実機ゲート未実施、D-LC-04）。
+- IndexedDB を利用できない場合はメモリーに保存し、端末への保存が使えない旨を表示します。この場合、再読み込み後には下書きを復元できません。
+- Gboard の日本語フリック入力、ローマ字入力、再変換、音声入力、変換中の別行移動や Undo は未検証（実機ゲート未実施、D-IME）。現在は行単位の編集を維持し、限定ブロック編集は導入していません。
+- 縦横の切り替え、safe-area、画面分割、候補欄、フローティングキーボード、文字拡大は未検証（実機ゲート未実施、D-VP）。
+- バックグラウンドからの復帰、画面ロック解除、Wi-Fi とモバイル回線の切り替え後の SSE 再接続は未検証（実機ゲート未実施、D-LC-01〜03）。
+
 ## エージェントへの直接送信（Hermes Agent）
 
 同じマシンで [Hermes Agent](https://github.com/NousResearch/hermes-agent) の gateway が動いていれば、提出したフィードバックを reviewer から直接 Hermes のセッションに送れます。送り先は、文書を書いたときのセッション（Discord のスレッドなど）です。
@@ -230,13 +293,14 @@ scope = "all"          # all | current | selected
 
 ## 設定
 
-`~/.config/reviewer/config.toml`（グローバル）と `DIR/.reviewer/config.toml`（プロジェクト）を読み込みます。port、bind、roots、agent はサーバー全体の設定なので、グローバル設定にだけ書きます。labels、exclude、prompt_template、anchor、data_dir は、プロジェクトの設定で上書きできます。
+`~/.config/reviewer/config.toml`（グローバル）と `DIR/.reviewer/config.toml`（プロジェクト）を読み込みます。port、bind、public_url、roots、agent はサーバー全体の設定なので、グローバル設定にだけ書きます。labels、exclude、prompt_template、anchor、data_dir は、プロジェクトの設定で上書きできます。
 
 ```toml
 # ~/.config/reviewer/config.toml（サーバー全体の設定）
 roots = ["~"]               # 開けるディレクトリ
 port = 7777
 bind = "all"                # 既定。"127.0.0.1" にするとこのマシンからのみ
+public_url = ""             # 公開 URL。空なら従来の直接接続用 URL を使う
 exclude = ["drafts/", "*.bak"]
 prompt_template = "{{.FeedbackPath}} を読んで対応し、{{.ResponsePath}} に返答してください。"
 

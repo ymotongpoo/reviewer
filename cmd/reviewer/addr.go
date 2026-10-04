@@ -73,6 +73,24 @@ func accessURLs(host string, port int, token string, hostname string, addrs []ne
 	return out
 }
 
+func baseURL(public string, urls []string) string {
+	if public != "" {
+		return strings.TrimRight(public, "/")
+	}
+	if len(urls) == 0 {
+		return ""
+	}
+	return strings.TrimSuffix(strings.SplitN(urls[0], "?", 2)[0], "/")
+}
+
+func preferPublicURL(public, token string, urls []string) []string {
+	if public == "" {
+		return urls
+	}
+	u := baseURL(public, nil) + "/?token=" + url.QueryEscape(token)
+	return append([]string{u}, urls...)
+}
+
 // virtualIfacePrefixes are container and VM bridges whose addresses are not
 // reachable from other machines.
 var virtualIfacePrefixes = []string{"docker", "br-", "veth", "virbr", "cni", "flannel", "podman", "lxc", "vmnet"}
