@@ -1,0 +1,14 @@
+docs/mobile/known-limitations.md
+  h_bf0ada3931f770 41,43,45,47,49,69,104-107
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "ab8c75d646884c7b8772de0d86b30c9f8d5ae812",
+  "prompts": {},
+  "humans": {
+    "h_bf0ada3931f770": {
+      "author": "Yoshi Yamaguchi <ymotongpoo@gmail.com>"
+    }
+  }
+}
