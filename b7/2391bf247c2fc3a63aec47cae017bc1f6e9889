@@ -1,0 +1,33 @@
+cmd/reviewer/main.go
+  s_2c1e4bb4f1f3f2::t_a864db923e9071 119,129-133,154-155,192
+cmd/reviewer/service.go
+  s_2c1e4bb4f1f3f2::t_a864db923e9071 170
+cmd/reviewer/addr.go
+  s_2c1e4bb4f1f3f2::t_a864db923e9071 76-93
+internal/config/config_test.go
+  s_2c1e4bb4f1f3f2::t_285227dc62ccbd 9-39
+internal/config/config.go
+  s_2c1e4bb4f1f3f2::t_a864db923e9071 73,237
+  s_2c1e4bb4f1f3f2::t_3dd20e17276f6d 70-72
+cmd/reviewer/addr_test.go
+  s_2c1e4bb4f1f3f2::t_285227dc62ccbd 48-86
+README.md
+  s_2c1e4bb4f1f3f2::t_91289794e65940 98-153,155-160,296,303
+  s_2c1e4bb4f1f3f2::t_a601bb4e6c48ed 154
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "b72391bf247c2fc3a63aec47cae017bc1f6e9889",
+  "prompts": {},
+  "sessions": {
+    "s_2c1e4bb4f1f3f2": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a105b9-efa0-7131-be68-4047166ee373",
+        "model": "gpt-6-astra"
+      },
+      "human_author": "Yoshi Yamaguchi <ymotongpoo@gmail.com>"
+    }
+  }
+}
