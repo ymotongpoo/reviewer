@@ -12,6 +12,9 @@ import { RoundHistory } from './components/RoundHistory'
 import { Settings } from './components/Settings'
 import { Home } from './components/Home'
 import { projectId } from './api'
+import { initInputLog } from './inputlog'
+
+initInputLog()
 
 function App() {
   useEffect(() => {
