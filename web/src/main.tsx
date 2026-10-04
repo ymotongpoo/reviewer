@@ -3,9 +3,9 @@ import { useEffect } from 'preact/hooks'
 import './style.css'
 import './responsive.css'
 import './theme'
-import { connectEvents, fatal, info, refreshAll, toasts } from './state'
+import { connection, fatal, info, toasts } from './state'
 import { route } from './router'
-import { Header } from './components/Header'
+import { ConnectionError, Header } from './components/Header'
 import { Tree } from './components/Tree'
 import { FileView } from './components/FileView'
 import { Overview } from './components/Overview'
@@ -29,13 +29,12 @@ function App() {
   const sidebar = useDismiss(drawer, closeTransientUI, { focus: true, returnTo: '.drawer-toggle' })
   useEffect(() => { if (!narrow) closeTransientUI() }, [narrow])
   useEffect(() => {
-    refreshAll()
-      .then(connectEvents)
-      .catch((e) => (fatal.value = (e as Error).message))
+    connection.start()
+    return () => connection.stop()
   }, [])
 
   if (fatal.value) return <div class="empty error">{fatal.value}</div>
-  if (!info.value) return <div class="empty">読み込み中…</div>
+  if (!info.value) return <div class="empty"><ConnectionError fallback="読み込み中…" /></div>
   const r = route.value
   return (
     <div class="layout">

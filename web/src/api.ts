@@ -26,6 +26,8 @@ import type {
   TreeFile,
 } from './types'
 
+export class NetworkError extends Error {}
+
 export class ApiError extends Error {
   constructor(message: string, public status: number) {
     super(message)
@@ -48,7 +50,7 @@ async function request<T>(method: string, url: string, body?: unknown): Promise<
     },
     body: body !== undefined ? JSON.stringify(body) : undefined,
     credentials: 'same-origin',
-  })
+  }).catch((e) => { throw new NetworkError((e as Error).message) })
   if (!res.ok) {
     let msg = res.statusText
     try {

@@ -2,7 +2,8 @@ import { Portal } from './Portal'
 import { useEffect, useState } from 'preact/hooks'
 import { api, projectId } from '../api'
 import { copyText } from '../clipboard'
-import { agentInfo, comments, draftCount, info, refreshAll, responseBanner, toast } from '../state'
+import { agentInfo, comments, draftCount, dismissResponseBanner, info, refreshAll, responseBanner, toast } from '../state'
+import { connState } from '../connection'
 import { AgentChip } from './Agent'
 import { AnnotateButton } from './Annotate'
 import { GitButton } from './Git'
@@ -86,6 +87,21 @@ function ProjectSwitcher({ name, root }: { name: string; root: string }) {
   )
 }
 
+export function ConnectionError({ fallback = '' }: { fallback?: string }) {
+  if (connState.value === 'unavailable') return (
+    <div class="banner error top" role="alert">
+      このプロジェクトはサーバーで閉じられたか、見つかりません。
+      <a href="/">ディレクトリの選択画面へ</a>
+    </div>
+  )
+  if (connState.value === 'unauthorized') return (
+    <div class="banner error top" role="alert">
+      認証が切れました。起動時に表示された URL（?token= 付き）を開き直してください。
+    </div>
+  )
+  return <>{fallback}</>
+}
+
 export function Header() {
   const i = info.value
   const [dialog, setDialog] = useState<'confirm' | SubmitResult | null>(null)
@@ -162,15 +178,22 @@ export function Header() {
             {draftCount.value > 0 && <span class="badge">{draftCount.value}</span>}
           </button>
         )}
+        {connState.value !== 'connected' && (
+          <span class={`conn-chip ${connState.value}`} role="status">
+            {connState.value === 'connecting' || connState.value === 'syncing' ? '同期中…' :
+              connState.value === 'reconnecting' ? '再接続中…' : connState.value === 'unavailable' ? '接続できません' : '認証が必要です'}
+          </span>
+        )}
       </header>
+      <ConnectionError />
       {responseBanner.value !== null && (
         <div class="banner success top">
           エージェントがラウンド{responseBanner.value}に返答しました。各コメントを確認し、解決するか返信してください。
           <span class="spacer" />
-          <a href="#/" onClick={() => (responseBanner.value = null)}>
+          <a href="#/" onClick={dismissResponseBanner}>
             概要を見る
           </a>
-          <button class="link" onClick={() => (responseBanner.value = null)} aria-label="閉じる">
+          <button class="link" onClick={dismissResponseBanner} aria-label="閉じる">
             ×
           </button>
         </div>

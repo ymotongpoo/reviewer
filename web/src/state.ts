@@ -1,5 +1,6 @@
-import { computed, signal } from '@preact/signals'
-import { api, projectBase } from './api'
+import { batch, computed, signal } from '@preact/signals'
+import { api, ApiError, projectBase, projectId } from './api'
+import { connectionGeneration, createConnection } from './connection'
 import type {
   AgentInfo,
   AgentRunView,
@@ -138,57 +139,103 @@ export function commentsFor(path: string) {
   return comments.value.filter((c) => c.path === path)
 }
 
-export async function refreshInfo() {
-  info.value = await api.project()
+const requests = new Map<string, number>()
+
+function invalidateRequest(key: string) {
+  const seq = (requests.get(key) ?? 0) + 1
+  requests.set(key, seq)
+  return seq
 }
-export async function refreshTree() {
-  tree.value = await api.tree()
+
+async function prepareLatest<T>(key: string, fetch: () => Promise<T>, apply: (value: T) => void) {
+  const seq = invalidateRequest(key)
+  const gen = connectionGeneration.value
+  const value = await fetch()
+  return () => {
+    if (requests.get(key) === seq && connectionGeneration.value === gen) apply(value)
+  }
 }
-export async function refreshComments() {
-  comments.value = await api.comments()
+
+export async function latestOnly<T>(key: string, fetch: () => Promise<T>, apply: (value: T) => void) {
+  const commit = await prepareLatest(key, fetch, apply)
+  commit()
 }
-export async function refreshAgent() {
-  agentInfo.value = await api.agent()
-  if (agentRound.value > 0) agentRuns.value = await api.agentRuns(agentRound.value)
+
+async function loadAgent() {
+  const round = agentRound.value
+  const [agent, runs] = await Promise.all([api.agent(), round > 0 ? api.agentRuns(round) : Promise.resolve([])])
+  return { agent, runs, round }
 }
-export async function refreshPresets() {
-  presets.value = await api.presets()
+function setAgent(value: Awaited<ReturnType<typeof loadAgent>>) {
+  agentInfo.value = value.agent
+  if (value.round === agentRound.value) agentRuns.value = value.runs
 }
-export async function refreshAnnotations() {
-  annotations.value = await api.annotations(true)
-}
-export async function refreshAnnotationRequests() {
+async function loadAnnotationRequests() {
   const list = await api.annotationRequests()
-  const views = await Promise.all(
-    list.map(async (r) => {
-      try {
-        return await api.annotationRequest(r.id)
-      } catch {
-        return { ...r, runs: [] }
-      }
-    }),
-  )
-  annotationRequests.value = views
+  return Promise.all(list.map(async (r) => {
+    try { return await api.annotationRequest(r.id) }
+    catch { return { ...r, runs: [] } }
+  }))
 }
-export async function refreshGit() {
-  gitStatus.value = info.value?.git ? await api.gitStatus() : null
-}
+
+export const refreshInfo = () => latestOnly('info', api.project, (v) => { info.value = v })
+export const refreshTree = () => latestOnly('tree', api.tree, (v) => { tree.value = v })
+export const refreshComments = () => latestOnly('comments', api.comments, (v) => { comments.value = v })
+export const refreshAgent = () => latestOnly('agent', loadAgent, setAgent)
+export const refreshPresets = () => latestOnly('presets', api.presets, (v) => { presets.value = v })
+export const refreshAnnotations = () => latestOnly('annotations', () => api.annotations(true), (v) => { annotations.value = v })
+export const refreshAnnotationRequests = () => latestOnly('annotationRequests', loadAnnotationRequests, (v) => { annotationRequests.value = v })
+export const refreshGit = () => latestOnly('git', () => info.value?.git ? api.gitStatus() : Promise.resolve(null), (v) => { gitStatus.value = v })
+
 export async function showAgentRound(round: number) {
   if (agentRound.value === round) return
   agentRound.value = round
-  agentRuns.value = round > 0 ? await api.agentRuns(round) : []
+  await refreshAgent()
 }
-export async function refreshAll() {
-  await Promise.all([
-    // Git is optional: a failing git must not break the page.
-    refreshInfo().then(() => refreshGit().catch(() => {})),
-    refreshTree(),
-    refreshComments(),
-    refreshAgent(),
-    refreshPresets(),
-    refreshAnnotations(),
-    refreshAnnotationRequests(),
+
+const responseSeenKey = `reviewer.responseSeen.${projectId}`
+export function markResponseSeen() {
+  const importedAt = info.value?.response?.importedAt ?? ''
+  try {
+    const previous = localStorage.getItem(responseSeenKey)
+    if (previous === null || importedAt > previous) localStorage.setItem(responseSeenKey, importedAt)
+  } catch { /* storage unavailable */ }
+}
+export function dismissResponseBanner() {
+  pendingResponseRound = undefined
+  markResponseSeen()
+  responseBanner.value = null
+}
+export function checkResponseBanner() {
+  const importedAt = info.value?.response?.importedAt ?? ''
+  try {
+    const previous = localStorage.getItem(responseSeenKey)
+    if (previous === null) markResponseSeen()
+    else if (importedAt > previous) responseBanner.value = info.value!.round
+  } catch { /* storage unavailable */ }
+}
+
+let allSeq = 0
+export async function refreshAll(gen = connectionGeneration.value) {
+  const seq = ++allSeq
+  const project = api.project()
+  const commits = await Promise.all([
+    prepareLatest('info', () => project, (v) => { info.value = v }),
+    prepareLatest('git', async () => (await project).git ? api.gitStatus().catch(() => null) : null, (v) => { gitStatus.value = v }),
+    prepareLatest('tree', api.tree, (v) => { tree.value = v }),
+    prepareLatest('comments', api.comments, (v) => { comments.value = v }),
+    prepareLatest('agent', loadAgent, setAgent),
+    prepareLatest('presets', api.presets, (v) => { presets.value = v }),
+    prepareLatest('annotations', () => api.annotations(true), (v) => { annotations.value = v }),
+    prepareLatest('annotationRequests', loadAnnotationRequests, (v) => { annotationRequests.value = v }),
   ])
+  if (gen !== connectionGeneration.value || seq !== allSeq) return
+  batch(() => {
+    for (const commit of commits) commit()
+    checkResponseBanner()
+    gitVersion.value++
+    fileVersion.value = { n: fileVersion.value.n + 1, paths: ['*'] }
+  })
 }
 
 /** Appends a streamed event to its run, or refetches when the run is unknown. */
@@ -200,6 +247,7 @@ function applyAgentEvent(ev: ServerEvent) {
     return
   }
   const r = runs[i]
+  invalidateRequest('agent')
   const next = { ...r, events: [...r.events, ev.agent] }
   if (ev.agent.type === 'approval') next.pending = ev.agent.approval
   if (ev.agent.type === 'answered') next.pending = undefined
@@ -215,6 +263,7 @@ function applyAnnotationAgentEvent(ev: ServerEvent) {
     return
   }
   const run = request.runs[i]
+  invalidateRequest('annotationRequests')
   const next = { ...run, events: [...run.events, ev.agent] }
   if (ev.agent.type === 'approval') next.pending = ev.agent.approval
   if (ev.agent.type === 'answered') next.pending = undefined
@@ -227,11 +276,13 @@ function applyAnnotationAgentEvent(ev: ServerEvent) {
 }
 
 export function upsertComment(c: Comment) {
+  invalidateRequest('comments')
   const list = comments.value
   const i = list.findIndex((x) => x.id === c.id)
   comments.value = i >= 0 ? [...list.slice(0, i), c, ...list.slice(i + 1)] : [...list, c]
 }
 export function removeComment(id: string) {
+  invalidateRequest('comments')
   comments.value = comments.value.filter((c) => c.id !== id)
 }
 
@@ -245,7 +296,15 @@ function debounced(fn: () => unknown, ms: number) {
 
 const lazyComments = debounced(() => refreshComments().catch(() => {}), 150)
 const lazyTree = debounced(() => refreshTree().catch(() => {}), 150)
-const lazyInfo = debounced(() => refreshInfo().catch(() => {}), 150)
+let pendingResponseRound: number | undefined
+const lazyInfo = debounced(() => {
+  const round = pendingResponseRound
+  if (round === undefined) return
+  void latestOnly('info', api.project, (v) => {
+    info.value = v
+    if (pendingResponseRound === round && v.round === round) responseBanner.value = round
+  }).catch(() => {})
+}, 150)
 const lazyAgent = debounced(() => refreshAgent().catch(() => {}), 150)
 const lazyPresets = debounced(() => refreshPresets().catch(() => {}), 150)
 const lazyAnnotations = debounced(() => refreshAnnotations().catch(() => {}), 150)
@@ -256,67 +315,96 @@ const lazyGit = debounced(() => {
   refreshGit().catch(() => {})
 }, 800)
 
-export function connectEvents() {
-  const es = new EventSource(`${projectBase}/api/events`)
-  let wasDown = false
-  es.onopen = () => {
-    if (wasDown) {
-      wasDown = false
-      refreshAll().catch(() => {})
-      gitVersion.value++
-      fileVersion.value = { n: fileVersion.value.n + 1, paths: ['*'] }
-    }
-  }
-  es.onerror = () => {
-    wasDown = true
-  }
-  es.onmessage = (m) => {
-    const ev = JSON.parse(m.data) as ServerEvent
-    switch (ev.type) {
-      case 'files':
-        fileVersion.value = { n: fileVersion.value.n + 1, paths: ev.paths ?? [] }
-        lazyTree()
-        lazyComments()
-        lazyGit()
-        break
-      case 'git':
-        lazyGit()
-        break
-      case 'tree':
-        lazyTree()
-        break
-      case 'comments':
-        lazyComments()
-        lazyTree()
-        break
-      case 'round':
-        responseBanner.value = null
-        lazyInfo()
-        lazyComments()
-        lazyTree()
-        break
-      case 'agent':
-        applyAgentEvent(ev)
-        break
-      case 'annotate':
-        if (ev.agent) applyAnnotationAgentEvent(ev)
-        else {
-          lazyPresets()
-          lazyAnnotationRequests()
-        }
-        break
-      case 'annotations':
-        lazyAnnotations()
+function refreshRoundInfo() {
+  void latestOnly('info', api.project, (v) => { info.value = v; markResponseSeen() }).catch(() => {})
+}
+
+export function dispatchEvent(ev: ServerEvent) {
+  switch (ev.type) {
+    case 'files':
+      fileVersion.value = { n: fileVersion.value.n + 1, paths: ev.paths ?? [] }
+      lazyTree()
+      lazyComments()
+      lazyGit()
+      break
+    case 'git':
+      lazyGit()
+      break
+    case 'tree':
+      lazyTree()
+      break
+    case 'comments':
+      lazyComments()
+      lazyTree()
+      break
+    case 'round':
+      pendingResponseRound = undefined
+      responseBanner.value = null
+      markResponseSeen()
+      refreshRoundInfo()
+      lazyComments()
+      lazyTree()
+      break
+    case 'agent':
+      applyAgentEvent(ev)
+      break
+    case 'annotate':
+      if (ev.agent) applyAnnotationAgentEvent(ev)
+      else {
+        lazyPresets()
         lazyAnnotationRequests()
-        lazyComments()
-        lazyTree()
-        break
-      case 'response':
-        responseBanner.value = ev.round ?? null
-        lazyInfo()
-        lazyComments()
-        toast(`エージェントの返答を取り込みました（ラウンド${ev.round}）`, 'success')
-        break
-    }
+      }
+      break
+    case 'annotations':
+      lazyAnnotations()
+      lazyAnnotationRequests()
+      lazyComments()
+      lazyTree()
+      break
+    case 'response':
+      pendingResponseRound = ev.round
+      lazyInfo()
+      lazyComments()
+      toast(`エージェントの返答を取り込みました（ラウンド${ev.round}）`, 'success')
+      break
   }
 }
+
+function replayEvents(kinds: Set<string>, paths: Set<string>) {
+  // Stream fragments cannot be replayed without their payload; fetch the runs.
+  for (const kind of kinds) {
+    if (kind === 'agent') lazyAgent()
+    else if (kind === 'annotate') { lazyPresets(); lazyAnnotationRequests(); lazyAnnotations() }
+    else if (kind === 'response') {
+      pendingResponseRound = info.value?.round
+      lazyInfo()
+      lazyComments()
+    } else if (kind === 'round' && kinds.has('response')) {
+      lazyTree()
+    } else dispatchEvent({ type: kind as ServerEvent['type'], paths: [...paths] })
+  }
+}
+
+export const connection = createConnection(`${projectBase}/api/events`, {
+  makeSource: (url) => new EventSource(url),
+  sync: refreshAll,
+  probe: async () => {
+    try { await api.project(); return 'ok' }
+    catch (e) {
+      if (e instanceof ApiError && e.status === 404) return 'unavailable'
+      if (e instanceof ApiError && e.status === 401) return 'unauthorized'
+      return 'error'
+    }
+  },
+  dispatch: dispatchEvent,
+  replay: replayEvents,
+  visibility: {
+    get: () => document.visibilityState === 'hidden' ? 'hidden' : 'visible',
+    on: (cb) => {
+      document.addEventListener('visibilitychange', cb)
+      return () => document.removeEventListener('visibilitychange', cb)
+    },
+  },
+  timers: { set: (fn, ms) => setTimeout(fn, ms), clear: (h) => clearTimeout(h as ReturnType<typeof setTimeout>) },
+  closeOnHidden: false,
+})
