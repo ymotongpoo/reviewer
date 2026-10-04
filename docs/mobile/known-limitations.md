@@ -38,15 +38,15 @@ GitダイアログとAI確認ダイアログは、既存のAPI応答形式に合
 | 差分確認、競合拒否、改行とBOMの保持 | 既存 `desktop/edit.e2e.ts`、`mobile/edit-drafts.e2e.ts`、`mobile/ime.e2e.ts`、`mobile/acceptance.e2e.ts` |
 | タップ領域と危険操作の間隔 | `mobile/tap-targets.e2e.ts`、`perf/perf.e2e.ts` |
 
-C14はテストと文書だけを変更します。既存の画像と計算済みスタイルの基準を更新せず、製品コードとdistの差分がないことを確認します。API、ハッシュルート、localStorageキーの変更もありません。
+C14はテスト、文書、およびC14で検出したexpanded touchヘッダーの製品CSSを変更しました。既存の画像と計算済みスタイルの基準は更新していません。API、ハッシュルート、localStorageキー、Cookie、認証、ネットワーク設定の変更はありません。
 
-## C14で検出した未解決事項
+## C14で検出した問題と対応
 
-915×412のexpanded touchで、GitとAIの操作を同時に表示するフィクスチャはヘッダーが画面幅を超えます。プロジェクト名 `test-…`、ブランチ `fixture`、エージェント名 `Fixture`、送信先未選択、提出待ちコメント1件の状態で、設定した幅915pxに対してinnerWidthが924pxになりました。Gitダイアログ表示時のスクリーンショットでもヘッダー操作の重なりが見られます。
+915×412のexpanded touchで、GitとAIの操作を同時に表示するとヘッダーが画面幅を超える問題を検出しました。プロジェクト名 `test-…`、ブランチ `fixture`、エージェント名 `Fixture`、送信先未選択、提出待ちコメント1件の状態で、修正前は設定した幅915pxに対してinnerWidthが924pxになっていました。
 
-document幅とinnerWidthだけを比較すると、ブラウザがレイアウトviewportを広げた状態を見逃します。C14ではinnerWidthと指定viewport幅の一致も検査し、この状態を失敗として残しています。表示の検査はsoft assertionで記録し、後続の状態の画像と結果も収集します。期待値の緩和、skip、基準画像の更新は行いません。
+`responsive.css`にexpanded touch（840px以上、coarse pointer）専用のヘッダー折り返しを追加しました。compact／mediumのヘッダーには適用せず、fine pointerのdesktop DOMと外観も変更していません。修正後は915×412のAcceptanceを再実行し、innerWidthとdocument幅が915pxに一致することを確認しました。
 
-この現象を解消するには製品のexpanded touchレイアウトを検討する必要があるため、C14の範囲では修正しません。C14の受け入れは未完了です。製品コード変更が必要な場合は停止するというユーザー指示に従い、許可範囲内の試験修正と結果の記録までで止めます。
+既存の`tablet-landscape` viewport flakyは、今回の修正後に単独実行して成功しています。
 
 指示書のC14は「6. Phase 5」にあります。依頼中の「9.4」に対応する節は現行指示書にはありません。対象ファイルは依頼で列挙された6ファイルに限定しました。
 
@@ -66,7 +66,7 @@ Go検証は `GOCACHE=/tmp/reviewer-e2e-go-cache GOMODCACHE=/tmp/reviewer-e2e-go-
 |---|---|
 | 360/412px縦向きの全ルート、プレビュー両タブ、各操作状態 | ✓ C14 Acceptance |
 | 800px横向きのルートと各操作状態 | ✓ C14 Acceptance |
-| 915px横向きの全操作状態 | ✗ GitとAI操作を表示したヘッダーが924pxへ拡大 |
+| 915px横向きの全操作状態 | ✓ expanded touchヘッダー折り返し後のAcceptance |
 | SelectionBarの24px safe-area、ComposerとEditBarのキーボード追従 | ✓ CDPと偽visualViewportによる自動検査 |
 | コメントと編集の下書き復元、IME、visibility復帰、結果不明POSTの再送防止 | ✓ C14 Acceptanceと既存回帰 |
 | 44pxターゲット、43px検出、コード内スクロール例外、危険操作の8px間隔 | ✓ 360/412/768px |
@@ -101,8 +101,10 @@ INV-1（画像）、INV-2（計算済みスタイル）、INV-3（マウス操�
 | `npm run e2e:sse` | ✗ 既存スクリプト未定義 |
 | `npx playwright test --project=sse` | ✓ 11 passed |
 | `npm run e2e:perf` | ✓ 2 passed |
-| C14 mobile Acceptanceとtap-targets | 24 passed、1 failed、8 skipped |
-| `npm run e2e` | 472 passed、2 failed、24 skipped |
+| C14 mobile Acceptanceとtap-targets（初回） | 24 passed、1 failed、8 skipped（修正前の記録） |
+| C14修正後Acceptance | ✓ 16 passed |
+| C14修正後tap-targets | ✓ 9 passed |
+| `npm run e2e` | 初回記録は下記。修正後の再実行結果を追記予定 |
 | `git diff --check`、distのスパイク検査 | ✓ エラーなし、対象文字列なし |
 
 全回帰の集計です。
