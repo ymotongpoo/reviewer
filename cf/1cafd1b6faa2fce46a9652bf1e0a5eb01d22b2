@@ -1,0 +1,82 @@
+internal/server/dist/assets/java-Cp6sSC4w.js
+  s_90f1a670beb75f::t_c58b62ac89f557 1
+internal/server/dist/assets/jsx-B3AKtmIm.js
+  s_90f1a670beb75f::t_c58b62ac89f557 1
+internal/server/dist/assets/css-B91dYjB-.js
+  s_90f1a670beb75f::t_c58b62ac89f557 1
+internal/server/dist/assets/ruby-jxC6vYIo.js
+  s_90f1a670beb75f::t_c58b62ac89f557 1
+internal/server/dist/assets/c-CKHSTq3t.js
+  s_90f1a670beb75f::t_c58b62ac89f557 1
+internal/server/dist/assets/sql-BsM40Hcr.js
+  s_90f1a670beb75f::t_c58b62ac89f557 1
+web/e2e/desktop/ime.e2e.ts
+  s_90f1a670beb75f::t_1c486f8a87d8fb 1-3
+internal/server/dist/assets/rst-D5CrM72K.js
+  s_90f1a670beb75f::t_c58b62ac89f557 1
+internal/server/dist/assets/typescript-DVeVUgnY.js
+  s_90f1a670beb75f::t_c58b62ac89f557 1
+internal/server/dist/index.html
+  s_90f1a670beb75f::t_c58b62ac89f557 8
+internal/server/dist/assets/cpp-Dm-1-pEP.js
+  s_90f1a670beb75f::t_c58b62ac89f557 1
+internal/server/dist/assets/html-derivative-H9CoxMW-.js
+  s_90f1a670beb75f::t_c58b62ac89f557 1
+internal/server/dist/assets/lua-omUbM5sg.js
+  s_90f1a670beb75f::t_c58b62ac89f557 1
+internal/server/dist/assets/php-C9Bmw1yO.js
+  s_90f1a670beb75f::t_c58b62ac89f557 1
+web/src/inputintent.ts
+  s_90f1a670beb75f::t_374a7a1bcc0847 45,54
+  s_90f1a670beb75f::t_8d237250468e89 1-44,46-53,55-59
+internal/server/dist/assets/index-npy8n0cO.js
+  s_90f1a670beb75f::t_c58b62ac89f557 1-252
+web/src/inputintent.test.ts
+  s_90f1a670beb75f::t_2386e521d2d4ff 1-60,62-71,74-108
+  s_90f1a670beb75f::t_374a7a1bcc0847 61,72-73
+web/src/components/FileView.tsx
+  s_90f1a670beb75f::t_8bd52bdd868005 24,208-211,218-222,224-226,515,598-650,653-658,705,752-760,765-770,774-779,781-782
+  s_90f1a670beb75f::t_4c0f335c095be0 857-858
+  s_90f1a670beb75f::t_374a7a1bcc0847 651-652
+  s_90f1a670beb75f::t_fdf4afc445394a 207,223,761-764,854,867,879,891,964
+  s_90f1a670beb75f::t_4f975a51d07c48 848-849,886-890,892,896-902,906,909-930,946-948,954,959-963,965,978,1038-1043,1072-1073,1330
+web/src/components/CodeRow.tsx
+  s_90f1a670beb75f::t_4f975a51d07c48 22-23,230,265
+web/e2e/mobile/ime.e2e.ts
+  s_90f1a670beb75f::t_1c486f8a87d8fb 1-3
+internal/server/dist/assets/tsx-CZ_Wt7l7.js
+  s_90f1a670beb75f::t_c58b62ac89f557 1
+web/e2e/support/ime.ts
+  s_90f1a670beb75f::t_7f070b6caadcb1 91-125,127,129-136,138-153
+  s_90f1a670beb75f::t_049d795f696667 126
+  s_90f1a670beb75f::t_73be2d22402b69 128,137
+  s_90f1a670beb75f::t_8eef374ccbffea 220
+  s_90f1a670beb75f::t_92221d38b6e969 35-37,81
+  s_90f1a670beb75f::t_1c486f8a87d8fb 1-34,38-80,82-90,154-219,221-285
+internal/server/dist/assets/dist-BlSa3Ump.js
+  s_90f1a670beb75f::t_c58b62ac89f557 1-63
+internal/server/dist/assets/vue-DsL-hrK9.js
+  s_90f1a670beb75f::t_c58b62ac89f557 1
+internal/server/dist/assets/xml-gbFfYVca.js
+  s_90f1a670beb75f::t_c58b62ac89f557 1
+internal/server/dist/assets/graphql-wcYiWOsa.js
+  s_90f1a670beb75f::t_c58b62ac89f557 1
+internal/server/dist/assets/html-CRzt6s9I.js
+  s_90f1a670beb75f::t_c58b62ac89f557 1
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "cf1cafd1b6faa2fce46a9652bf1e0a5eb01d22b2",
+  "prompts": {},
+  "sessions": {
+    "s_90f1a670beb75f": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a10597-d153-7271-beec-c42a95cc8cf3",
+        "model": "gpt-6-astra"
+      },
+      "human_author": "Yoshi Yamaguchi <ymotongpoo@gmail.com>"
+    }
+  }
+}
