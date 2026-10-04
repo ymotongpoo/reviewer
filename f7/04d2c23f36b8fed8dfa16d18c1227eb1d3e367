@@ -1,0 +1,28 @@
+web/src/components/SelectionBar.tsx
+  s_b13aed65733919::t_03ca7e43bc2f02 27,44-46,48,50-51
+  s_b13aed65733919::t_7c07af3f1ec67e 43
+web/e2e/desktop/interactions.e2e.ts
+  s_b13aed65733919::t_0ee27cf69d63f3 74-75
+web/src/components/FileView.tsx
+  s_b13aed65733919::t_03ca7e43bc2f02 162,526-553,841,851,875,1300,1306-1314
+web/e2e/mobile/touch-range.e2e.ts
+  s_b13aed65733919::t_7173ee5610d929 1-47,50-53,55-141,143-160
+  s_b13aed65733919::t_f7ee59d5c04f2d 48-49,142
+  s_b13aed65733919::t_d3ba5d7d8b9f72 54
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "f704d2c23f36b8fed8dfa16d18c1227eb1d3e367",
+  "prompts": {},
+  "sessions": {
+    "s_b13aed65733919": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a1055f-6de9-7090-bcd0-4527e587841f",
+        "model": "gpt-6-astra"
+      },
+      "human_author": "Yoshi Yamaguchi <ymotongpoo@gmail.com>"
+    }
+  }
+}
