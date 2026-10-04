@@ -71,6 +71,8 @@ for (const example of [
       return getSelection()!.toString()
     }, example)
     expect(selected).toContain(example.text.split('\n')[0])
+    await page.waitForTimeout(200)
+    await expect(page.locator('.selection-bar')).toHaveCount(0)
     await page.locator(`#L${example.start} .ln`).click({ position: { x: 40, y: 10 } })
     await page.locator('.composer textarea').fill('文字範囲コメント')
     await expect(page.locator('.save-state')).toHaveText('下書き保存済み')

@@ -159,6 +159,7 @@ export function FileView({ path, line }: { path: string; line?: number }) {
   const [previewDraft, setPreviewDraft] = useState<string | null>(null)
   const [sel, setSel] = useState<Selection | null>(null)
   const [touchSel, setTouchSel] = useState<TouchSel>({ kind: 'none' })
+  const selectionTimer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined)
   const touchUI = isTouchUI.value
   // AI annotations remain expanded until they are adopted or dismissed.
   const [annotationToggles, setAnnotationToggles] = useState<Map<number, boolean>>(new Map())
@@ -522,6 +523,34 @@ export function FileView({ path, line }: { path: string; line?: number }) {
     return selectionTarget(textLines(displayLines), a, b)
   }
 
+  function cancelSelectionRead() {
+    clearTimeout(selectionTimer.current)
+    selectionTimer.current = undefined
+  }
+
+  useLayoutEffect(() => {
+    if (!touchUI) return
+    if (session?.mode === 'insert') {
+      setTouchSel((s) => s.kind === 'text' ? { kind: 'none' } : s)
+      return
+    }
+    const onSelectionChange = () => {
+      cancelSelectionRead()
+      selectionTimer.current = setTimeout(() => {
+        const target = textSelection()
+        setTouchSel((s) => target?.range
+          ? { kind: 'text', target, token: selectionToken }
+          : s.kind === 'text' ? { kind: 'none' } : s)
+      }, 100)
+    }
+    document.addEventListener('selectionchange', onSelectionChange)
+    return () => {
+      document.removeEventListener('selectionchange', onSelectionChange)
+      // A pending read must not attach an old DOM selection to a new display.
+      cancelSelectionRead()
+    }
+  }, [touchUI, path, selectionToken.hash, selectionToken.gen, session?.mode])
+
   // Editing
 
   /** The buffer with the caret the input actually shows; native keys move it without telling us. */
@@ -809,6 +838,7 @@ export function FileView({ path, line }: { path: string; line?: number }) {
 
   const rowHandlerImpl: Omit<RowHandlers, 'input'> = {
     gutterTap(no) {
+      cancelSelectionRead()
       toNormal(false)
       if (mapRef.current?.changed[no - 1]) {
         toast(CHANGED_LINE)
@@ -818,6 +848,7 @@ export function FileView({ path, line }: { path: string; line?: number }) {
     },
     gutterDown(e, no) {
       e.preventDefault()
+      cancelSelectionRead()
       if (touchSel.kind !== 'none') setTouchSel({ kind: 'none' })
       // Text selected in the rows wins over the line; the gutter keeps the selection.
       const t = textSelection()
@@ -841,6 +872,7 @@ export function FileView({ path, line }: { path: string; line?: number }) {
       if (dragging.current) setSel((s) => (s ? { ...s, focus: no } : s))
     },
     editLine(no) {
+      cancelSelectionRead()
       setTouchSel({ kind: 'none' })
       beginEdit(no)
     },
@@ -1265,12 +1297,21 @@ export function FileView({ path, line }: { path: string; line?: number }) {
         {showPreview && file && <Preview path={path} content={previewDraft ?? file.content} scrollRatio={scrollRatio} />}
       </div>
       {touchUI && <SelectionBar selection={touchSel} insert={session?.mode === 'insert'}
-        onClear={() => setTouchSel({ kind: 'none' })}
+        onClear={() => { cancelSelectionRead(); setTouchSel({ kind: 'none' }) }}
         onEdit={() => {
           if (touchSel.kind === 'lines' && isValid(touchSel, selectionToken)) rowHandlerImpl.editLine(touchSel.anchor)
         }}
         onComment={() => {
           if (!isValid(touchSel, selectionToken)) return
+          cancelSelectionRead()
+          if (touchSel.kind === 'text') {
+            const t = touchSel.target
+            if (openComposer(t.start, t.end, t.range)) {
+              setTouchSel({ kind: 'none' })
+              window.getSelection()?.removeAllRanges()
+            }
+            return
+          }
           const range = lineRange(touchSel)
           if (range && openComposer(...range)) setTouchSel({ kind: 'none' })
         }}

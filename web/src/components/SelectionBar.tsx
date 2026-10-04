@@ -24,7 +24,7 @@ export function SelectionBar({ selection, insert, onComment, onEdit, onClear }: 
       window.removeEventListener('resize', update)
     }
   }, [])
-  const visible = selection.kind === 'lines' && !insert && !keyboard
+  const visible = selection.kind !== 'none' && !insert && !keyboard
   useLayoutEffect(() => {
     if (!visible || !ref.current) return
     const style = document.documentElement.style
@@ -40,13 +40,15 @@ export function SelectionBar({ selection, insert, onComment, onEdit, onClear }: 
       style.removeProperty('--bottom-ui-extra')
     }
   }, [visible])
-  if (!visible || selection.kind !== 'lines') return null
-  const range = lineRange(selection)!
-  const single = selection.focus === undefined
+  if (!visible) return null
+  const range = lineRange(selection)
+  const text = selection.kind === 'text' ? selection.target.range : undefined
+  const single = selection.kind === 'lines' && selection.focus === undefined
   return createPortal(
-    <div class="selection-bar" ref={ref} role="region" aria-label="行の選択">
+    <div class="selection-bar" ref={ref} role="region" aria-label={text ? '文字の選択' : '行の選択'}>
       <span class="selection-bar-label" aria-live="polite">
-        {single ? `L${selection.anchor} を選択中。終了行をタップ` : `L${range[0]}–L${range[1]}`}
+        {text ? `選択した文字列 L${text.startLine}:${text.startColumn + 1}–L${text.endLine}:${text.endColumn}`
+          : single ? `L${selection.anchor} を選択中。終了行をタップ` : range && `L${range[0]}–L${range[1]}`}
       </span>
       <div class="selection-bar-actions">
         <button class="btn primary" onPointerDown={(e) => e.preventDefault()} onClick={onComment}>
