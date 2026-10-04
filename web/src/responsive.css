@@ -14,6 +14,25 @@
   .code { padding-bottom: 40dvh; }
 }
 
+@media (min-width: 840px) and (hover: none) and (pointer: coarse) {
+  /* Touch landscape keeps the expanded shell, but header controls may wrap.
+     This prevents long project/action labels from widening the layout viewport. */
+  .app-header {
+    min-width: 0;
+    flex-wrap: wrap;
+    overflow: hidden;
+  }
+  .app-header > .brand,
+  .app-header > .switcher,
+  .app-header > .round-chip,
+  .app-header > .btn,
+  .app-header > .header-actions {
+    min-width: 0;
+  }
+  .app-header > .switcher { flex: 1 1 180px; }
+  .app-header > .header-actions { flex: 1 1 auto; }
+}
+
 @media (hover: none) and (pointer: coarse) {
   .selection-bar {
     position: fixed;
