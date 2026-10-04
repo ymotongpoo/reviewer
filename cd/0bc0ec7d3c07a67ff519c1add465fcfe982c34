@@ -1,0 +1,92 @@
+web/src/components/Thread.tsx
+  s_dd5d94f853ce0d::t_f3fd0486cc33eb 1,3,173-178
+web/e2e/desktop/composer.e2e.ts
+  s_dd5d94f853ce0d::t_2d3de2921bc75b 3,5,7,9-12,16,19-96
+  s_dd5d94f853ce0d::t_e3cd3f6ab96a94 97-117,119-121,123
+  s_dd5d94f853ce0d::t_c39b96d42f3851 122
+web/src/localstore.ts
+  s_dd5d94f853ce0d::t_d730ce9f4c7389 45-54,57-58,70-76,78-82,84-88,90-106
+  s_dd5d94f853ce0d::t_47e86b29bcb6b5 1-44,55-56,59-69,77,83,89,107-109
+internal/server/dist/index.html
+  s_dd5d94f853ce0d::t_de288209f03830 8
+internal/server/dist/assets/html-Bc7VSlzc.js
+  s_dd5d94f853ce0d::t_de288209f03830 1
+web/src/drafts.test.ts
+  s_dd5d94f853ce0d::t_2d3de2921bc75b 1-70
+internal/server/dist/assets/html-derivative-DtF_yUm3.js
+  s_dd5d94f853ce0d::t_de288209f03830 1
+internal/server/dist/assets/lua-DtkZ9MBJ.js
+  s_dd5d94f853ce0d::t_de288209f03830 1
+internal/server/dist/assets/php-Vx0njJjk.js
+  s_dd5d94f853ce0d::t_de288209f03830 1
+internal/server/dist/assets/rst-D-lX-QzN.js
+  s_dd5d94f853ce0d::t_de288209f03830 1
+internal/server/dist/assets/sql-DRHOxgtb.js
+  s_dd5d94f853ce0d::t_de288209f03830 1
+internal/server/dist/assets/typescript-Crp-qJpX.js
+  s_dd5d94f853ce0d::t_de288209f03830 1
+internal/server/dist/assets/cpp-u_IwUYVc.js
+  s_dd5d94f853ce0d::t_de288209f03830 1
+internal/server/dist/assets/xml-CxNHheKF.js
+  s_dd5d94f853ce0d::t_de288209f03830 1
+internal/server/dist/assets/java-c7c7RMx3.js
+  s_dd5d94f853ce0d::t_de288209f03830 1
+internal/server/dist/assets/jsx-CDwsbo6n.js
+  s_dd5d94f853ce0d::t_de288209f03830 1
+web/src/components/Composer.tsx
+  s_dd5d94f853ce0d::t_e3cd3f6ab96a94 346,375,401
+  s_dd5d94f853ce0d::t_185f27fc146af5 2-4,18,26-28,35-38,40-45,47,52-57,65-82,86,88-91,93-94,97-101,105-118,120,122-130,136-143,145-146,148-153,157-159,161-170,172-177,180,184-188,193-202,207-227,229-256,258,260,262-263,267-279,282-295,328-329,334,336-338,340,355,387,389-392,394,410,413
+  s_dd5d94f853ce0d::t_70b42c55527ce2 30-34,119,144,228,280-281
+  s_dd5d94f853ce0d::t_f3fd0486cc33eb 46,121,147,154,160,171
+  s_dd5d94f853ce0d::t_3cc8bee7f81bac 335,339,388,393,408
+web/src/state.test.ts
+  s_dd5d94f853ce0d::t_2d3de2921bc75b 148-168
+internal/server/dist/assets/c-C5cQM9S1.js
+  s_dd5d94f853ce0d::t_de288209f03830 1
+internal/server/dist/assets/dist-BTsSdSZ5.js
+  s_dd5d94f853ce0d::t_de288209f03830 1-63
+internal/server/dist/assets/graphql-BIFCbzAu.js
+  s_dd5d94f853ce0d::t_de288209f03830 1
+web/src/components/Overview.tsx
+  s_dd5d94f853ce0d::t_f3fd0486cc33eb 2,7-8,20,30-36,64-78
+  s_dd5d94f853ce0d::t_8fc02a41712104 79
+internal/server/dist/assets/tsx-CJBVBJVQ.js
+  s_dd5d94f853ce0d::t_de288209f03830 1
+internal/server/dist/assets/vue-BTPlO8z2.js
+  s_dd5d94f853ce0d::t_de288209f03830 1
+internal/server/dist/assets/css-Ded7jxIg.js
+  s_dd5d94f853ce0d::t_de288209f03830 1
+internal/server/dist/assets/index-CshpFbMH.js
+  s_dd5d94f853ce0d::t_de288209f03830 1-252
+web/src/components/Header.tsx
+  s_dd5d94f853ce0d::t_f3fd0486cc33eb 5,214-230,243,264,274-277,283,302
+internal/server/dist/assets/ruby-DYa88N7_.js
+  s_dd5d94f853ce0d::t_de288209f03830 1
+web/src/state.ts
+  s_dd5d94f853ce0d::t_185f27fc146af5 3-4,112-126
+  s_dd5d94f853ce0d::t_1efd209df19809 127
+web/src/drafts.ts
+  s_dd5d94f853ce0d::t_47e86b29bcb6b5 1-43
+web/e2e/mobile/composer-drafts.e2e.ts
+  s_dd5d94f853ce0d::t_be0e4f0d3bf49b 1-3,5-30,32-45,49-79,81-83,86-92,94-168
+  s_dd5d94f853ce0d::t_e20d23bd49fc23 84-85
+  s_dd5d94f853ce0d::t_6a17ef31a8b35f 46-48
+  s_dd5d94f853ce0d::t_5923e781850cd1 4,80,93
+  s_dd5d94f853ce0d::t_3cc8bee7f81bac 31
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "cd0bc0ec7d3c07a67ff519c1add465fcfe982c34",
+  "prompts": {},
+  "sessions": {
+    "s_dd5d94f853ce0d": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a104f8-4750-7fe0-b01e-6e9ec39e3b3c",
+        "model": "gpt-6-astra"
+      },
+      "human_author": "Yoshi Yamaguchi <ymotongpoo@gmail.com>"
+    }
+  }
+}
