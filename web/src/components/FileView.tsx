@@ -21,6 +21,7 @@ import {
 import { tokenize, type Token } from '../highlight'
 import { addNavigationGuard } from '../router'
 import { copyText } from '../clipboard'
+import { beforeInputIntent, createIntentGuard, keydownIntent, type Intent, type KeyInfo } from '../inputintent'
 import {
   caretAt,
   deleteBackward,
@@ -203,13 +204,26 @@ export function FileView({ path, line }: { path: string; line?: number }) {
   const codeRef = useRef<HTMLDivElement>(null)
   const composing = useRef(false)
   const pendingBefore = useRef<Buffer | null>(null)
+  const lastNativeInput = useRef<{ ta: HTMLTextAreaElement; value: string; lines: string[] } | null>(null)
+  const afterComposition = useRef<(() => void) | null>(null)
+  const intentGuard = useRef(createIntentGuard())
+  const intentFrame = useRef(0)
+  const deferredInput = useRef<{ ta: HTMLTextAreaElement; finish: () => boolean; frame: number } | null>(null)
   const goal = useRef<number | undefined>(undefined)
   const highlightSeq = useRef(0)
   const fv = fileVersion.value
 
   function setSession(s: EditSession | null) {
     const prev = sessionRef.current
-    if (!s || !prev || s.path !== prev.path) generation.current++
+    if (!s || !prev || s.path !== prev.path) {
+      generation.current++
+      afterComposition.current = null
+      composing.current = false
+      pendingBefore.current = null
+      lastNativeInput.current = null
+      clearDeferredInput()
+      intentGuard.current.clear()
+    }
     sessionRef.current = s
     setSessionState(s)
     if (s?.buf.lines !== prev?.buf.lines || s?.baseHash !== prev?.baseHash) {
@@ -498,7 +512,7 @@ export function FileView({ path, line }: { path: string; line?: number }) {
       const ours = !t || t === document.body || t === codeRef.current || t.classList.contains('inline-input')
       if (!ours && t.closest('input, textarea, select, [contenteditable]')) return
       e.preventDefault()
-      setReview('draft')
+      runWhenComposed(() => setReview('draft'))
     }
     window.addEventListener('beforeunload', warn)
     window.addEventListener('keydown', save)
@@ -581,6 +595,67 @@ export function FileView({ path, line }: { path: string; line?: number }) {
 
   // Editing
 
+  function runWhenComposed(fn: () => void) {
+    if (composing.current) afterComposition.current = fn
+    else fn()
+  }
+
+  function clearDeferredInput() {
+    if (deferredInput.current) cancelAnimationFrame(deferredInput.current.frame)
+    deferredInput.current = null
+  }
+
+  function applyIntent(intent: Intent) {
+    switch (intent) {
+      case 'newline': apply(newline, 'other'); break
+      case 'joinBackward': apply(deleteBackward, isBlock(current().sel) ? 'other' : 'delete'); break
+      case 'joinForward': apply(deleteForward, isBlock(current().sel) ? 'other' : 'delete'); break
+      case 'indent': apply(indent, 'other'); break
+      case 'outdent': apply(outdent, 'other'); break
+      case 'undo': undoRedo(false); break
+      case 'redo': undoRedo(true); break
+    }
+  }
+
+  // An uncancelable boundary deletion may have no input event at all.
+  function deferJoin(ta: HTMLTextAreaElement, intent: Intent) {
+    clearDeferredInput()
+    const before = current()
+    const value = ta.value
+    const start = ta.selectionStart
+    const end = ta.selectionEnd
+    const gen = generation.current
+    const finish = () => {
+      clearDeferredInput()
+      const s = sessionRef.current
+      if (generation.current !== gen || !s || s.mode !== 'insert' || composing.current || inputEl.current !== ta ||
+          s.buf.lines !== before.lines || ta.value !== value || ta.selectionStart !== start || ta.selectionEnd !== end) return false
+      pendingBefore.current = null
+      applyIntent(intent)
+      return true
+    }
+    deferredInput.current = { ta, finish, frame: requestAnimationFrame(finish) }
+  }
+
+  // History events cannot always be canceled. The application owns history;
+  // restore its result after any native mutation instead of recording it again.
+  function ignoreNativeInput(ta: HTMLTextAreaElement) {
+    clearDeferredInput()
+    const gen = generation.current
+    const finish = () => {
+      clearDeferredInput()
+      const s = sessionRef.current
+      if (generation.current !== gen || !s || inputEl.current !== ta || composing.current) return false
+      const line = s.buf.sel.head.line
+      ta.value = s.buf.lines[line].slice(0, lineEnd(s.buf.lines[line]))
+      // LineInput also projects selections that span several rows onto this line.
+      setSession({ ...s, sync: s.sync + 1 })
+      pendingBefore.current = null
+      return true
+    }
+    deferredInput.current = { ta, finish, frame: requestAnimationFrame(finish) }
+  }
+
   /** The buffer with the caret the input actually shows; native keys move it without telling us. */
   function current(): Buffer {
     const s = sessionRef.current!
@@ -627,6 +702,7 @@ export function FileView({ path, line }: { path: string; line?: number }) {
   }
 
   function beginEdit(no?: number, col?: number, block: 'center' | 'nearest' = 'center') {
+    if (composing.current) { runWhenComposed(() => beginEdit(no, col, block)); return }
     if (!file || savingRef.current) return
     if (!sessionRef.current && (recoveryLoading.current || recovery)) {
       toast('端末の編集下書きを復元するか、破棄してください')
@@ -673,19 +749,37 @@ export function FileView({ path, line }: { path: string; line?: number }) {
   function keyDown(e: KeyboardEvent, ta: HTMLTextAreaElement) {
     const s = sessionRef.current
     if (!s || s.mode !== 'insert') return
-    // Keys that confirm or cancel an IME conversion belong to the IME.
-    if (e.isComposing || e.keyCode === 229) return
+    intentGuard.current.keydown()
+    cancelAnimationFrame(intentFrame.current)
+    intentFrame.current = requestAnimationFrame(() => intentGuard.current.clear())
+    const k: KeyInfo = { key: e.key, keyCode: e.keyCode, isComposing: e.isComposing,
+      shift: e.shiftKey, ctrl: e.ctrlKey, meta: e.metaKey, alt: e.altKey }
+    const intent = keydownIntent(k, composing.current)
+    if (intent === 'defer') {
+      if (composing.current) {
+        const requested = keydownIntent({ ...k, isComposing: false, keyCode: 0 }, false)
+        // IME Enter only confirms a candidate. An ordinary Enter received
+        // before compositionend, like Tab/history, waits for the committed value.
+        const enter = requested === 'newline' && !e.isComposing && e.keyCode !== 229
+        if (enter || requested === 'indent' || requested === 'outdent' || requested === 'undo' || requested === 'redo') {
+          e.preventDefault()
+          runWhenComposed(() => applyIntent(requested))
+        }
+      }
+      return
+    }
     const mod = e.ctrlKey || e.metaKey
     const key = e.key
     if (key !== 'ArrowUp' && key !== 'ArrowDown') goal.current = undefined
-    if (mod && !e.altKey && (key === 'z' || key === 'Z')) {
+    const cur = current()
+    const block = isBlock(cur.sel)
+    const head = cur.sel.head
+    const boundary = intent === 'joinBackward' ? head.col === 0 : head.col >= lineEnd(cur.lines[head.line])
+    if (intent !== 'native' &&
+        (intent !== 'joinBackward' && intent !== 'joinForward' || block || (isCollapsed(cur.sel) && boundary))) {
       e.preventDefault()
-      undoRedo(e.shiftKey)
-      return
-    }
-    if (e.ctrlKey && !e.metaKey && !e.altKey && key === 'y') {
-      e.preventDefault()
-      undoRedo(true)
+      intentGuard.current.mark(intent)
+      applyIntent(intent)
       return
     }
     if (mod && !e.altKey && key === 'a') {
@@ -695,34 +789,11 @@ export function FileView({ path, line }: { path: string; line?: number }) {
       return
     }
     if (mod || e.altKey) return
-    const cur = current()
-    const block = isBlock(cur.sel)
-    const head = cur.sel.head
     switch (key) {
       case 'Escape':
         e.preventDefault()
         if (block) collapseTo(cur, head)
         else toNormal(true)
-        return
-      case 'Enter':
-        e.preventDefault()
-        apply(newline, 'other')
-        return
-      case 'Tab':
-        e.preventDefault()
-        apply(e.shiftKey ? outdent : indent, 'other')
-        return
-      case 'Backspace':
-        if (block || (isCollapsed(cur.sel) && head.col === 0)) {
-          e.preventDefault()
-          apply(deleteBackward, block ? 'other' : 'delete')
-        }
-        return
-      case 'Delete':
-        if (block || (isCollapsed(cur.sel) && head.col >= lineEnd(cur.lines[head.line]))) {
-          e.preventDefault()
-          apply(deleteForward, block ? 'other' : 'delete')
-        }
         return
       case 'ArrowUp':
       case 'ArrowDown': {
@@ -774,13 +845,17 @@ export function FileView({ path, line }: { path: string; line?: number }) {
 
   function nativeInput(ta: HTMLTextAreaElement, inputType: string) {
     const s = sessionRef.current
-    if (!s || s.mode !== 'insert') return
+    if (!s || s.mode !== 'insert' || inputEl.current !== ta || composing.current) return
+    if (deferredInput.current?.ta === ta && deferredInput.current.finish()) return
     const l = s.buf.sel.head.line
     // The input never holds the CR a line keeps in a file with mixed line endings.
     const cr = s.buf.lines[l].slice(lineEnd(s.buf.lines[l]))
     const value = ta.value
+    const last = lastNativeInput.current
     const before: Buffer = pendingBefore.current ?? s.buf
     pendingBefore.current = null
+    // A multiline commit may move the buffer's caret before this input unmounts.
+    if (last?.ta === ta && last.value === value && last.lines === s.buf.lines) return
     goal.current = undefined
     if (value + cr === s.buf.lines[l]) return
     if (/[\r\n]/.test(value)) {
@@ -789,6 +864,7 @@ export function FileView({ path, line }: { path: string; line?: number }) {
       const lines = insertText(whole, value + cr).lines
       const pre = value.slice(0, ta.selectionStart).split(/\r\n|\r|\n/)
       const head = { line: l + pre.length - 1, col: pre[pre.length - 1].length }
+      lastNativeInput.current = { ta, value, lines }
       commit(before, { lines, sel: { anchor: head, head } }, 'other')
       return
     }
@@ -800,26 +876,58 @@ export function FileView({ path, line }: { path: string; line?: number }) {
       head: { line: l, col: backward ? ta.selectionStart : ta.selectionEnd },
     }
     const kind: EditKind = inputType.startsWith('delete') ? 'delete' : inputType === 'insertText' ? 'type' : 'other'
+    lastNativeInput.current = { ta, value, lines }
     // The input already shows this; do not write it back.
     commit(before, { lines, sel }, kind, { sync: false })
   }
 
   const inputHandlers: InputHandlers = {
     mounted(ta) {
+      if (!ta) {
+        clearDeferredInput()
+        afterComposition.current = null
+        composing.current = false
+        pendingBefore.current = null
+        lastNativeInput.current = null
+      }
       inputEl.current = ta
     },
     keyDown,
-    beforeInput(e) {
-      if (e.inputType === 'historyUndo' || e.inputType === 'historyRedo') {
-        e.preventDefault()
-        undoRedo(e.inputType === 'historyRedo')
+    keyUp() { intentGuard.current.clear() },
+    beforeInput(e, ta) {
+      if (!sessionRef.current || sessionRef.current.mode !== 'insert') return
+      if (composing.current || e.isComposing) {
+        if (composing.current && (e.inputType === 'historyUndo' || e.inputType === 'historyRedo')) {
+          runWhenComposed(() => undoRedo(e.inputType === 'historyRedo'))
+        }
         return
       }
       if (savingRef.current) {
-        e.preventDefault()
+        if (e.cancelable) e.preventDefault()
         return
       }
-      if (!composing.current) pendingBefore.current = current()
+      // Classify the echo independently of the caret the keydown already moved.
+      const echo = beforeInputIntent(e.inputType, true, false, { collapsed: true, atStart: true, atEnd: true, block: false })
+      if (intentGuard.current.consume(echo)) {
+        if (e.cancelable) e.preventDefault()
+        else ignoreNativeInput(ta)
+        return
+      }
+      const cur = current()
+      const intent = beforeInputIntent(e.inputType, e.cancelable, false, {
+        collapsed: isCollapsed(cur.sel), block: isBlock(cur.sel),
+        atStart: cur.sel.head.col === 0, atEnd: cur.sel.head.col >= lineEnd(cur.lines[cur.sel.head.line]),
+      })
+      if (intent === 'native') { pendingBefore.current = cur; return }
+      if (intent === 'defer') {
+        pendingBefore.current = cur
+        deferJoin(ta, e.inputType === 'deleteContentBackward' ? 'joinBackward' : 'joinForward')
+        return
+      }
+      pendingBefore.current = null
+      if (e.cancelable) e.preventDefault()
+      applyIntent(intent)
+      if (!e.cancelable) ignoreNativeInput(ta)
     },
     input: nativeInput,
     paste(e) {
@@ -835,16 +943,26 @@ export function FileView({ path, line }: { path: string; line?: number }) {
       if (cut) apply(deleteSelection, 'other')
     },
     compositionStart() {
-      composing.current = true
+      clearDeferredInput()
+      intentGuard.current.clear()
+      afterComposition.current = null
       const s = sessionRef.current
       if (!s) return
       // A conversion cannot replace several lines; drop the selection to the caret.
       if (isBlock(s.buf.sel)) setSession({ ...s, buf: { lines: s.buf.lines, sel: caretAt(s.buf.sel.head.line, s.buf.sel.head.col) } })
       pendingBefore.current = current()
+      composing.current = true
     },
     compositionEnd(ta) {
       composing.current = false
       nativeInput(ta, 'insertCompositionText')
+      const pending = afterComposition.current
+      afterComposition.current = null
+      const gen = generation.current
+      // Let the trailing input see the committed value before undo/move rewrites it.
+      queueMicrotask(() => {
+        if (generation.current === gen && sessionRef.current && !composing.current) pending?.()
+      })
     },
     mouseDown() {
       // A click inside the line ends a selection that spans lines; the click then places the caret.
@@ -857,7 +975,7 @@ export function FileView({ path, line }: { path: string; line?: number }) {
       const buf = current()
       setTimeout(() => {
         const now = sessionRef.current
-        if (!now || now.mode !== 'insert' || !document.hasFocus()) return
+        if (!now || now.mode !== 'insert' || composing.current || !document.hasFocus()) return
         if ((document.activeElement as HTMLElement | null)?.classList.contains('inline-input')) return
         setSession({ ...now, buf: now.buf.lines === buf.lines ? buf : now.buf, mode: 'normal' })
       }, 0)
@@ -917,9 +1035,12 @@ export function FileView({ path, line }: { path: string; line?: number }) {
       // In insert mode a click moves the caret to that line instead of selecting text.
       e.preventDefault()
       const col = colFromPoint(e.currentTarget as HTMLElement, e.clientX, e.clientY, lineEnd(s.buf.lines[no - 1]))
-      const cur = current()
-      const head = { line: no - 1, col }
-      commit(cur, { lines: cur.lines, sel: { anchor: e.shiftKey ? cur.sel.anchor : head, head } }, null)
+      const shift = e.shiftKey
+      runWhenComposed(() => {
+        const cur = current()
+        const head = { line: no - 1, col: Math.min(col, lineEnd(cur.lines[no - 1])) }
+        commit(cur, { lines: cur.lines, sel: { anchor: shift ? cur.sel.anchor : head, head } }, null)
+      })
     },
     textDblClick(e, no) {
       if (sessionRef.current?.mode === 'insert') return
@@ -948,7 +1069,8 @@ export function FileView({ path, line }: { path: string; line?: number }) {
       input: {
         mounted: (ta) => input().mounted(ta),
         keyDown: (e, ta) => input().keyDown(e, ta),
-        beforeInput: (e) => input().beforeInput(e),
+        keyUp: () => input().keyUp(),
+        beforeInput: (e, ta) => input().beforeInput(e, ta),
         input: (ta, type) => input().input(ta, type),
         paste: (e) => input().paste(e),
         copy: (e, cut) => input().copy(e, cut),
@@ -1205,7 +1327,7 @@ export function FileView({ path, line }: { path: string; line?: number }) {
             error={editError}
             unknown={!!unknownSave}
             onCheckServer={() => void checkServer()}
-            onReview={() => setReview('draft')}
+            onReview={() => runWhenComposed(() => setReview('draft'))}
             onDiscard={() => discard(true)}
             onShowExternal={() => setReview('external')}
             onReload={() => void reload()}

@@ -19,7 +19,8 @@ export interface RowHandlers {
 export interface InputHandlers {
   mounted(ta: HTMLTextAreaElement | null): void
   keyDown(e: KeyboardEvent, ta: HTMLTextAreaElement): void
-  beforeInput(e: InputEvent): void
+  keyUp(): void
+  beforeInput(e: InputEvent, ta: HTMLTextAreaElement): void
   input(ta: HTMLTextAreaElement, inputType: string): void
   paste(e: ClipboardEvent): void
   copy(e: ClipboardEvent, cut: boolean): void
@@ -226,7 +227,7 @@ function LineInput({ text, state, handlers }: { text: string; state: InputState;
       row?.removeAttribute('data-composing')
       handlers.compositionEnd(ta)
     }
-    const before = (e: Event) => handlers.beforeInput(e as InputEvent)
+    const before = (e: Event) => handlers.beforeInput(e as InputEvent, ta)
     ta.addEventListener('compositionstart', start)
     ta.addEventListener('compositionend', end)
     ta.addEventListener('beforeinput', before)
@@ -261,6 +262,7 @@ function LineInput({ text, state, handlers }: { text: string; state: InputState;
       readOnly={state.readOnly}
       aria-label="行を編集"
       onKeyDown={(e) => handlers.keyDown(e, e.currentTarget)}
+      onKeyUp={() => handlers.keyUp()}
       onInput={(e) => {
         if (composing.current || (e as InputEvent).isComposing) return
         handlers.input(e.currentTarget, (e as InputEvent).inputType ?? '')
