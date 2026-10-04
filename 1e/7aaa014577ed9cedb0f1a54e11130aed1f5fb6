@@ -1,0 +1,21 @@
+internal/server/hub_test.go
+  s_c3b51d49fbe173::t_3720335e572792 1-212
+internal/server/server.go
+  s_c3b51d49fbe173::t_3720335e572792 635-638,666-668,682,685-687
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "1e7aaa014577ed9cedb0f1a54e11130aed1f5fb6",
+  "prompts": {},
+  "sessions": {
+    "s_c3b51d49fbe173": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a104d0-9f12-78b2-8e4f-7a0574104296",
+        "model": "gpt-6-astra"
+      },
+      "human_author": "Yoshi Yamaguchi <ymotongpoo@gmail.com>"
+    }
+  }
+}
