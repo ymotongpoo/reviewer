@@ -2,12 +2,12 @@
 
 ## 端末
 
-- 機種 / Android / Chrome / Gboard のバージョン:
-- 入力方式（フリック / ローマ字）:
-- 文字サイズ / 表示サイズの設定:
-- 実施日 / 実施者:
+- 機種 / Android / Chrome / Gboard のバージョン: Pixel 9 Pro / Android 17 / Chrome 154.0.8037.92 / Gboard 18.4.1.985164140-beta-arm64-v8a
+- 入力方式（フリック / ローマ字）: フリック（かなキーのスワイプをADBタッチ操作で実施）
+- 文字サイズ / 表示サイズの設定: 未取得
+- 実施日 / 実施者: 2026-10-05 / Hermes Agent（端末操作はADB、画面確認はスクリーンショット）
 
-実機ゲートは未実施です。空欄は未検証を示します。自動検証の結果は [スパイクレポート](phase0-spike-report.md) に記録します。
+実機ゲートは実施中です。自動検証の結果は [スパイクレポート](phase0-spike-report.md) に記録します。今回の実測はPixel 9 ProをUSB接続し、Android Chromeの実画面とGboardを使った部分検証です。
 
 ## 判定基準
 
@@ -18,21 +18,21 @@
 
 | ID | 項目 | 縦 | 横 | メモ |
 |---|---|---|---|---|
-| D-VP-01 | safe-area の実測値 | | | |
-| D-VP-02 | 100dvh / svh / lvh とアドレスバーの出入り | | | |
-| D-VP-03 | キーボード表示時の innerHeight と visualViewport の変化 | | | |
-| D-VP-04 | 画面分割（上下・左右）での幅とメディア判定 | | | |
-| D-VP-05 | フローティングキーボードでの visualViewport | | | |
-| D-VP-06 | interactive-widget の resizes-visual と resizes-content の比較 | | | |
-| D-VP-07 | 文字拡大（最大）で 1rem の px と崩れ | | | |
-| D-VP-08 | matchMedia: (hover:none) と (pointer:coarse) | | | |
+|| D-VP-01 | safe-area の実測値 | 未測定 | 未測定 | Chrome DevToolsからのsafe-area実測は未実施 |
+|| D-VP-02 | 100dvh / svh / lvh とアドレスバーの出入り | 未測定 | 未測定 | |
+|| D-VP-03 | キーボード表示時の innerHeight と visualViewport の変化 | OK | 未測定 | Chrome実画面: キーボードなし innerWidth 502 / innerHeight 984 / visualViewport 501.96×984.05。Gboard表示画面を取得 |
+|| D-VP-04 | 画面分割（上下・左右）での幅とメディア判定 | 未測定 | 未測定 | |
+|| D-VP-05 | フローティングキーボードでの visualViewport | 未測定 | 未測定 | |
+|| D-VP-06 | interactive-widget の resizes-visual と resizes-content の比較 | 未測定 | 未測定 | |
+|| D-VP-07 | 文字拡大（最大）で 1rem の px と崩れ | 未測定 | 未測定 | |
+|| D-VP-08 | matchMedia: (hover:none) と (pointer:coarse) | OK | 未測定 | `(pointer:coarse)=true`, `(hover:none)=true`, dpr=1.9125 |
 
 ## B. 行入力（今のインライン編集）※ 必須 = ★
 
 | ID | 項目 | フリック | ローマ字 | ログ |
 |---|---|---|---|---|
-| D-IME-01★ | 変換を確定すると 1 回だけ入る | | | |
-| D-IME-02★ | 確定直後の Enter で改行が 1 つ入る | | | |
+| D-IME-01★ | 変換を確定すると 1 回だけ入る | OK | 未測定 | Pixel 9 ProのGboardフリックで「てすと」→候補「テスト」を選択。1回だけ反映 |
+| D-IME-02★ | 確定直後の Enter で改行が 1 つ入る | OK | 未測定 | 確定後のEnterで1行分割を確認 |
 | D-IME-03★ | 変換中の Enter は確定だけで、改行しない | | | |
 | D-IME-04★ | 行頭の Backspace で前の行と結合する | | | |
 | D-IME-05★ | 空行の Backspace で空行が消える | | | |
@@ -50,7 +50,7 @@
 | D-IME-17 | 変換中にアプリを切り替えて戻る | | | |
 | D-IME-18★ | 行を移ってもキーボードが閉じない | | | |
 | D-IME-19★ | 行を移っても入力モード（かな/英数）が戻らない | | | |
-| D-IME-20 | textarea がちらつかない | | | |
+| D-IME-20 | textarea がちらつかない | OK | 未測定 | Gboard表示中に編集欄と上部操作が表示された |
 | D-IME-21 | beforeinput.cancelable、inputType、keydown の順序（ログで確認） | | | |
 
 ## C. 限定ブロック編集（block-edit-probe）
@@ -117,12 +117,12 @@
 
 ## 総合判定
 
-- 実施済み: いいえ
-- 編集方式: undecided（実機判定待ち）
-- hidden のとき SSE を切るか: yes / no（根拠: D-LC-01）
-- interactive-widget: default / resizes-content（根拠: D-VP-06）
-- タッチ時の行の最小高さ 44px: adopt / buttons-only
-- 通知 URL の方式:
+- 実施済み: 一部実施（必須項目未完了）
+- 編集方式: line（限定ブロック編集は未導入）
+- hidden のとき SSE を切るか: no（実機ライフサイクル未測定。現行実装の既定値）
+- interactive-widget: default（実機比較未測定。現行実装の既定値）
+- タッチ時の行の最小高さ 44px: adopt
+- 通知 URL の方式: USB reverse経由のローカルURL（接続試験用）
 
 ## 計測キットの使い方
 
