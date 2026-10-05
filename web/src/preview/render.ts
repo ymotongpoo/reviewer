@@ -111,7 +111,7 @@ export async function renderInto(el: HTMLElement, src: string, renderer: Rendere
   el.querySelectorAll<HTMLImageElement>('img[src]').forEach((img) => {
     const src = img.getAttribute('src') ?? ''
     if (!projectId || !src || /^(?:[a-z][a-z\d+.-]*:|\/\/|#)/i.test(src)) return
-    const base = path.split('/').slice(0, -1)
+    const base = src.startsWith('/') ? [] : path.split('/').slice(0, -1)
     for (const part of src.split('/')) {
       if (!part || part === '.') continue
       if (part === '..') base.pop()
