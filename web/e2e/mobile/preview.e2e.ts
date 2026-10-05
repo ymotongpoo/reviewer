@@ -1,7 +1,18 @@
-import { writeFile } from 'node:fs/promises'
+import { mkdir, writeFile } from 'node:fs/promises'
 import { join } from 'node:path'
 import { test, expect } from '../support/fixtures'
 
+test('preview resolves relative images through the project asset endpoint', async ({ page, project, openFile }) => {
+  await mkdir(join(project.dir, 'docs'), { recursive: true })
+  const png = Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII=', 'base64')
+  await writeFile(join(project.dir, 'docs', 'pixel.png'), png)
+  await writeFile(join(project.dir, 'docs', 'readme.md'), '![pixel](pixel.png)\n')
+  await openFile('docs/readme.md')
+  await page.locator('.file-preview-toggle').tap()
+  const image = page.locator('.preview-pane img').first()
+  await expect(image).toHaveAttribute('src', /\/api\/asset\?path=docs%2Fpixel\.png/)
+  await expect.poll(() => image.evaluate((el: HTMLImageElement) => el.naturalWidth)).toBeGreaterThan(0)
+})
 test('C11 preview tabs preserve scroll ratio and source draft; larger widths retain split panes', async ({ page, project, openFile }, info) => {
   await writeFile(join(project.dir, 'tabs.md'), Array.from({ length: 80 }, (_, i) => `## 見出し ${i}\n\n説明文です。\n`).join('\n'))
   await openFile('tabs.md')

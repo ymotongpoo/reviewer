@@ -12,6 +12,7 @@ import {
   draftStore,
   editing,
   fileVersion,
+  info,
   setAnnotationSeverity,
   setShowDismissedAnnotations,
   showDismissedAnnotations,
@@ -468,6 +469,10 @@ export function FileView({ path, line }: { path: string; line?: number }) {
     setFreshAnnotations((prev) => new Set([...prev, ...unseenIds]))
     markSeen(unseenIds)
   }, [unseenIds.join(',')])
+
+  useEffect(() => {
+    markSeen([`changed:${info.value?.round ?? 0}:${path}`])
+  }, [path])
 
   useEffect(() => {
     const ids = fileComments.map((c) => `comment:${c.id}`)

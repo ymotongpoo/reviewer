@@ -85,14 +85,15 @@ export function Tree() {
     if (c.path && c.status !== 'resolved' && !isSeen(`comment:${c.id}`)) humanCounts.set(c.path, (humanCounts.get(c.path) ?? 0) + 1)
   }
   const unresolved = (f: TreeFile) => humanCounts.get(f.path) ?? 0
+  const isChanged = (f: TreeFile) => f.changed && !isSeen(`changed:${info.value?.round ?? 0}:${f.path}`)
 
   const files = tree.value.filter(
     (f) =>
       (!filter || f.path.toLowerCase().includes(filter.toLowerCase())) &&
-      (!onlyChanged || !hasBase || f.changed || f.new) &&
+      (!onlyChanged || !hasBase || isChanged(f) || f.new) &&
       (!onlyCommented || unresolved(f) > 0 || (annotationCounts.get(f.path) ?? 0) > 0),
   )
-  const root = useMemo(() => build(files), [files.map((f) => `${f.path}${unresolved(f)}${f.changed}${f.new}`).join('|')])
+  const root = useMemo(() => build(files), [files.map((f) => `${f.path}${unresolved(f)}${isChanged(f)}${f.new}`).join('|')])
   const projectCount = comments.value.filter((c) => c.scope === 'project' && c.status !== 'resolved').length
   const current = route.value.page === 'file' ? route.value.path : null
 
@@ -145,7 +146,7 @@ export function Tree() {
           >
             <span class="name">{f.path.split('/').pop()}</span>
             {f.new && <span class="mark new" title="前回の提出後に追加されたファイル">新規</span>}
-            {f.changed && <span class="mark changed" title="前回の提出後に変更されたファイル">●</span>}
+            {isChanged(f) && <span class="mark changed" title="前回の提出後に変更されたファイル">●</span>}
             {unresolved(f) > 0 && (
               <span
                 class="count comment-list-trigger"
