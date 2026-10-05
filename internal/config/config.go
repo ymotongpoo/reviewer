@@ -67,9 +67,10 @@ type Config struct {
 	// DataDir is where review data is stored. Relative paths are resolved
 	// against the project root. The special value "xdg" selects
 	// $XDG_DATA_HOME/reviewer/<project>-<hash>.
-	DataDir string `toml:"data_dir"`
-	Port    int    `toml:"port"`
-	Bind    string `toml:"bind"`
+	DataDir   string `toml:"data_dir"`
+	Port      int    `toml:"port"`
+	Bind      string `toml:"bind"`
+	PublicURL string `toml:"public_url"`
 	// Roots limits the directories the server may open ("~" = home).
 	Roots          []string `toml:"roots"`
 	Exclude        []string `toml:"exclude"`
@@ -233,7 +234,7 @@ func Load(root, projectPath string) (Config, error) {
 }
 
 // LoadGlobal reads the defaults and the global file only; it holds the
-// server-wide settings (port, bind, roots, agent).
+// server-wide settings (port, bind, public URL, roots, agent).
 func LoadGlobal(path string) (Config, error) {
 	c := Default()
 	if path == "" {

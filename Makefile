@@ -24,6 +24,10 @@ test:
 	go test ./...
 	cd web && npm run typecheck
 
+.PHONY: e2e
+e2e:
+	cd web && npm run e2e
+
 install: web
 	go install ./cmd/reviewer
 

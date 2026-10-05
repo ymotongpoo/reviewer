@@ -1,3 +1,4 @@
+import { Portal } from './Portal'
 import { useEffect, useState } from 'preact/hooks'
 import { api, ApiError } from '../api'
 import { copyText } from '../clipboard'
@@ -174,6 +175,7 @@ function GitDialog({ onClose }: { onClose: () => void }) {
 
   const working = busy === 'commit' || busy === 'push'
   return (
+    <Portal onClose={() => { if (!working) onClose() }}>
     <div class="modal-backdrop" onClick={(e) => e.target === e.currentTarget && !working && onClose()}>
       <div class="modal git-modal" role="dialog" aria-modal="true" aria-labelledby="git-title">
         {loadError && <div class="banner error">{loadError}</div>}
@@ -265,6 +267,7 @@ function GitDialog({ onClose }: { onClose: () => void }) {
         )}
       </div>
     </div>
+    </Portal>
   )
 }
 

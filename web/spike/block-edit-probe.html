@@ -1,0 +1,28 @@
+<!doctype html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <link rel="icon" href="data:,">
+  <title>限定ブロック編集の計測</title>
+  <link rel="stylesheet" href="/src/style.css">
+  <style>
+    body { overflow: auto; }
+    .probe-toolbar { padding: 16px; }
+    .probe-toolbar button, .block-actions button { min-height: 44px; margin: 4px; }
+    .code .row .ln .edit-marker { display: block; }
+    .block-editor { margin-left: 56px; }
+    .block-editor textarea { display: block; width: calc(100% - 16px); font: inherit; line-height: inherit; min-height: 120px; }
+  </style>
+</head>
+<body>
+  <div class="probe-toolbar">
+    <h1>限定ブロック編集の計測</h1>
+    <p>✎ で空行までの範囲を編集します。上下それぞれ最大10行です。</p>
+    <button id="undo">元に戻す</button>
+    <output id="result" aria-live="polite"></output>
+  </div>
+  <div class="file-view wrap"><div class="code" id="lines"></div></div>
+  <script type="module" src="/src/spike/block-edit-probe.ts"></script>
+</body>
+</html>

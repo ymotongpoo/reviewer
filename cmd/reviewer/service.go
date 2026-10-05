@@ -167,6 +167,7 @@ func printURLs(port int, bind string) error {
 		addrs = interfaceAddrs()
 	}
 	urls := accessURLs(host, port, token, hostname(), addrs)
+	urls = preferPublicURL(cfg.PublicURL, token, urls)
 	fmt.Printf("Open: %s\n", urls[0])
 	for _, u := range urls[1:] {
 		fmt.Printf("      %s\n", u)

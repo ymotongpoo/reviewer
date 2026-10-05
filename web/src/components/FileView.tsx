@@ -1,9 +1,15 @@
 import { Fragment } from 'preact'
-import { useEffect, useMemo, useRef, useState } from 'preact/hooks'
-import { api, ApiError } from '../api'
+import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'preact/hooks'
+import { isCompact, isNarrow, isTouchUI } from '../media'
+import { useDismiss } from './Sheet'
+import { isValid, lineRange, tapLine, type SelToken, type TouchSel } from '../touchselect'
+import { SelectionBar } from './SelectionBar'
+import { api, ApiError, projectId } from '../api'
+import { afterSave, classifySaveError, restorePlan, shouldDropEditDraft, type EditDraft } from '../drafts'
 import {
   annotationSeverity,
   comments,
+  draftStore,
   editing,
   fileVersion,
   setAnnotationSeverity,
@@ -15,6 +21,7 @@ import {
 import { tokenize, type Token } from '../highlight'
 import { addNavigationGuard } from '../router'
 import { copyText } from '../clipboard'
+import { beforeInputIntent, createIntentGuard, keydownIntent, type Intent, type KeyInfo } from '../inputintent'
 import {
   caretAt,
   deleteBackward,
@@ -68,6 +75,7 @@ interface Selection {
  * hash and the server refuses to overwrite.
  */
 interface EditSession {
+  rev: number
   path: string
   baseHash: string
   baseContent: string
@@ -86,6 +94,7 @@ interface EditSession {
 function startSession(path: string, file: FileData): EditSession {
   const { format, lines } = parseContent(file.content)
   return {
+    rev: 0,
     path,
     baseHash: file.hash,
     baseContent: file.content,
@@ -105,7 +114,14 @@ function draftContent(s: EditSession): string {
 }
 
 function isDirty(s: EditSession): boolean {
-  return s.buf.lines !== s.baseLines && draftContent(s) !== s.baseContent
+  return s.buf.lines !== s.baseLines && !shouldDropEditDraft(s.baseContent, draftContent(s))
+}
+
+interface EditAttempt {
+  generation: number
+  path: string
+  content: string
+  sentRev: number
 }
 
 function isBlock(sel: Sel): boolean {
@@ -132,6 +148,33 @@ export function FileView({ path, line }: { path: string; line?: number }) {
       return false
     }
   })
+  const compact = isCompact.value
+  const narrow = isNarrow.value
+  const [optionsOpen, setOptionsOpen] = useState(false)
+  const optionsRef = useDismiss(narrow && optionsOpen, () => setOptionsOpen(false), { returnTo: '.file-menu-toggle' })
+  useLayoutEffect(() => {
+    if (narrow && optionsOpen) document.getElementById('file-options')?.focus({ preventScroll: true })
+  }, [narrow, optionsOpen])
+  const [previewTab, setPreviewTab] = useState<'source' | 'preview'>('source')
+  const tabScroll = useRef<number | null>(null)
+  useEffect(() => { setOptionsOpen(false); setPreviewTab('source') }, [path])
+  useEffect(() => { if (!narrow) setOptionsOpen(false) }, [narrow])
+  useLayoutEffect(() => {
+    const main = document.querySelector<HTMLElement>('.main')
+    if (main && tabScroll.current !== null) {
+      main.scrollTop = tabScroll.current * Math.max(0, main.scrollHeight - main.clientHeight)
+      if (previewTab !== 'preview' || !main.querySelector('.preview-pane .spinner')) tabScroll.current = null
+    }
+  }, [previewTab])
+  function switchTab(next: 'source' | 'preview') {
+    if (next === previewTab) return
+    const main = document.querySelector<HTMLElement>('.main')
+    if (main) tabScroll.current = main.scrollTop / Math.max(1, main.scrollHeight - main.clientHeight)
+    cancelSelectionRead()
+    setTouchSel({ kind: 'none' })
+    window.getSelection()?.removeAllRanges()
+    setPreviewTab(next)
+  }
   const [scrollRatio, setScrollRatio] = useState(0)
   // Tokens, and the draft lines they were computed from while editing.
   const [hl, setHl] = useState<{ tokens?: Token[][]; lines?: string[] }>({})
@@ -140,26 +183,94 @@ export function FileView({ path, line }: { path: string; line?: number }) {
   const [review, setReview] = useState<'draft' | 'external' | null>(null)
   const [editError, setEditError] = useState<EditError | null>(null)
   const [saving, setSaving] = useState(false)
+  const [recovery, setRecovery] = useState<EditDraft | null>(null)
+  const [unknownSave, setUnknownSave] = useState<EditAttempt | null>(null)
   const [previewDraft, setPreviewDraft] = useState<string | null>(null)
   const [sel, setSel] = useState<Selection | null>(null)
+  const [touchSel, setTouchSel] = useState<TouchSel>({ kind: 'none' })
+  const selectionTimer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined)
+  const touchUI = isTouchUI.value
   // AI annotations remain expanded until they are adopted or dismissed.
   const [annotationToggles, setAnnotationToggles] = useState<Map<number, boolean>>(new Map())
   const dragging = useRef(false)
   const lastPath = useRef(path)
   const sessionRef = useRef<EditSession | null>(null)
   const savingRef = useRef(false)
+  const unknownRef = useRef<EditAttempt | null>(null)
+  const generation = useRef(0)
+  const recoveryLoading = useRef(true)
+  const journalTimer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined)
   const inputEl = useRef<HTMLTextAreaElement | null>(null)
   const codeRef = useRef<HTMLDivElement>(null)
   const composing = useRef(false)
   const pendingBefore = useRef<Buffer | null>(null)
+  const lastNativeInput = useRef<{ ta: HTMLTextAreaElement; value: string; lines: string[] } | null>(null)
+  const afterComposition = useRef<(() => void) | null>(null)
+  const intentGuard = useRef(createIntentGuard())
+  const intentFrame = useRef(0)
+  const deferredInput = useRef<{ ta: HTMLTextAreaElement; finish: () => boolean; frame: number } | null>(null)
   const goal = useRef<number | undefined>(undefined)
   const highlightSeq = useRef(0)
   const fv = fileVersion.value
 
   function setSession(s: EditSession | null) {
+    const prev = sessionRef.current
+    if (!s || !prev || s.path !== prev.path) {
+      generation.current++
+      afterComposition.current = null
+      composing.current = false
+      pendingBefore.current = null
+      lastNativeInput.current = null
+      clearDeferredInput()
+      intentGuard.current.clear()
+    }
     sessionRef.current = s
     setSessionState(s)
+    if (s?.buf.lines !== prev?.buf.lines || s?.baseHash !== prev?.baseHash) {
+      clearTimeout(journalTimer.current)
+      if (s) journalTimer.current = setTimeout(() => void persistDraft(s), 500)
+    }
   }
+
+  function persistDraft(s: EditSession) {
+    const key = `${projectId}:${s.path}`
+    if (!isDirty(s)) return draftStore.del('edit', key)
+    const draft: EditDraft = {
+      path: s.path, baseHash: s.baseHash, baseContent: s.baseContent,
+      lines: s.buf.lines, savedAt: Date.now(), revision: s.rev,
+    }
+    return draftStore.put('edit', key, draft)
+  }
+
+  function flushDraft() {
+    clearTimeout(journalTimer.current)
+    const s = sessionRef.current
+    if (s) void persistDraft(s)
+  }
+
+  useEffect(() => {
+    const hidden = () => { if (document.visibilityState === 'hidden') flushDraft() }
+    document.addEventListener('visibilitychange', hidden)
+    window.addEventListener('pagehide', flushDraft)
+    return () => {
+      flushDraft()
+      generation.current++
+      document.removeEventListener('visibilitychange', hidden)
+      window.removeEventListener('pagehide', flushDraft)
+    }
+  }, [])
+
+  useEffect(() => {
+    let cancelled = false
+    recoveryLoading.current = true
+    setRecovery(null)
+    void draftStore.get<EditDraft>('edit', `${projectId}:${path}`).then((draft) => {
+      if (cancelled) return
+      recoveryLoading.current = false
+      if (!sessionRef.current) setRecovery(draft ?? null)
+    })
+    return () => { cancelled = true }
+  }, [path])
 
   /** Highlights content; only the latest request is applied. */
   function highlight(content: string, lines?: string[]) {
@@ -180,9 +291,14 @@ export function FileView({ path, line }: { path: string; line?: number }) {
       setSel(null)
       setFile(null)
       setHl({})
+      flushDraft()
       setSession(null)
       setReview(null)
       setEditError(null)
+      unknownRef.current = null
+      setUnknownSave(null)
+      savingRef.current = false
+      setSaving(false)
     }
     if (!pathChanged && fv.n > 0 && !fv.paths.includes(path) && !fv.paths.includes('*') && file) return
     ;(async () => {
@@ -210,6 +326,20 @@ export function FileView({ path, line }: { path: string; line?: number }) {
   const lines = useMemo(() => (file ? splitLines(file.content) : []), [file])
   const draftLines = session?.buf.lines
   const displayLines = draftLines ?? lines
+  const displayGen = useRef(0)
+  const displayed = useRef({ lines: displayLines, hash: file?.hash })
+  // A disk update also invalidates selections while an edit keeps its base hash.
+  if (displayed.current.lines !== displayLines || displayed.current.hash !== file?.hash) {
+    displayGen.current++
+    displayed.current = { lines: displayLines, hash: file?.hash }
+  }
+  const selectionToken: SelToken = { path, hash: session?.baseHash ?? file?.hash ?? '', gen: displayGen.current }
+  useLayoutEffect(() => {
+    if (!isValid(touchSel, selectionToken)) {
+      setTouchSel({ kind: 'none' })
+      toast('ファイルが更新されたため選択を解除しました')
+    }
+  }, [path, selectionToken.hash, selectionToken.gen, touchSel])
   const map = useMemo(
     () => (session ? mapLines(session.baseLines, session.buf.lines) : null),
     [session?.baseLines, draftLines],
@@ -297,11 +427,11 @@ export function FileView({ path, line }: { path: string; line?: number }) {
   // The new comment's range is in lines on disk; show it where those lines are now.
   const newLineAt = newLine ? { start: toDraft(newLine.start!), end: toDraft(newLine.end!) } : null
   // A new range comment shows its characters rather than whole lines.
-  const selRange = sel
+  const selRange = (isValid(touchSel, selectionToken) ? lineRange(touchSel) : null) ?? (sel
     ? [Math.min(sel.anchor, sel.focus), Math.max(sel.anchor, sel.focus)]
     : newLineAt?.start && newLineAt.end && !newLine?.range
       ? [newLineAt.start, newLineAt.end]
-      : null
+      : null)
 
   // Characters of range comments, by the row they are shown on.
   const diskText = useMemo(() => textLines(lines), [lines])
@@ -351,8 +481,14 @@ export function FileView({ path, line }: { path: string; line?: number }) {
         return null
       })
     }
+    // Cancelling pointerdown suppresses compatibility mouseup in Chromium.
+    const pointerUp = (e: PointerEvent) => { if (e.pointerType === 'mouse') up() }
     window.addEventListener('mouseup', up)
-    return () => window.removeEventListener('mouseup', up)
+    window.addEventListener('pointerup', pointerUp)
+    return () => {
+      window.removeEventListener('mouseup', up)
+      window.removeEventListener('pointerup', pointerUp)
+    }
   })
 
   // Leaving the file or the page with a draft asks first.
@@ -376,7 +512,7 @@ export function FileView({ path, line }: { path: string; line?: number }) {
       const ours = !t || t === document.body || t === codeRef.current || t.classList.contains('inline-input')
       if (!ours && t.closest('input, textarea, select, [contenteditable]')) return
       e.preventDefault()
-      setReview('draft')
+      runWhenComposed(() => setReview('draft'))
     }
     window.addEventListener('beforeunload', warn)
     window.addEventListener('keydown', save)
@@ -429,7 +565,96 @@ export function FileView({ path, line }: { path: string; line?: number }) {
     return selectionTarget(textLines(displayLines), a, b)
   }
 
+  function cancelSelectionRead() {
+    clearTimeout(selectionTimer.current)
+    selectionTimer.current = undefined
+  }
+
+  useLayoutEffect(() => {
+    if (!touchUI) return
+    if (session?.mode === 'insert') {
+      setTouchSel((s) => s.kind === 'text' ? { kind: 'none' } : s)
+      return
+    }
+    const onSelectionChange = () => {
+      cancelSelectionRead()
+      selectionTimer.current = setTimeout(() => {
+        const target = textSelection()
+        setTouchSel((s) => target?.range
+          ? { kind: 'text', target, token: selectionToken }
+          : s.kind === 'text' ? { kind: 'none' } : s)
+      }, 100)
+    }
+    document.addEventListener('selectionchange', onSelectionChange)
+    return () => {
+      document.removeEventListener('selectionchange', onSelectionChange)
+      // A pending read must not attach an old DOM selection to a new display.
+      cancelSelectionRead()
+    }
+  }, [touchUI, path, selectionToken.hash, selectionToken.gen, session?.mode])
+
   // Editing
+
+  function runWhenComposed(fn: () => void) {
+    if (composing.current) afterComposition.current = fn
+    else fn()
+  }
+
+  function clearDeferredInput() {
+    if (deferredInput.current) cancelAnimationFrame(deferredInput.current.frame)
+    deferredInput.current = null
+  }
+
+  function applyIntent(intent: Intent) {
+    switch (intent) {
+      case 'newline': apply(newline, 'other'); break
+      case 'joinBackward': apply(deleteBackward, isBlock(current().sel) ? 'other' : 'delete'); break
+      case 'joinForward': apply(deleteForward, isBlock(current().sel) ? 'other' : 'delete'); break
+      case 'indent': apply(indent, 'other'); break
+      case 'outdent': apply(outdent, 'other'); break
+      case 'undo': undoRedo(false); break
+      case 'redo': undoRedo(true); break
+    }
+  }
+
+  // An uncancelable boundary deletion may have no input event at all.
+  function deferJoin(ta: HTMLTextAreaElement, intent: Intent) {
+    clearDeferredInput()
+    const before = current()
+    const value = ta.value
+    const start = ta.selectionStart
+    const end = ta.selectionEnd
+    const gen = generation.current
+    const finish = () => {
+      clearDeferredInput()
+      const s = sessionRef.current
+      if (generation.current !== gen || !s || s.mode !== 'insert' || composing.current || inputEl.current !== ta ||
+          s.buf.lines !== before.lines || ta.value !== value || ta.selectionStart !== start || ta.selectionEnd !== end) return false
+      pendingBefore.current = null
+      applyIntent(intent)
+      return true
+    }
+    deferredInput.current = { ta, finish, frame: requestAnimationFrame(finish) }
+  }
+
+  // History events cannot always be canceled. The application owns history;
+  // restore its result after any native mutation instead of recording it again.
+  function ignoreNativeInput(ta: HTMLTextAreaElement) {
+    clearDeferredInput()
+    const gen = generation.current
+    const finish = () => {
+      clearDeferredInput()
+      const s = sessionRef.current
+      if (generation.current !== gen || !s || inputEl.current !== ta || composing.current) return false
+      const line = s.buf.sel.head.line
+      ta.value = s.buf.lines[line].slice(0, lineEnd(s.buf.lines[line]))
+      // LineInput also projects selections that span several rows onto this line.
+      setSession({ ...s, sync: s.sync + 1 })
+      pendingBefore.current = null
+      return true
+    }
+    deferredInput.current = { ta, finish, frame: requestAnimationFrame(finish) }
+  }
 
   /** The buffer with the caret the input actually shows; native keys move it without telling us. */
   function current(): Buffer {
@@ -453,6 +678,7 @@ export function FileView({ path, line }: { path: string; line?: number }) {
       ...s,
       buf: next,
       history,
+      rev: s.rev + (next.lines !== s.buf.lines ? 1 : 0),
       sync: opts.sync === false ? s.sync : s.sync + 1,
       revealBlock: 'nearest',
     })
@@ -472,11 +698,16 @@ export function FileView({ path, line }: { path: string; line?: number }) {
     const r = redoing ? redo(s.history, cur) : undo(s.history, cur)
     if (!r) return
     goal.current = undefined
-    setSession({ ...s, buf: r.buffer, history: r.history, sync: s.sync + 1, revealBlock: 'nearest' })
+    setSession({ ...s, buf: r.buffer, history: r.history, rev: s.rev + (r.buffer.lines !== s.buf.lines ? 1 : 0), sync: s.sync + 1, revealBlock: 'nearest' })
   }
 
   function beginEdit(no?: number, col?: number, block: 'center' | 'nearest' = 'center') {
+    if (composing.current) { runWhenComposed(() => beginEdit(no, col, block)); return }
     if (!file || savingRef.current) return
+    if (!sessionRef.current && (recoveryLoading.current || recovery)) {
+      toast('端末の編集下書きを復元するか、破棄してください')
+      return
+    }
     const s = sessionRef.current ?? startSession(path, file)
     const l = Math.max(0, Math.min((no ?? s.buf.sel.head.line + 1) - 1, s.buf.lines.length - 1))
     const end = lineEnd(s.buf.lines[l])
@@ -518,19 +749,37 @@ export function FileView({ path, line }: { path: string; line?: number }) {
   function keyDown(e: KeyboardEvent, ta: HTMLTextAreaElement) {
     const s = sessionRef.current
     if (!s || s.mode !== 'insert') return
-    // Keys that confirm or cancel an IME conversion belong to the IME.
-    if (e.isComposing || e.keyCode === 229) return
+    intentGuard.current.keydown()
+    cancelAnimationFrame(intentFrame.current)
+    intentFrame.current = requestAnimationFrame(() => intentGuard.current.clear())
+    const k: KeyInfo = { key: e.key, keyCode: e.keyCode, isComposing: e.isComposing,
+      shift: e.shiftKey, ctrl: e.ctrlKey, meta: e.metaKey, alt: e.altKey }
+    const intent = keydownIntent(k, composing.current)
+    if (intent === 'defer') {
+      if (composing.current) {
+        const requested = keydownIntent({ ...k, isComposing: false, keyCode: 0 }, false)
+        // IME Enter only confirms a candidate. An ordinary Enter received
+        // before compositionend, like Tab/history, waits for the committed value.
+        const enter = requested === 'newline' && !e.isComposing && e.keyCode !== 229
+        if (enter || requested === 'indent' || requested === 'outdent' || requested === 'undo' || requested === 'redo') {
+          e.preventDefault()
+          runWhenComposed(() => applyIntent(requested))
+        }
+      }
+      return
+    }
     const mod = e.ctrlKey || e.metaKey
     const key = e.key
     if (key !== 'ArrowUp' && key !== 'ArrowDown') goal.current = undefined
-    if (mod && !e.altKey && (key === 'z' || key === 'Z')) {
+    const cur = current()
+    const block = isBlock(cur.sel)
+    const head = cur.sel.head
+    const boundary = intent === 'joinBackward' ? head.col === 0 : head.col >= lineEnd(cur.lines[head.line])
+    if (intent !== 'native' &&
+        (intent !== 'joinBackward' && intent !== 'joinForward' || block || (isCollapsed(cur.sel) && boundary))) {
       e.preventDefault()
-      undoRedo(e.shiftKey)
-      return
-    }
-    if (e.ctrlKey && !e.metaKey && !e.altKey && key === 'y') {
-      e.preventDefault()
-      undoRedo(true)
+      intentGuard.current.mark(intent)
+      applyIntent(intent)
       return
     }
     if (mod && !e.altKey && key === 'a') {
@@ -540,34 +789,11 @@ export function FileView({ path, line }: { path: string; line?: number }) {
       return
     }
     if (mod || e.altKey) return
-    const cur = current()
-    const block = isBlock(cur.sel)
-    const head = cur.sel.head
     switch (key) {
       case 'Escape':
         e.preventDefault()
         if (block) collapseTo(cur, head)
         else toNormal(true)
-        return
-      case 'Enter':
-        e.preventDefault()
-        apply(newline, 'other')
-        return
-      case 'Tab':
-        e.preventDefault()
-        apply(e.shiftKey ? outdent : indent, 'other')
-        return
-      case 'Backspace':
-        if (block || (isCollapsed(cur.sel) && head.col === 0)) {
-          e.preventDefault()
-          apply(deleteBackward, block ? 'other' : 'delete')
-        }
-        return
-      case 'Delete':
-        if (block || (isCollapsed(cur.sel) && head.col >= lineEnd(cur.lines[head.line]))) {
-          e.preventDefault()
-          apply(deleteForward, block ? 'other' : 'delete')
-        }
         return
       case 'ArrowUp':
       case 'ArrowDown': {
@@ -619,13 +845,17 @@ export function FileView({ path, line }: { path: string; line?: number }) {
 
   function nativeInput(ta: HTMLTextAreaElement, inputType: string) {
     const s = sessionRef.current
-    if (!s || s.mode !== 'insert') return
+    if (!s || s.mode !== 'insert' || inputEl.current !== ta || composing.current) return
+    if (deferredInput.current?.ta === ta && deferredInput.current.finish()) return
     const l = s.buf.sel.head.line
     // The input never holds the CR a line keeps in a file with mixed line endings.
     const cr = s.buf.lines[l].slice(lineEnd(s.buf.lines[l]))
     const value = ta.value
+    const last = lastNativeInput.current
     const before: Buffer = pendingBefore.current ?? s.buf
     pendingBefore.current = null
+    // A multiline commit may move the buffer's caret before this input unmounts.
+    if (last?.ta === ta && last.value === value && last.lines === s.buf.lines) return
     goal.current = undefined
     if (value + cr === s.buf.lines[l]) return
     if (/[\r\n]/.test(value)) {
@@ -634,6 +864,7 @@ export function FileView({ path, line }: { path: string; line?: number }) {
       const lines = insertText(whole, value + cr).lines
       const pre = value.slice(0, ta.selectionStart).split(/\r\n|\r|\n/)
       const head = { line: l + pre.length - 1, col: pre[pre.length - 1].length }
+      lastNativeInput.current = { ta, value, lines }
       commit(before, { lines, sel: { anchor: head, head } }, 'other')
       return
     }
@@ -645,26 +876,58 @@ export function FileView({ path, line }: { path: string; line?: number }) {
       head: { line: l, col: backward ? ta.selectionStart : ta.selectionEnd },
     }
     const kind: EditKind = inputType.startsWith('delete') ? 'delete' : inputType === 'insertText' ? 'type' : 'other'
+    lastNativeInput.current = { ta, value, lines }
     // The input already shows this; do not write it back.
     commit(before, { lines, sel }, kind, { sync: false })
   }
 
   const inputHandlers: InputHandlers = {
     mounted(ta) {
+      if (!ta) {
+        clearDeferredInput()
+        afterComposition.current = null
+        composing.current = false
+        pendingBefore.current = null
+        lastNativeInput.current = null
+      }
       inputEl.current = ta
     },
     keyDown,
-    beforeInput(e) {
-      if (e.inputType === 'historyUndo' || e.inputType === 'historyRedo') {
-        e.preventDefault()
-        undoRedo(e.inputType === 'historyRedo')
+    keyUp() { intentGuard.current.clear() },
+    beforeInput(e, ta) {
+      if (!sessionRef.current || sessionRef.current.mode !== 'insert') return
+      if (composing.current || e.isComposing) {
+        if (composing.current && (e.inputType === 'historyUndo' || e.inputType === 'historyRedo')) {
+          runWhenComposed(() => undoRedo(e.inputType === 'historyRedo'))
+        }
         return
       }
       if (savingRef.current) {
-        e.preventDefault()
+        if (e.cancelable) e.preventDefault()
         return
       }
-      if (!composing.current) pendingBefore.current = current()
+      // Classify the echo independently of the caret the keydown already moved.
+      const echo = beforeInputIntent(e.inputType, true, false, { collapsed: true, atStart: true, atEnd: true, block: false })
+      if (intentGuard.current.consume(echo)) {
+        if (e.cancelable) e.preventDefault()
+        else ignoreNativeInput(ta)
+        return
+      }
+      const cur = current()
+      const intent = beforeInputIntent(e.inputType, e.cancelable, false, {
+        collapsed: isCollapsed(cur.sel), block: isBlock(cur.sel),
+        atStart: cur.sel.head.col === 0, atEnd: cur.sel.head.col >= lineEnd(cur.lines[cur.sel.head.line]),
+      })
+      if (intent === 'native') { pendingBefore.current = cur; return }
+      if (intent === 'defer') {
+        pendingBefore.current = cur
+        deferJoin(ta, e.inputType === 'deleteContentBackward' ? 'joinBackward' : 'joinForward')
+        return
+      }
+      pendingBefore.current = null
+      if (e.cancelable) e.preventDefault()
+      applyIntent(intent)
+      if (!e.cancelable) ignoreNativeInput(ta)
     },
     input: nativeInput,
     paste(e) {
@@ -680,16 +943,26 @@ export function FileView({ path, line }: { path: string; line?: number }) {
       if (cut) apply(deleteSelection, 'other')
     },
     compositionStart() {
-      composing.current = true
+      clearDeferredInput()
+      intentGuard.current.clear()
+      afterComposition.current = null
       const s = sessionRef.current
       if (!s) return
       // A conversion cannot replace several lines; drop the selection to the caret.
       if (isBlock(s.buf.sel)) setSession({ ...s, buf: { lines: s.buf.lines, sel: caretAt(s.buf.sel.head.line, s.buf.sel.head.col) } })
       pendingBefore.current = current()
+      composing.current = true
     },
     compositionEnd(ta) {
       composing.current = false
       nativeInput(ta, 'insertCompositionText')
+      const pending = afterComposition.current
+      afterComposition.current = null
+      const gen = generation.current
+      // Let the trailing input see the committed value before undo/move rewrites it.
+      queueMicrotask(() => {
+        if (generation.current === gen && sessionRef.current && !composing.current) pending?.()
+      })
     },
     mouseDown() {
       // A click inside the line ends a selection that spans lines; the click then places the caret.
@@ -702,7 +975,7 @@ export function FileView({ path, line }: { path: string; line?: number }) {
       const buf = current()
       setTimeout(() => {
         const now = sessionRef.current
-        if (!now || now.mode !== 'insert' || !document.hasFocus()) return
+        if (!now || now.mode !== 'insert' || composing.current || !document.hasFocus()) return
         if ((document.activeElement as HTMLElement | null)?.classList.contains('inline-input')) return
         setSession({ ...now, buf: now.buf.lines === buf.lines ? buf : now.buf, mode: 'normal' })
       }, 0)
@@ -710,8 +983,19 @@ export function FileView({ path, line }: { path: string; line?: number }) {
   }
 
   const rowHandlerImpl: Omit<RowHandlers, 'input'> = {
+    gutterTap(no) {
+      cancelSelectionRead()
+      toNormal(false)
+      if (mapRef.current?.changed[no - 1]) {
+        toast(CHANGED_LINE)
+        return
+      }
+      setTouchSel((s) => tapLine(s, no, selectionToken))
+    },
     gutterDown(e, no) {
       e.preventDefault()
+      cancelSelectionRead()
+      if (touchSel.kind !== 'none') setTouchSel({ kind: 'none' })
       // Text selected in the rows wins over the line; the gutter keeps the selection.
       const t = textSelection()
       if (t) {
@@ -734,6 +1018,8 @@ export function FileView({ path, line }: { path: string; line?: number }) {
       if (dragging.current) setSel((s) => (s ? { ...s, focus: no } : s))
     },
     editLine(no) {
+      cancelSelectionRead()
+      setTouchSel({ kind: 'none' })
       beginEdit(no)
     },
     toggleAnnotation(no) {
@@ -749,9 +1035,12 @@ export function FileView({ path, line }: { path: string; line?: number }) {
       // In insert mode a click moves the caret to that line instead of selecting text.
       e.preventDefault()
       const col = colFromPoint(e.currentTarget as HTMLElement, e.clientX, e.clientY, lineEnd(s.buf.lines[no - 1]))
-      const cur = current()
-      const head = { line: no - 1, col }
-      commit(cur, { lines: cur.lines, sel: { anchor: e.shiftKey ? cur.sel.anchor : head, head } }, null)
+      const shift = e.shiftKey
+      runWhenComposed(() => {
+        const cur = current()
+        const head = { line: no - 1, col: Math.min(col, lineEnd(cur.lines[no - 1])) }
+        commit(cur, { lines: cur.lines, sel: { anchor: shift ? cur.sel.anchor : head, head } }, null)
+      })
     },
     textDblClick(e, no) {
       if (sessionRef.current?.mode === 'insert') return
@@ -771,6 +1060,7 @@ export function FileView({ path, line }: { path: string; line?: number }) {
     const input = () => latest.current.input
     return {
       gutterDown: (e, no) => row().gutterDown(e, no),
+      gutterTap: (no) => row().gutterTap(no),
       rowEnter: (no) => row().rowEnter(no),
       editLine: (no) => row().editLine(no),
       toggleAnnotation: (no) => row().toggleAnnotation(no),
@@ -779,7 +1069,8 @@ export function FileView({ path, line }: { path: string; line?: number }) {
       input: {
         mounted: (ta) => input().mounted(ta),
         keyDown: (e, ta) => input().keyDown(e, ta),
-        beforeInput: (e) => input().beforeInput(e),
+        keyUp: () => input().keyUp(),
+        beforeInput: (e, ta) => input().beforeInput(e, ta),
         input: (ta, type) => input().input(ta, type),
         paste: (e) => input().paste(e),
         copy: (e, cut) => input().copy(e, cut),
@@ -791,32 +1082,101 @@ export function FileView({ path, line }: { path: string; line?: number }) {
     }
   }, [])
 
+  function ownsAttempt(attempt: EditAttempt) {
+    return generation.current === attempt.generation && sessionRef.current?.path === attempt.path
+  }
+
+  function saved(attempt: EditAttempt, hash: string) {
+    if (!ownsAttempt(attempt)) return
+    const s = sessionRef.current!
+    unknownRef.current = null
+    setUnknownSave(null)
+    setEditError(null)
+    setReview(null)
+    setFile({ path: attempt.path, content: attempt.content, hash })
+    if (afterSave(attempt.sentRev, s.rev) === 'clear') {
+      setSession(null)
+      void draftStore.del('edit', `${projectId}:${s.path}`)
+      highlight(attempt.content)
+    } else {
+      // A late input (including an IME commit) belongs to the next save.
+      const next = { ...s, baseHash: hash, baseContent: attempt.content, baseLines: parseContent(attempt.content).lines }
+      setSession(next)
+      flushDraft()
+    }
+    toast(`${attempt.path} を保存しました`, 'success')
+  }
+
   async function save() {
     const s = sessionRef.current
-    if (!s || savingRef.current) return
+    if (!s || savingRef.current || unknownRef.current) return
     const content = draftContent(s)
     if (content === s.baseContent) return
+    const sentRev = s.rev
+    const attempt: EditAttempt = { generation: generation.current, path: s.path, content, sentRev }
     savingRef.current = true
     setSaving(true)
     setEditError(null)
+    flushDraft()
     try {
       const res = await api.saveFile(s.path, content, s.baseHash)
-      // Adopt what was written; the watcher's refresh then finds the same hash.
-      if (sessionRef.current?.path === s.path) {
-        setSession(null)
-        setReview(null)
-        setFile({ path: s.path, content, hash: res.hash })
-        highlight(content)
-      }
-      toast(`${s.path} を保存しました`, 'success')
+      saved(attempt, res.hash)
     } catch (e) {
+      if (!ownsAttempt(attempt)) return
       const conflict = e instanceof ApiError && e.status === 409
-      setEditError({ message: e instanceof ApiError ? e.message : String(e), conflict })
-      if (conflict) api.file(s.path).then((f) => sessionRef.current?.path === s.path && setFile(f), () => {})
+      if (classifySaveError(e) === 'unknown') {
+        unknownRef.current = attempt
+        setUnknownSave(attempt)
+        setEditError({ message: '保存結果を確認できません。サーバーの内容を確認してください', conflict: false })
+      } else {
+        setEditError({ message: e instanceof ApiError ? e.message : String(e), conflict })
+      }
+      if (conflict) api.file(s.path).then((f) => ownsAttempt(attempt) && setFile(f), () => {})
     } finally {
-      savingRef.current = false
-      setSaving(false)
+      // Clearing this session also advances the generation. A different path
+      // can have its own request in flight, which this response must not unlock.
+      if (generation.current === attempt.generation || (!sessionRef.current && lastPath.current === attempt.path)) {
+        savingRef.current = false
+        setSaving(false)
+      }
     }
+  }
+
+  async function checkServer() {
+    const attempt = unknownRef.current
+    if (!attempt || savingRef.current || !ownsAttempt(attempt)) return
+    savingRef.current = true
+    setSaving(true)
+    try {
+      const f = await api.file(attempt.path)
+      if (!ownsAttempt(attempt)) return
+      if (f.content === attempt.content) saved(attempt, f.hash)
+      else {
+        setFile(f)
+        unknownRef.current = null
+        setUnknownSave(null)
+        setEditError({ message: 'サーバーの内容が送信した内容と一致しません', conflict: f.hash !== sessionRef.current!.baseHash })
+      }
+    } catch {
+      if (ownsAttempt(attempt)) setEditError({ message: '保存結果を確認できません。サーバーの内容を確認してください', conflict: false })
+    } finally {
+      if (generation.current === attempt.generation || (!sessionRef.current && lastPath.current === attempt.path)) {
+        savingRef.current = false
+        setSaving(false)
+      }
+    }
+  }
+
+  function restoreDraft() {
+    if (!recovery || !file || sessionRef.current) return
+    const s = startSession(path, { path, hash: recovery.baseHash, content: recovery.baseContent })
+    setSession({ ...s, buf: { lines: recovery.lines, sel: caretAt(0, 0) }, rev: recovery.revision })
+    setRecovery(null)
+  }
+
+  function discardRecovery() {
+    void draftStore.del('edit', `${projectId}:${path}`)
+    setRecovery(null)
   }
 
   function discard(ask: boolean): boolean {
@@ -824,6 +1184,9 @@ export function FileView({ path, line }: { path: string; line?: number }) {
     if (!s) return true
     if (ask && isDirty(s) && !confirm('編集内容を破棄しますか？')) return false
     setSession(null)
+    void draftStore.del('edit', `${projectId}:${s.path}`)
+    unknownRef.current = null
+    setUnknownSave(null)
     setReview(null)
     setEditError(null)
     if (file) highlight(file.content)
@@ -852,7 +1215,7 @@ export function FileView({ path, line }: { path: string; line?: number }) {
     }
   }
 
-  const conflict = !!session && !!file && file.hash !== session.baseHash && !saving
+  const conflict = !!session && !!file && restorePlan(session, file) === 'conflict' && !saving
   const hunks = useMemo(() => {
     if (!session || !review) return []
     if (review === 'draft') return diffHunks(session.baseLines, session.buf.lines)
@@ -883,10 +1246,12 @@ export function FileView({ path, line }: { path: string; line?: number }) {
   if (!file) return <div class="empty">読み込み中…</div>
 
   return (
-    <div class={`file-view ${wrap || showPreview ? 'wrap' : ''} ${showPreview ? 'split' : ''} ${session ? 'editing' : ''}`}>
-      <div class="file-head">
-        <span class="file-path">{path}</span>
+    <div class={`file-view ${wrap || showPreview ? 'wrap' : ''} ${showPreview ? 'split' : ''} ${showPreview && compact ? 'tabbed' : ''} ${session ? 'editing' : ''}`}>
+      <div class="file-head" ref={(el) => { optionsRef.current = el }}>
+        <span class="file-path" title={path}>{path}</span>
         <span class="spacer" />
+        <span id="file-options" role={narrow ? 'group' : undefined} aria-label={narrow ? 'ファイルの補助操作' : undefined}
+          tabIndex={narrow ? -1 : undefined} class={`file-options ${optionsOpen ? 'open' : ''}`} style={narrow ? undefined : { display: 'contents' }}>
         <select
           class="compact-select"
           aria-label="AI指摘の重要度"
@@ -907,23 +1272,7 @@ export function FileView({ path, line }: { path: string; line?: number }) {
           />{' '}
           却下済みも表示
         </label>
-        {isMarkdown(path) && (
-          <button
-            class={`btn small ${showPreview ? 'primary' : ''}`}
-            onClick={() => {
-              setPreview(!preview)
-              try {
-                localStorage.setItem('reviewer.preview', !preview ? '1' : '0')
-              } catch {
-                // storage unavailable
-              }
-            }}
-            title="右側にレンダリング結果を表示"
-          >
-            プレビュー
-          </button>
-        )}
-        <label class="toggle">
+        <label class="toggle file-wrap-toggle" style={narrow ? undefined : { order: 2 }}>
           <input
             type="checkbox"
             checked={wrap}
@@ -938,14 +1287,35 @@ export function FileView({ path, line }: { path: string; line?: number }) {
           />{' '}
           折り返し
         </label>
+        </span>
+        {isMarkdown(path) && (
+          <button
+            style={narrow ? undefined : { order: 1 }}
+            class={`btn small file-preview-toggle ${showPreview ? 'primary' : ''}`}
+            onClick={() => {
+              setPreview(!preview)
+              try {
+                localStorage.setItem('reviewer.preview', !preview ? '1' : '0')
+              } catch {
+                // storage unavailable
+              }
+            }}
+            aria-pressed={showPreview}
+            title={compact ? "ソースとプレビューのタブを表示" : "右側にレンダリング結果を表示"}
+          >
+            プレビュー
+          </button>
+        )}
         {!session && (
-          <button class="btn small" onClick={() => beginEdit(targetLine)} title="行の✎か本文のダブルクリックでも編集できます">
+          <button class="btn small file-edit-toggle" style={narrow ? undefined : { order: 3 }} onClick={() => { setPreviewTab('source'); beginEdit(targetLine) }} title="行の✎か本文のダブルクリックでも編集できます">
             編集
           </button>
         )}
-        <button class="btn small" onClick={() => (editing.value = { kind: 'new', scope: 'file', path })}>
+        <button class="btn small file-comment-toggle" style={narrow ? undefined : { order: 4 }} onClick={() => { setPreviewTab('source'); editing.value = { kind: 'new', scope: 'file', path } }}>
           ファイルにコメント
         </button>
+        <button class={`small file-menu-toggle ${narrow ? 'btn' : ''}`} style={{ display: narrow ? undefined : 'none' }} hidden={!narrow} aria-label="ファイルのその他の操作"
+          aria-controls="file-options" aria-expanded={optionsOpen} onClick={() => setOptionsOpen(!optionsOpen)}>⋯</button>
         {session && map && (
           <EditBar
             mode={session.mode}
@@ -955,7 +1325,9 @@ export function FileView({ path, line }: { path: string; line?: number }) {
             saving={saving}
             conflict={conflict}
             error={editError}
-            onReview={() => setReview('draft')}
+            unknown={!!unknownSave}
+            onCheckServer={() => void checkServer()}
+            onReview={() => runWhenComposed(() => setReview('draft'))}
             onDiscard={() => discard(true)}
             onShowExternal={() => setReview('external')}
             onReload={() => void reload()}
@@ -964,10 +1336,30 @@ export function FileView({ path, line }: { path: string; line?: number }) {
           />
         )}
       </div>
-      <CommentList path={path} />
+      {!session && recovery && recovery.path === path && (
+        <div class="banner warn edit-recovery">
+          <span>端末に保存された編集下書きがあります（{new Date(recovery.savedAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}）</span>
+          <button class="btn small" onClick={restoreDraft}>復元</button>
+          <button class="btn small" onClick={discardRecovery}>破棄</button>
+        </div>
+      )}
+      <CommentList path={path} revealSource={showPreview && compact ? () => setPreviewTab('source') : undefined} />
 
+      {showPreview && compact && <div class="preview-tabs" role="tablist" aria-label="ファイルの表示">
+        {(['source', 'preview'] as const).map((tab) => <button id={`file-tab-${tab}`} role="tab"
+          aria-selected={previewTab === tab} aria-controls={`file-panel-${tab}`} tabIndex={previewTab === tab ? 0 : -1}
+          onClick={() => switchTab(tab)} onKeyDown={(e) => {
+            if (!['ArrowLeft', 'ArrowRight', 'Home', 'End'].includes(e.key)) return
+            e.preventDefault()
+            const next = e.key === 'Home' ? 'source' : e.key === 'End' ? 'preview' : tab === 'source' ? 'preview' : 'source'
+            switchTab(next)
+            document.getElementById(`file-tab-${next}`)?.focus({ preventScroll: true })
+          }}>{tab === 'source' ? 'ソース' : 'プレビュー'}</button>)}
+      </div>}
       <div class="file-body">
-        <div class="file-src">
+        <div class="file-src" id="file-panel-source" role={showPreview && compact ? 'tabpanel' : undefined}
+          aria-labelledby={showPreview && compact ? 'file-tab-source' : undefined}
+          hidden={showPreview && compact && previewTab !== 'source'}>
           {(scopeFile.length > 0 || newFile || lost.length > 0 || lostAnnotations.length > 0 || (newLine && !newLineAt?.end)) && (
             <div class="file-comments">
               {scopeFile.map((c) => (
@@ -1024,6 +1416,7 @@ export function FileView({ path, line }: { path: string; line?: number }) {
                 <Fragment key={i}>
                   <CodeRow
                     no={no}
+                    touchUI={touchUI}
                     text={text}
                     tokens={tokens?.[i]}
                     verifyTokens={!!session}
@@ -1071,8 +1464,34 @@ export function FileView({ path, line }: { path: string; line?: number }) {
             {displayLines.length === 0 && <div class="empty">（空のファイル）</div>}
           </div>
         </div>
-        {showPreview && file && <Preview path={path} content={previewDraft ?? file.content} scrollRatio={scrollRatio} />}
+        {showPreview && file && <Preview path={path} content={previewDraft ?? file.content} scrollRatio={scrollRatio} tabbed={compact} hidden={compact && previewTab !== 'preview'} onReady={() => {
+          const main = document.querySelector<HTMLElement>('.main')
+          if (compact && previewTab === 'preview' && main && tabScroll.current !== null) {
+            main.scrollTop = tabScroll.current * Math.max(0, main.scrollHeight - main.clientHeight)
+            tabScroll.current = null
+          }
+        }} />}
       </div>
+      {touchUI && <SelectionBar selection={touchSel} insert={session?.mode === 'insert' || !!review || (showPreview && compact && previewTab === 'preview')}
+        onClear={() => { cancelSelectionRead(); setTouchSel({ kind: 'none' }) }}
+        onEdit={() => {
+          if (touchSel.kind === 'lines' && isValid(touchSel, selectionToken)) rowHandlerImpl.editLine(touchSel.anchor)
+        }}
+        onComment={() => {
+          if (!isValid(touchSel, selectionToken)) return
+          cancelSelectionRead()
+          if (touchSel.kind === 'text') {
+            const t = touchSel.target
+            if (openComposer(t.start, t.end, t.range)) {
+              setTouchSel({ kind: 'none' })
+              window.getSelection()?.removeAllRanges()
+            }
+            return
+          }
+          const range = lineRange(touchSel)
+          if (range && openComposer(...range)) setTouchSel({ kind: 'none' })
+        }}
+      />}
       {session && review && (
         <EditReview
           kind={review}
@@ -1081,6 +1500,7 @@ export function FileView({ path, line }: { path: string; line?: number }) {
           dirty={!!map?.dirty}
           saving={saving}
           conflict={conflict}
+          unknown={!!unknownSave}
           onClose={() => setReview(null)}
           onSave={() => void save()}
         />

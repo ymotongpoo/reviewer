@@ -16,7 +16,12 @@ function aiLocation(a: Annotation): string {
   return lineRange(a.loc.start, a.loc.end)
 }
 
-function jumpTo(id: string) {
+function jumpTo(id: string, revealSource?: () => void) {
+  if (revealSource) {
+    revealSource()
+    requestAnimationFrame(() => jumpTo(id))
+    return
+  }
   const element = document.getElementById(id)
   if (!element) return
   element.scrollIntoView({ behavior: 'smooth', block: 'center' })
@@ -24,9 +29,9 @@ function jumpTo(id: string) {
   window.setTimeout(() => element.classList.remove('comment-list-target'), 1400)
 }
 
-function HumanCard({ comment }: { comment: Comment }) {
+function HumanCard({ comment, revealSource }: { comment: Comment; revealSource?: () => void }) {
   return (
-    <button class="comment-list-card" onClick={() => jumpTo(`comment-${comment.id}`)}>
+    <button class="comment-list-card" onClick={() => jumpTo(`comment-${comment.id}`, revealSource)}>
       <div class="comment-list-card-head">
         <span class="cid">{comment.id}</span>
         <span class={`chip label-${comment.label}`}>{comment.label}</span>
@@ -39,9 +44,9 @@ function HumanCard({ comment }: { comment: Comment }) {
   )
 }
 
-function AnnotationCardItem({ annotation }: { annotation: Annotation }) {
+function AnnotationCardItem({ annotation, revealSource }: { annotation: Annotation; revealSource?: () => void }) {
   return (
-    <button class="comment-list-card" onClick={() => jumpTo(`annotation-${annotation.id}`)}>
+    <button class="comment-list-card" onClick={() => jumpTo(`annotation-${annotation.id}`, revealSource)}>
       <div class="comment-list-card-head">
         <span class="cid">{annotation.id}</span>
         <span class={`chip severity severity-${annotation.severity}`}>{severityText[annotation.severity]}</span>
@@ -57,7 +62,7 @@ function AnnotationCardItem({ annotation }: { annotation: Annotation }) {
   )
 }
 
-export function CommentList({ path }: { path: string }) {
+export function CommentList({ path, revealSource }: { path: string; revealSource?: () => void }) {
   const selection = commentListSelection.value
   if (!selection || selection.path !== path) return null
 
@@ -79,8 +84,8 @@ export function CommentList({ path }: { path: string }) {
       ) : (
         <div class="comment-list-items">
           {human
-            ? (items as Comment[]).map((c) => <HumanCard key={c.id} comment={c} />)
-            : (items as Annotation[]).map((a) => <AnnotationCardItem key={a.id} annotation={a} />)}
+            ? (items as Comment[]).map((c) => <HumanCard key={c.id} comment={c} revealSource={revealSource} />)
+            : (items as Annotation[]).map((a) => <AnnotationCardItem key={a.id} annotation={a} revealSource={revealSource} />)}
         </div>
       )}
     </section>

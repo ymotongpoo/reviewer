@@ -6,6 +6,7 @@ import { BOM, decodeMarks, splitMarked } from '../textrange'
 /** Callbacks shared by every row. The object must keep its identity across renders. */
 export interface RowHandlers {
   gutterDown(e: MouseEvent, no: number): void
+  gutterTap(no: number): void
   rowEnter(no: number): void
   editLine(no: number): void
   toggleAnnotation(no: number): void
@@ -18,7 +19,8 @@ export interface RowHandlers {
 export interface InputHandlers {
   mounted(ta: HTMLTextAreaElement | null): void
   keyDown(e: KeyboardEvent, ta: HTMLTextAreaElement): void
-  beforeInput(e: InputEvent): void
+  keyUp(): void
+  beforeInput(e: InputEvent, ta: HTMLTextAreaElement): void
   input(ta: HTMLTextAreaElement, inputType: string): void
   paste(e: ClipboardEvent): void
   copy(e: ClipboardEvent, cut: boolean): void
@@ -43,6 +45,7 @@ export interface InputState {
 
 export interface RowProps {
   no: number
+  touchUI: boolean
   text: string
   tokens?: Token[]
   /** Show tokens only when they match the text; set while the draft is being highlighted. */
@@ -76,6 +79,8 @@ function countRender() {
 export const CodeRow = memo(function CodeRow(p: RowProps) {
   countRender()
   const { no, handlers } = p
+  const gutterPointer = useRef('mouse')
+  const textPointer = useRef('mouse')
   // A line of a file with mixed line endings keeps its CR, which is not shown.
   const text = p.text.endsWith('\r') ? p.text.slice(0, -1) : p.text
   const showTokens =
@@ -110,14 +115,21 @@ export const CodeRow = memo(function CodeRow(p: RowProps) {
     <div id={`L${no}`} class={classes} onMouseEnter={() => handlers.rowEnter(no)}>
       <span
         class={`ln clickable ${p.annotationCount ? 'has-annotation' : ''} ${p.commentBlocked ? 'no-comment' : ''}`}
-        onMouseDown={(e) => handlers.gutterDown(e, no)}
-        title={p.commentBlocked ?? 'クリックでコメント（Shift+クリックかドラッグで範囲選択、本文を選択中なら選択した文字列にコメント）'}
+        onPointerDown={(e) => {
+          gutterPointer.current = e.pointerType
+          if (e.pointerType === 'mouse') handlers.gutterDown(e, no)
+        }}
+        onClick={() => {
+          if (gutterPointer.current !== 'mouse') handlers.gutterTap(no)
+        }}
+        title={p.commentBlocked ?? (p.touchUI ? '開始行、終了行の順にタップして選択します' : 'クリックでコメント（Shift+クリックかドラッグで範囲選択、本文を選択中なら選択した文字列にコメント）')}
       >
-        {no}
+        {!p.touchUI && no}
         {p.annotationCount > 0 && (
           <button
             class={`annotation-marker ${p.annotationClass} ${p.annotationOpen ? 'open' : ''}`}
             title={`AI指摘 ${p.annotationCount}件`}
+            onPointerDown={(e) => e.stopPropagation()}
             onMouseDown={(e) => e.stopPropagation()}
             onClick={(e) => {
               e.stopPropagation()
@@ -131,6 +143,10 @@ export const CodeRow = memo(function CodeRow(p: RowProps) {
           class="edit-marker"
           title="この行を編集"
           aria-label={`行${no}を編集`}
+          onPointerDown={(e) => {
+            e.preventDefault()
+            e.stopPropagation()
+          }}
           onMouseDown={(e) => {
             // Keep focus where it is so that the edited line does not blur first.
             e.preventDefault()
@@ -143,12 +159,23 @@ export const CodeRow = memo(function CodeRow(p: RowProps) {
         >
           ✎
         </button>
-        <span class="plus">+</span>
+        {p.touchUI ? (
+          <button class="line-hit" aria-label={`行${no}を選択`} aria-disabled={p.commentBlocked ? 'true' : undefined}
+            onClick={(e) => {
+              // Keyboard activation has no preceding pointer event.
+              if (e.detail === 0) { e.stopPropagation(); handlers.gutterTap(no) }
+            }}>
+            {no}<span class="plus">+</span>
+          </button>
+        ) : <span class="plus">+</span>}
       </span>
       <span
         class={`text ${p.input ? 'editing' : ''}`}
+        onPointerDown={(e) => { textPointer.current = e.pointerType }}
         onMouseDown={p.input ? undefined : (e) => handlers.textMouseDown(e, no)}
-        onDblClick={p.input ? undefined : (e) => handlers.textDblClick(e, no)}
+        onDblClick={p.input ? undefined : (e) => {
+          if (textPointer.current === 'mouse') handlers.textDblClick(e, no)
+        }}
       >
         {p.input ? (
           <>
@@ -200,7 +227,7 @@ function LineInput({ text, state, handlers }: { text: string; state: InputState;
       row?.removeAttribute('data-composing')
       handlers.compositionEnd(ta)
     }
-    const before = (e: Event) => handlers.beforeInput(e as InputEvent)
+    const before = (e: Event) => handlers.beforeInput(e as InputEvent, ta)
     ta.addEventListener('compositionstart', start)
     ta.addEventListener('compositionend', end)
     ta.addEventListener('beforeinput', before)
@@ -235,6 +262,7 @@ function LineInput({ text, state, handlers }: { text: string; state: InputState;
       readOnly={state.readOnly}
       aria-label="行を編集"
       onKeyDown={(e) => handlers.keyDown(e, e.currentTarget)}
+      onKeyUp={() => handlers.keyUp()}
       onInput={(e) => {
         if (composing.current || (e as InputEvent).isComposing) return
         handlers.input(e.currentTarget, (e as InputEvent).inputType ?? '')

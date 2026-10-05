@@ -7,7 +7,12 @@
     "dev": "vite",
     "build": "tsc --noEmit && vite build",
     "typecheck": "tsc --noEmit",
-    "test": "vitest run"
+    "test": "vitest run",
+    "e2e": "playwright test --project=desktop --project=boundary --project=mobile-360 --project=mobile-412 --project=tablet-768 --project=tablet-landscape --project=sse",
+    "e2e:desktop": "playwright test --project=desktop --project=boundary",
+    "e2e:spike": "playwright test --project=spike --pass-with-no-tests",
+    "typecheck:e2e": "tsc -p e2e/tsconfig.json --noEmit",
+    "e2e:perf": "node -e 'const fs = require(\"node:fs\"), os = require(\"node:os\"), path = require(\"node:path\"), cp = require(\"node:child_process\"); const root = process.cwd(), dir = fs.mkdtempSync(path.join(os.tmpdir(), \"reviewer-perf-config-\")), config = path.join(dir, \"playwright.config.mts\"), at = p => JSON.stringify(path.join(root, p)); try { fs.writeFileSync(config, `import base from ${at(\"playwright.config.ts\")}; export default { ...base, testDir: ${at(\"e2e/perf\")}, globalSetup: ${at(\"e2e/global-setup.ts\")}, globalTeardown: ${at(\"e2e/global-teardown.ts\")}, projects: [{ name: \"perf\", testMatch: \"**/perf.e2e.ts\" }] };`); const r = cp.spawnSync(process.execPath, [path.join(root, \"node_modules/@playwright/test/cli.js\"), \"test\", \"--config\", config, ...process.argv.slice(1)], { stdio: \"inherit\" }); if (r.error) throw r.error; process.exitCode = r.status ?? 1; } finally { fs.rmSync(dir, { recursive: true, force: true }); }' --"
   },
   "dependencies": {
     "@preact/signals": "^2.11.2",
@@ -23,7 +28,9 @@
     "zenn-markdown-html": "^0.5.4"
   },
   "devDependencies": {
+    "@playwright/test": "1.63.0",
     "@preact/preset-vite": "^2.10.6",
+    "@types/node": "26.6.4",
     "typescript": "^7.0.2",
     "vite": "^8.3.1",
     "vitest": "^4.1.11"

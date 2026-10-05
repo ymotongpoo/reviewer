@@ -1,9 +1,11 @@
 import { useEffect, useState } from 'preact/hooks'
-import { api } from '../api'
+import { api, projectId } from '../api'
 import {
   annotationRequests,
   annotations,
   comments,
+  composerJournalVersion,
+  draftStore,
   editing,
   info,
   refreshAnnotationRequests,
@@ -15,6 +17,7 @@ import {
 import { statusText, commentLines } from '../labels'
 import { fileHref, roundHref } from '../router'
 import type { AnnotationRequestView, Comment, RequestDiff } from '../types'
+import type { ComposerJournal } from '../drafts'
 import { Composer } from './Composer'
 import { Thread } from './Thread'
 import { CopyPrompt } from './Header'
@@ -24,6 +27,13 @@ type Filter = 'unresolved' | 'draft' | 'all'
 
 export function Overview() {
   const i = info.value
+  const [journals, setJournals] = useState<ComposerJournal[]>([])
+  const journalVersion = composerJournalVersion.value
+  useEffect(() => {
+    let active = true
+    void draftStore.list<ComposerJournal>('composer', `${projectId}:`).then((list) => { if (active) setJournals(list) })
+    return () => { active = false }
+  }, [journalVersion])
   const [filter, setFilter] = useState<Filter>('unresolved')
   if (!i) return null
   const ed = editing.value
@@ -50,6 +60,22 @@ export function Overview() {
       {(i.warnings ?? []).map((w) => (
         <div class="banner warn">⚠ {w}</div>
       ))}
+
+      {journals.length > 0 && (
+        <div class="banner warn composer-journals">
+          端末に保存された未送信のコメントが {journals.length} 件あります
+          <ul>{journals.map((j) => {
+            const c = comments.value.find((c) => c.id === j.commentId)
+            const path = j.target?.path ?? c?.path
+            const start = j.target?.start ?? c?.loc?.start
+            return <li key={j.key}><a href={path ? fileHref(path, start) : '#/'}
+              onClick={() => {
+                if (c) editing.value = { kind: 'comment', id: c.id }
+                else if (j.target?.scope === 'project') editing.value = j.target
+              }}>{path ? `${path}${start ? ` L${start}` : ''}` : '全体コメント'}</a></li>
+          })}</ul>
+        </div>
+      )}
 
       <section class="card">
         <h2>ラウンド {i.round}</h2>
