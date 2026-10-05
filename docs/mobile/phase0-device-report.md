@@ -18,10 +18,10 @@
 
 | ID | 項目 | 縦 | 横 | メモ |
 |---|---|---|---|---|
-|| D-VP-01 | safe-area の実測値 | 未測定 | 未測定 | Chrome DevToolsからのsafe-area実測は未実施 |
-|| D-VP-02 | 100dvh / svh / lvh とアドレスバーの出入り | 未測定 | 未測定 | |
-|| D-VP-03 | キーボード表示時の innerHeight と visualViewport の変化 | OK | 未測定 | Chrome実画面: キーボードなし innerWidth 502 / innerHeight 984 / visualViewport 501.96×984.05。Gboard表示画面を取得 |
-|| D-VP-04 | 画面分割（上下・左右）での幅とメディア判定 | 未測定 | 未測定 | |
+|| D-VP-01 | safe-area の実測値 | OK | 未測定 | CSS env実測: top 0px / right 0px / bottom 25px / left 0px |
+|| D-VP-02 | 100dvh / svh / lvh とアドレスバーの出入り | OK | 未測定 | svh 984.05px / lvh 1040px / dvh 984.05px。アドレスバー出入りは未測定 |
+|| D-VP-03 | キーボード表示時の innerHeight と visualViewport の変化 | OK | 未測定 | 非表示時984px→Gboard表示時visualViewport 585.10px、--kb-inset 398.90px。textarea bottom 246.02pxでキーボード領域外 |
+|| D-VP-04 | 画面分割（上下・左右）での幅とメディア判定 | OK | OK | 縦 502×984 / 横 1040×422 CSS px、両方 coarse=true / noHover=true。横向き画面でヘッダー・本文の横溢れなし |
 || D-VP-05 | フローティングキーボードでの visualViewport | 未測定 | 未測定 | |
 || D-VP-06 | interactive-widget の resizes-visual と resizes-content の比較 | 未測定 | 未測定 | |
 || D-VP-07 | 文字拡大（最大）で 1rem の px と崩れ | 未測定 | 未測定 | |
