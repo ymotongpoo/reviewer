@@ -1,0 +1,14 @@
+docs/mobile/phase0-device-report.md
+  h_bf0ada3931f770 37-39
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "e33277f4bdb903b4a84ff7f278b4078efdd356f2",
+  "prompts": {},
+  "humans": {
+    "h_bf0ada3931f770": {
+      "author": "Yoshi Yamaguchi <ymotongpoo@gmail.com>"
+    }
+  }
+}
