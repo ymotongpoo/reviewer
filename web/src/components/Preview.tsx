@@ -5,7 +5,7 @@ import { isDark } from '../theme'
 const rendererText: Record<Renderer, string> = { zenn: 'Zenn', markdown: 'Markdown' }
 
 /** Rendered preview of a Markdown file, shown beside the source. */
-export function Preview({ path, content, scrollRatio, tabbed = false, hidden = false, onReady }: { path: string; content: string; scrollRatio: number; tabbed?: boolean; hidden?: boolean; onReady?: () => void }) {
+export function Preview({ path, content, scrollRatio, onScrollRatio, tabbed = false, hidden = false, onReady }: { path: string; content: string; scrollRatio: number; onScrollRatio?: (ratio: number) => void; tabbed?: boolean; hidden?: boolean; onReady?: () => void }) {
   const auto = detectRenderer(path, content)
   const [override, setOverride] = useState<Renderer | null>(null)
   const renderer = override ?? auto
@@ -25,7 +25,7 @@ export function Preview({ path, content, scrollRatio, tabbed = false, hidden = f
     setBusy(true)
     // Render off-screen first so that a slow render does not blank the pane.
     const tmp = document.createElement('div')
-    renderInto(tmp, content, renderer)
+    renderInto(tmp, content, renderer, path)
       .then(() => {
         if (cancelled) return
         el.replaceChildren(...tmp.childNodes)
@@ -40,7 +40,18 @@ export function Preview({ path, content, scrollRatio, tabbed = false, hidden = f
 
   useLayoutEffect(() => { if (!busy) onReady?.() }, [busy])
 
-  // Follow the source scroll position proportionally.
+  // Follow the source scroll position proportionally and report preview scrolls back.
+  useEffect(() => {
+    const p = pane.current
+    if (!p || tabbed) return
+    const on = () => {
+      const max = p.scrollHeight - p.clientHeight
+      onScrollRatio?.(max > 0 ? p.scrollTop / max : 0)
+    }
+    p.addEventListener('scroll', on, { passive: true })
+    return () => p.removeEventListener('scroll', on)
+  }, [tabbed, onScrollRatio])
+
   useEffect(() => {
     const p = pane.current
     if (p && !tabbed) p.scrollTop = scrollRatio * (p.scrollHeight - p.clientHeight)

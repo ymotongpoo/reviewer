@@ -14,6 +14,8 @@ import (
 	"io/fs"
 	"log"
 	"net/http"
+	"os"
+	"path/filepath"
 	"strings"
 	"sync"
 	"time"
@@ -92,6 +94,7 @@ func (p *Project) Handler() http.Handler {
 		mux.HandleFunc("GET /api/project", p.handleProject)
 		mux.HandleFunc("GET /api/tree", p.handleTree)
 		mux.HandleFunc("GET /api/file", p.handleFile)
+		mux.HandleFunc("GET /api/asset", p.handleAsset)
 		mux.HandleFunc("PUT /api/file", p.handleSaveFile)
 		mux.HandleFunc("GET /api/rounds/{n}/changes", p.handleRoundChanges)
 		mux.HandleFunc("GET /api/rounds/{n}/diff", p.handleRoundDiff)
@@ -275,6 +278,40 @@ func (p *Project) handleFile(w http.ResponseWriter, r *http.Request) {
 	respond(w, fv, err)
 }
 
+func (p *Project) handleAsset(w http.ResponseWriter, r *http.Request) {
+	name := filepath.Clean(filepath.FromSlash(r.URL.Query().Get("path")))
+	if name == "." || filepath.IsAbs(name) || name == ".." || strings.HasPrefix(name, ".."+string(filepath.Separator)) || name == ".reviewer" || strings.HasPrefix(name, ".reviewer"+string(filepath.Separator)) {
+		writeError(w, &app.Error{Code: http.StatusBadRequest, Msg: "invalid asset path"})
+		return
+	}
+	root, err := filepath.Abs(p.Root)
+	if err != nil {
+		writeError(w, err)
+		return
+	}
+	file, err := os.Open(filepath.Join(root, name))
+	if err != nil {
+		http.NotFound(w, r)
+		return
+	}
+	defer file.Close()
+	resolved, err := filepath.EvalSymlinks(filepath.Join(root, name))
+	if err != nil {
+		http.NotFound(w, r)
+		return
+	}
+	rel, err := filepath.Rel(root, resolved)
+	if err != nil || rel == ".." || strings.HasPrefix(rel, ".."+string(filepath.Separator)) || rel == ".reviewer" || strings.HasPrefix(rel, ".reviewer"+string(filepath.Separator)) {
+		writeError(w, &app.Error{Code: http.StatusForbidden, Msg: "asset outside project"})
+		return
+	}
+	st, err := file.Stat()
+	if err != nil || !st.Mode().IsRegular() || st.Size() > 16<<20 {
+		http.NotFound(w, r)
+		return
+	}
+	http.ServeContent(w, r, filepath.Base(name), st.ModTime(), file)
+}
 func (p *Project) handleSaveFile(w http.ResponseWriter, r *http.Request) {
 	var req app.SaveFileInput
 	if err := decode(r, &req); err != nil {

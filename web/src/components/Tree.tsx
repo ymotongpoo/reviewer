@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from 'preact/hooks'
 import { projectId } from '../api'
 import { comments, info, showCommentList, tree, visibleAnnotations } from '../state'
+import { isSeen, seenVersion } from '../seen'
 import { fileHref, route } from '../router'
 import type { TreeFile } from '../types'
 import type { JSX } from 'preact'
@@ -27,9 +28,9 @@ function build(files: TreeFile[]): Dir {
   return root
 }
 
-function count(d: Dir): number {
-  let n = d.files.reduce((a, f) => a + f.unresolved, 0)
-  for (const c of d.dirs.values()) n += count(c)
+function count(d: Dir, counts: Map<string, number>): number {
+  let n = d.files.reduce((a, f) => a + (counts.get(f.path) ?? 0), 0)
+  for (const c of d.dirs.values()) n += count(c, counts)
   return n
 }
 
@@ -73,18 +74,25 @@ export function Tree() {
   const [expanded, setExpanded] = useState<Set<string>>(loadExpanded)
   // Change markers only while the submitted round waits for the agent.
   const hasBase = info.value?.roundStatus === 'submitted' && (info.value?.baseRound ?? 0) > 0
+  seenVersion.value
   const annotationCounts = new Map<string, number>()
   for (const a of visibleAnnotations.value) {
-    if (a.state === 'pending') annotationCounts.set(a.path, (annotationCounts.get(a.path) ?? 0) + 1)
+    if (a.state === 'pending' && !isSeen(a.id)) annotationCounts.set(a.path, (annotationCounts.get(a.path) ?? 0) + 1)
   }
+
+  const humanCounts = new Map<string, number>()
+  for (const c of comments.value) {
+    if (c.path && c.status !== 'resolved' && !isSeen(`comment:${c.id}`)) humanCounts.set(c.path, (humanCounts.get(c.path) ?? 0) + 1)
+  }
+  const unresolved = (f: TreeFile) => humanCounts.get(f.path) ?? 0
 
   const files = tree.value.filter(
     (f) =>
       (!filter || f.path.toLowerCase().includes(filter.toLowerCase())) &&
       (!onlyChanged || !hasBase || f.changed || f.new) &&
-      (!onlyCommented || f.unresolved > 0 || (annotationCounts.get(f.path) ?? 0) > 0),
+      (!onlyCommented || unresolved(f) > 0 || (annotationCounts.get(f.path) ?? 0) > 0),
   )
-  const root = useMemo(() => build(files), [files.map((f) => `${f.path}${f.unresolved}${f.changed}${f.new}`).join('|')])
+  const root = useMemo(() => build(files), [files.map((f) => `${f.path}${unresolved(f)}${f.changed}${f.new}`).join('|')])
   const projectCount = comments.value.filter((c) => c.scope === 'project' && c.status !== 'resolved').length
   const current = route.value.page === 'file' ? route.value.path : null
 
@@ -114,7 +122,7 @@ export function Tree() {
       <>
         {dirs.map((sub): JSX.Element => {
           const isCollapsed = !expanded.has(sub.path) && !filtering
-          const n = count(sub)
+          const n = count(sub, humanCounts)
           const pending = isCollapsed ? countAnnotations(sub, annotationCounts) : 0
           return (
             <>
@@ -138,7 +146,7 @@ export function Tree() {
             <span class="name">{f.path.split('/').pop()}</span>
             {f.new && <span class="mark new" title="前回の提出後に追加されたファイル">新規</span>}
             {f.changed && <span class="mark changed" title="前回の提出後に変更されたファイル">●</span>}
-            {f.unresolved > 0 && (
+            {unresolved(f) > 0 && (
               <span
                 class="count comment-list-trigger"
                 title="人間コメント一覧を表示"
@@ -149,7 +157,7 @@ export function Tree() {
                   location.hash = fileHref(f.path)
                 }}
               >
-                {f.unresolved}
+                {unresolved(f)}
               </span>
             )}
             {(annotationCounts.get(f.path) ?? 0) > 0 && (

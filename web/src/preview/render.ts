@@ -1,3 +1,4 @@
+import { projectId } from '../api'
 import DOMPurify from 'dompurify'
 import { Marked } from 'marked'
 import { tokenize } from '../highlight'
@@ -89,7 +90,7 @@ async function highlightCode(root: HTMLElement) {
 }
 
 /** Renders src into el and returns nothing; errors are shown in place. */
-export async function renderInto(el: HTMLElement, src: string, renderer: Renderer): Promise<void> {
+export async function renderInto(el: HTMLElement, src: string, renderer: Renderer, path = ''): Promise<void> {
   const { body } = splitFrontmatter(src)
   let html: string
   if (renderer === 'zenn') {
@@ -107,8 +108,27 @@ export async function renderInto(el: HTMLElement, src: string, renderer: Rendere
     ADD_ATTR: ['display-mode', 'target', 'data-content', 'allowfullscreen'],
   })
   placeholderEmbeds(el)
+  el.querySelectorAll<HTMLImageElement>('img[src]').forEach((img) => {
+    const src = img.getAttribute('src') ?? ''
+    if (!projectId || !src || /^(?:[a-z][a-z\d+.-]*:|\/\/|#)/i.test(src)) return
+    const base = path.split('/').slice(0, -1)
+    for (const part of src.split('/')) {
+      if (!part || part === '.') continue
+      if (part === '..') base.pop()
+      else base.push(part)
+    }
+    img.src = `/p/${projectId}/api/asset?path=${encodeURIComponent(base.join('/'))}`
+  })
   el.querySelectorAll('a[href]').forEach((a) => {
-    if (!a.getAttribute('href')!.startsWith('#')) {
+    const href = a.getAttribute('href')!
+    if (href.startsWith('#')) {
+      a.addEventListener('click', (event) => {
+        const target = document.getElementById(decodeURIComponent(href.slice(1)))
+        if (!target) return
+        event.preventDefault()
+        target.scrollIntoView({ block: 'center' })
+      })
+    } else {
       a.setAttribute('target', '_blank')
       a.setAttribute('rel', 'noopener noreferrer')
     }

@@ -20,7 +20,9 @@ describe('responsive CSS guard', () => {
     for (const [, list] of conditions) {
       for (const condition of list.split(',').map((s) => s.trim())) {
         expect(
-          [COMPACT, MEDIUM, NARROW, TOUCH].includes(condition) || /^\(prefers-[\w-]+:\s*[\w-]+\)$/.test(condition),
+          [COMPACT, MEDIUM, NARROW, TOUCH].includes(condition) ||
+          /^\(min-width: 840px\) and \(hover:\s*none\) and \(pointer:\s*coarse\)$/.test(condition) ||
+          /^\(prefers-[\w-]+:\s*[\w-]+\)$/.test(condition),
           condition,
         ).toBe(true)
       }

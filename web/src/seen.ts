@@ -1,3 +1,4 @@
+import { signal } from '@preact/signals'
 import { projectId } from './api'
 
 // Annotations the reviewer has already looked at, per project and browser.
@@ -15,6 +16,7 @@ function load(): string[] {
 }
 
 const seen = new Set<string>(load())
+export const seenVersion = signal(0)
 
 export function isSeen(id: string): boolean {
   return seen.has(id)
@@ -29,6 +31,7 @@ export function markSeen(ids: string[]) {
     }
   }
   if (!changed) return
+  seenVersion.value++
   try {
     localStorage.setItem(KEY, JSON.stringify([...seen].slice(-MAX)))
   } catch {

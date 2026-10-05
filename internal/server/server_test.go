@@ -19,6 +19,16 @@ import (
 	"github.com/ymotongpoo/reviewer/internal/store"
 )
 
+func TestSecurityHeadersKeepSameOriginImages(t *testing.T) {
+	w := httptest.NewRecorder()
+	r := httptest.NewRequest(http.MethodGet, "/", nil)
+	securityHeaders(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) { w.WriteHeader(http.StatusNoContent) })).ServeHTTP(w, r)
+	csp := w.Header().Get("Content-Security-Policy")
+	if !strings.Contains(csp, "img-src 'self' data:") || strings.Contains(csp, "img-src 'self' data: https:") {
+		t.Fatalf("CSP image sources = %q", csp)
+	}
+}
+
 type env struct {
 	ts    *httptest.Server
 	reg   *Registry
@@ -94,6 +104,16 @@ func TestAuth(t *testing.T) {
 func TestProjects(t *testing.T) {
 	e := newEnv(t)
 	idA := e.open(t, filepath.Join(e.root, "a"))
+	if err := os.WriteFile(filepath.Join(e.root, "a", "pixel.bin"), []byte("binary"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	assetRes, assetBody := do(t, "GET", e.ts.URL+"/p/"+idA+"/api/asset?path=pixel.bin", "", bearer)
+	if assetRes.StatusCode != 200 || assetBody != "binary" {
+		t.Fatalf("asset: %d %q", assetRes.StatusCode, assetBody)
+	}
+	if res, _ := do(t, "GET", e.ts.URL+"/p/"+idA+"/api/asset?path=../pixel.bin", "", bearer); res.StatusCode != 400 {
+		t.Fatalf("asset traversal: %d", res.StatusCode)
+	}
 	if again := e.open(t, filepath.Join(e.root, "a", ".")); again != idA {
 		t.Errorf("id not stable: %s vs %s", idA, again)
 	}

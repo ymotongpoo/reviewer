@@ -63,6 +63,7 @@ import { AnnotationCard } from './AnnotationCard'
 import { CommentList } from './CommentList'
 import { CodeRow, type InputHandlers, type InputState, type RowHandlers } from './CodeRow'
 import { EditBar, EditReview, type EditError } from './EditBar'
+import { isSeen, markSeen } from '../seen'
 
 interface Selection {
   anchor: number
@@ -192,6 +193,7 @@ export function FileView({ path, line }: { path: string; line?: number }) {
   const touchUI = isTouchUI.value
   // AI annotations remain expanded until they are adopted or dismissed.
   const [annotationToggles, setAnnotationToggles] = useState<Map<number, boolean>>(new Map())
+  const [freshAnnotations, setFreshAnnotations] = useState<Set<string>>(new Set())
   const dragging = useRef(false)
   const lastPath = useRef(path)
   const sessionRef = useRef<EditSession | null>(null)
@@ -394,6 +396,7 @@ export function FileView({ path, line }: { path: string; line?: number }) {
   const lost = lineComments.filter((c) => !located.includes(c))
 
   const fileAnnotations = visibleAnnotations.value.filter((a) => a.path === path)
+  const unseenIds = fileAnnotations.filter((a) => a.state === 'pending' && !isSeen(a.id) && !freshAnnotations.has(a.id)).map((a) => a.id)
   const locatedAnnotations = fileAnnotations.filter(
     (a) => a.loc && a.loc.state !== 'outdated' && a.loc.end <= lines.length && placeOf(a.loc) !== undefined,
   )
@@ -457,7 +460,19 @@ export function FileView({ path, line }: { path: string; line?: number }) {
 
   useEffect(() => {
     setAnnotationToggles(new Map())
+    setFreshAnnotations(new Set())
   }, [path])
+
+  useEffect(() => {
+    if (unseenIds.length === 0) return
+    setFreshAnnotations((prev) => new Set([...prev, ...unseenIds]))
+    markSeen(unseenIds)
+  }, [unseenIds.join(',')])
+
+  useEffect(() => {
+    const ids = fileComments.map((c) => `comment:${c.id}`)
+    if (ids.length > 0) markSeen(ids)
+  }, [fileComments.map((c) => c.id).join(',')])
 
   useEffect(() => {
     if (!showPreview) return
@@ -1378,7 +1393,7 @@ export function FileView({ path, line }: { path: string; line?: number }) {
                 </div>
               )}
               {lostAnnotations.length > 0 && (
-                <details class="lost annotations-lost" open={lostAnnotations.some((a) => a.state === 'pending')}>
+                <details class="lost annotations-lost" open={lostAnnotations.some((a) => a.state === 'pending' && (freshAnnotations.has(a.id) || !isSeen(a.id)))}>
                   <summary class="lost-title">位置を特定できないAI指摘（{lostAnnotations.length}件）</summary>
                   <div class="lost-list">
                     {lostAnnotations.map((a) => (
@@ -1410,7 +1425,8 @@ export function FileView({ path, line }: { path: string; line?: number }) {
               const composerHere = newLine && newLineAt?.end === no
               const lineAnnotations = annotationsByEnd.get(no)
               const annotationOpen =
-                !!lineAnnotations && (annotationToggles.get(no) ?? lineAnnotations.some((a) => a.state === 'pending'))
+                !!lineAnnotations &&
+                (annotationToggles.get(no) ?? lineAnnotations.some((a) => a.state === 'pending' && (freshAnnotations.has(a.id) || !isSeen(a.id))))
               const edited = !!map?.changed[i]
               return (
                 <Fragment key={i}>
@@ -1464,7 +1480,11 @@ export function FileView({ path, line }: { path: string; line?: number }) {
             {displayLines.length === 0 && <div class="empty">（空のファイル）</div>}
           </div>
         </div>
-        {showPreview && file && <Preview path={path} content={previewDraft ?? file.content} scrollRatio={scrollRatio} tabbed={compact} hidden={compact && previewTab !== 'preview'} onReady={() => {
+        {showPreview && file && <Preview path={path} content={previewDraft ?? file.content} scrollRatio={scrollRatio} onScrollRatio={(ratio) => {
+          setScrollRatio(ratio)
+          const main = document.querySelector<HTMLElement>('.main')
+          if (main) main.scrollTop = ratio * Math.max(0, main.scrollHeight - main.clientHeight)
+        }} tabbed={compact} hidden={compact && previewTab !== 'preview'} onReady={() => {
           const main = document.querySelector<HTMLElement>('.main')
           if (compact && previewTab === 'preview' && main && tabScroll.current !== null) {
             main.scrollTop = tabScroll.current * Math.max(0, main.scrollHeight - main.clientHeight)
