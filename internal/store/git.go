@@ -11,7 +11,7 @@ import (
 	"github.com/ymotongpoo/reviewer/internal/config"
 )
 
-func (s *Store) gitPath() string { return filepath.Join(s.Dir, "git.toml") }
+func (s *Store) gitPath() string { return filepath.Join(s.sharedDir(), "git.toml") }
 
 // GitSettings reads the project's git.toml. ok is false when it is missing.
 func (s *Store) GitSettings() (config.GitConfig, bool, error) {

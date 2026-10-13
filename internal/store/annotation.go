@@ -236,7 +236,7 @@ func (s *Store) ProjectPresets() ([]config.Preset, error) {
 	var doc struct {
 		Presets []config.Preset `toml:"presets"`
 	}
-	if _, err := toml.DecodeFile(filepath.Join(s.Dir, "presets.toml"), &doc); err != nil {
+	if _, err := toml.DecodeFile(filepath.Join(s.sharedDir(), "presets.toml"), &doc); err != nil {
 		if errors.Is(err, fs.ErrNotExist) {
 			return []config.Preset{}, nil
 		}
@@ -257,5 +257,5 @@ func (s *Store) SaveProjectPresets(presets []config.Preset) error {
 	if err := toml.NewEncoder(&b).Encode(doc); err != nil {
 		return err
 	}
-	return writeFileAtomic(filepath.Join(s.Dir, "presets.toml"), b.Bytes())
+	return writeFileAtomic(filepath.Join(s.sharedDir(), "presets.toml"), b.Bytes())
 }

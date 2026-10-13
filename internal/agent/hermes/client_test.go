@@ -84,7 +84,7 @@ func TestSessions(t *testing.T) {
 		{"id": "h", "source": "discord", "title": "hidden", "hidden": true},
 	}}
 	c := newClient(t, f)
-	ss, err := c.Sessions(context.Background())
+	ss, err := c.Sessions(context.Background(), "")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -97,7 +97,7 @@ func TestSessions(t *testing.T) {
 	}
 
 	bad := New(Options{URL: c.opts.URL, APIKey: "wrong"})
-	if _, err := bad.Sessions(context.Background()); err == nil || !strings.Contains(err.Error(), "401") {
+	if _, err := bad.Sessions(context.Background(), ""); err == nil || !strings.Contains(err.Error(), "401") {
 		t.Errorf("auth error = %v", err)
 	}
 }
@@ -105,7 +105,7 @@ func TestSessions(t *testing.T) {
 func TestCreateSession(t *testing.T) {
 	f := &hermestest.Fake{Key: "k"}
 	c := newClient(t, f)
-	session, err := c.CreateSession(context.Background(), "reviewer: Q-1 test")
+	session, err := c.CreateSession(context.Background(), "", "reviewer: Q-1 test")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -115,7 +115,7 @@ func TestCreateSession(t *testing.T) {
 	if len(f.SessionRequests) != 1 || f.SessionRequests[0].Source != "api_server" {
 		t.Fatalf("requests = %+v", f.SessionRequests)
 	}
-	_, err = c.CreateSession(context.Background(), session.Title)
+	_, err = c.CreateSession(context.Background(), "", session.Title)
 	var apiErr *APIError
 	if !errors.Is(err, agent.ErrTitleInUse) || !errors.As(err, &apiErr) {
 		t.Fatalf("duplicate title error = %v", err)
@@ -151,7 +151,7 @@ func TestCreateSessionTitleConflictErrors(t *testing.T) {
 			}))
 			defer ts.Close()
 			c := New(Options{URL: ts.URL})
-			_, err := c.CreateSession(context.Background(), "title")
+			_, err := c.CreateSession(context.Background(), "", "title")
 			if errors.Is(fmt.Errorf("create session: %w", err), agent.ErrTitleInUse) != tt.conflict {
 				t.Fatalf("title conflict = %v, error = %v", tt.conflict, err)
 			}

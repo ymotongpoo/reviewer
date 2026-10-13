@@ -67,9 +67,11 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("DELETE /api/projects/{id}", s.handleForgetProject)
 	mux.HandleFunc("GET /api/fs", s.handleFS)
 	mux.HandleFunc("/p/{id}/api/", s.handleProjectAPI)
+	mux.HandleFunc("/p/{id}/s/{sid}/api/", s.handleSessionAPI)
 	mux.HandleFunc("/api/", func(w http.ResponseWriter, r *http.Request) {
 		writeError(w, &app.Error{Code: http.StatusNotFound, Msg: "not found"})
 	})
+	mux.Handle("/p/{id}/s/{sid}/", s.static)
 	mux.Handle("/p/{id}/", s.static)
 	mux.Handle("/", s.static)
 	return s.auth(securityHeaders(mux))
@@ -87,11 +89,26 @@ func (s *Server) handleProjectAPI(w http.ResponseWriter, r *http.Request) {
 	http.StripPrefix("/p/"+id, p.Handler()).ServeHTTP(w, r)
 }
 
-// Handler returns the per-project API handler; paths start with /api/.
+// handleSessionAPI dispatches /p/<id>/s/<sid>/api/... to a session other
+// than the default one.
+func (s *Server) handleSessionAPI(w http.ResponseWriter, r *http.Request) {
+	id, sid := r.PathValue("id"), r.PathValue("sid")
+	p, err := s.Reg.GetSession(id, sid)
+	if err != nil {
+		writeError(w, err)
+		return
+	}
+	http.StripPrefix("/p/"+id+"/s/"+sid, p.Handler()).ServeHTTP(w, r)
+}
+
+// Handler returns the per-session API handler; paths start with /api/.
 func (p *Project) Handler() http.Handler {
 	p.muxOnce.Do(func() {
 		mux := http.NewServeMux()
 		mux.HandleFunc("GET /api/project", p.handleProject)
+		mux.HandleFunc("GET /api/sessions", p.handleSessions)
+		mux.HandleFunc("POST /api/sessions", p.handleCreateSession)
+		mux.HandleFunc("PATCH /api/session", p.handleUpdateSession)
 		mux.HandleFunc("GET /api/tree", p.handleTree)
 		mux.HandleFunc("GET /api/file", p.handleFile)
 		mux.HandleFunc("GET /api/asset", p.handleAsset)
@@ -267,6 +284,48 @@ func respond(w http.ResponseWriter, v any, err error) {
 
 func (p *Project) handleProject(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, p.App.Info())
+}
+
+func (p *Project) handleSessions(w http.ResponseWriter, r *http.Request) {
+	writeJSON(w, map[string]any{"sessions": p.Sessions()})
+}
+
+func (p *Project) handleCreateSession(w http.ResponseWriter, r *http.Request) {
+	var req struct {
+		Name string `json:"name"`
+	}
+	if err := decode(r, &req); err != nil {
+		writeError(w, err)
+		return
+	}
+	np, err := p.reg.CreateSession(p.ID, req.Name)
+	if err != nil {
+		writeError(w, err)
+		return
+	}
+	writeJSON(w, map[string]any{"session": np.App.SessionInfo(), "url": np.URL()})
+}
+
+func (p *Project) handleUpdateSession(w http.ResponseWriter, r *http.Request) {
+	var req struct {
+		Name     *string `json:"name"`
+		Archived *bool   `json:"archived"`
+	}
+	if err := decode(r, &req); err != nil {
+		writeError(w, err)
+		return
+	}
+	if req.Archived != nil && *req.Archived && p.App.AgentBusy() {
+		writeError(w, &app.Error{Code: http.StatusConflict, Msg: "エージェントの対応中はアーカイブできません"})
+		return
+	}
+	ss, err := p.App.UpdateSession(req.Name, req.Archived)
+	if err != nil {
+		writeError(w, err)
+		return
+	}
+	p.dir.broadcast(app.Event{Type: "session"})
+	writeJSON(w, ss)
 }
 
 func (p *Project) handleTree(w http.ResponseWriter, r *http.Request) {

@@ -2,8 +2,6 @@ package app
 
 import (
 	"context"
-	"crypto/sha256"
-	"encoding/hex"
 	"fmt"
 	"log"
 	"net/http"
@@ -36,10 +34,10 @@ type activeRun struct {
 	run agent.Run
 }
 
-// Attacher is implemented by agents that can resume reading a run after a
-// restart of reviewer.
+// Attacher is implemented by agents that can resume reading a run of the
+// session sessionID after a restart of reviewer.
 type Attacher interface {
-	Attach(ctx context.Context, runID string) (agent.Run, error)
+	Attach(ctx context.Context, sessionID, runID string) (agent.Run, error)
 }
 
 // liveSessioner is implemented by runs that know the session they ended in.
@@ -86,7 +84,7 @@ func (a *App) reattach() {
 	a.agents.mu.Unlock()
 	for _, rec := range stale {
 		if at, ok := ag.(Attacher); ok && ag.Kind() == rec.Kind {
-			if run, err := at.Attach(context.Background(), rec.ID); err == nil {
+			if run, err := at.Attach(context.Background(), rec.SessionID, rec.ID); err == nil {
 				a.follow(rec, run)
 				continue
 			}
@@ -157,7 +155,7 @@ func (a *App) AgentSessions(ctx context.Context) ([]agent.Session, error) {
 	if err != nil {
 		return nil, err
 	}
-	ss, err := ag.Sessions(ctx)
+	ss, err := ag.Sessions(ctx, a.Proj.Root)
 	if err != nil {
 		return nil, &Error{Code: http.StatusBadGateway, Msg: err.Error()}
 	}
@@ -276,10 +274,9 @@ func (a *App) SendToAgent(ctx context.Context, n int) (*store.AgentRun, error) {
 	}
 	a.agents.mu.Unlock()
 
-	sum := sha256.Sum256([]byte(a.Proj.Root))
 	// The submission time keeps keys unique when a data directory is recreated
 	// and round numbers start over.
-	key := fmt.Sprintf("reviewer-%s-r%d-%d-%d", hex.EncodeToString(sum[:6]), n, m.SubmittedAt.UnixNano(), attempts+1)
+	key := fmt.Sprintf("%s-r%d-%d-%d", a.runKey(), n, m.SubmittedAt.UnixNano(), attempts+1)
 	run, err := ag.Start(ctx, agent.Request{SessionID: binding.SessionID, Prompt: prompt, IdempotencyKey: key})
 	if err != nil {
 		return nil, &Error{Code: http.StatusBadGateway, Msg: "エージェントに送信できませんでした: " + err.Error()}
@@ -288,7 +285,7 @@ func (a *App) SendToAgent(ctx context.Context, n int) (*store.AgentRun, error) {
 	a.saveRun(rec)
 	a.follow(rec, run)
 
-	msg := fmt.Sprintf("📝 reviewer: ラウンド%dのレビューコメント（%d件）を送りました。対応をお願いします。", n, len(m.FeedbackIDs))
+	msg := fmt.Sprintf("📝 reviewer%s: ラウンド%dのレビューコメント（%d件）を送りました。対応をお願いします。", a.sessionLabel(), n, len(m.FeedbackIDs))
 	if u := a.agents.baseURL; u != "" {
 		msg += "\n進捗: " + u
 	}
@@ -409,7 +406,7 @@ func (a *App) finish(rec *store.AgentRun, run agent.Run, ev agent.Event) {
 	var msg string
 	switch status {
 	case agent.StatusCompleted:
-		msg = fmt.Sprintf("✅ reviewer: ラウンド%dの対応が終わりました。", rec.Round)
+		msg = fmt.Sprintf("✅ reviewer%s: ラウンド%dの対応が終わりました。", a.sessionLabel(), rec.Round)
 		if summary == "" {
 			summary = firstLines(text, 300)
 		}
@@ -420,9 +417,9 @@ func (a *App) finish(rec *store.AgentRun, run agent.Run, ev agent.Event) {
 			msg += "\n（response.json が書かれていないため、コメントごとの返答はありません）"
 		}
 	case agent.StatusCancelled:
-		msg = fmt.Sprintf("⏹ reviewer: ラウンド%dの対応を停止しました。", rec.Round)
+		msg = fmt.Sprintf("⏹ reviewer%s: ラウンド%dの対応を停止しました。", a.sessionLabel(), rec.Round)
 	default:
-		msg = fmt.Sprintf("⚠️ reviewer: ラウンド%dの対応が途中で終わりました。", rec.Round)
+		msg = fmt.Sprintf("⚠️ reviewer%s: ラウンド%dの対応が途中で終わりました。", a.sessionLabel(), rec.Round)
 		if errText != "" {
 			msg += "（" + errText + "）"
 		}

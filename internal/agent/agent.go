@@ -1,5 +1,5 @@
-// Package agent abstracts coding agents (Hermes Agent today; Claude Code and
-// Codex later) that reviewer can hand a round of feedback to directly.
+// Package agent abstracts coding agents (T3 Code and Hermes Agent) that
+// reviewer can hand a round of feedback to directly.
 package agent
 
 import (
@@ -12,7 +12,7 @@ import (
 type Session struct {
 	ID        string    `json:"id"`
 	Title     string    `json:"title"`
-	Source    string    `json:"source"` // e.g. "discord", "cli"
+	Source    string    `json:"source"` // e.g. "discord", "cli", "t3"
 	Preview   string    `json:"preview,omitempty"`
 	UpdatedAt time.Time `json:"updatedAt"`
 }
@@ -65,18 +65,20 @@ type Request struct {
 
 // Agent is a connection to an agent.
 type Agent interface {
-	// Kind is a short identifier such as "hermes".
+	// Kind is a short identifier such as "t3" or "hermes".
 	Kind() string
-	// Name is shown in the UI, e.g. "Hermes Agent".
+	// Name is shown in the UI, e.g. "T3 Code".
 	Name() string
-	Sessions(ctx context.Context) ([]Session, error)
+	// Sessions lists the sessions that may work on the directory dir.
+	// Agents that do not know about directories list all sessions.
+	Sessions(ctx context.Context, dir string) ([]Session, error)
 	Start(ctx context.Context, r Request) (Run, error)
 }
 
 // SessionCreator is optionally implemented by agents that can create an empty
-// titled session before a run starts.
+// titled session for the directory dir before a run starts.
 type SessionCreator interface {
-	CreateSession(ctx context.Context, title string) (Session, error)
+	CreateSession(ctx context.Context, dir, title string) (Session, error)
 }
 
 // ErrTitleInUse indicates that a session title is already taken.

@@ -299,6 +299,7 @@ func (f *Fake) stream(w http.ResponseWriter, r *http.Request, rn *run) {
 }
 
 var instructionsPathRE = regexp.MustCompile("`([^`]+/instructions\\.md)`")
+
 // backtickPathRE matches absolute paths in backticks on one line, so that
 // code fences elsewhere in the instructions cannot shift the pairing.
 var backtickPathRE = regexp.MustCompile("`(/[^`\n]+)`")

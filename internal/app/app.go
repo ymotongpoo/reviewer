@@ -3,6 +3,8 @@
 package app
 
 import (
+	"crypto/sha256"
+	"encoding/hex"
 	"errors"
 	"fmt"
 	"io/fs"
@@ -47,7 +49,7 @@ func conflict(format string, a ...any) error {
 
 // Event is published to connected clients.
 type Event struct {
-	Type    string   `json:"type"` // files | tree | comments | round | response | agent | annotate | annotations | git
+	Type    string   `json:"type"` // files | tree | comments | round | response | agent | annotate | annotations | git | session
 	Paths   []string `json:"paths,omitempty"`
 	Round   int      `json:"round,omitempty"`
 	Request string   `json:"request,omitempty"`
@@ -56,26 +58,48 @@ type Event struct {
 	Agent *agent.Event `json:"agent,omitempty"`
 }
 
-// App is a running review session for one project.
+// App is a running review session of a directory. A directory may have
+// several sessions at once; they share its Workspace.
 type App struct {
-	mu      sync.Mutex
-	Cfg     config.Config
-	Proj    *project.Project
-	Store   *store.Store
+	mu   sync.Mutex
+	Cfg  config.Config
+	Proj *project.Project
+	// Store holds the session's rounds, comments and annotations.
+	Store *store.Store
+	// DataDir is the session's data directory.
 	DataDir string
+	// SessionID identifies the session within the directory.
+	SessionID string
+	// Session is the session's metadata; guarded by mu.
+	Session store.Session
+	ws      *Workspace
 	notify  func(Event)
 	files   []project.File
 	now     func() time.Time
 	agents  agentState
+}
 
-	// gitMu serializes Git operations; they run without holding mu.
+// Workspace is a directory under review. Its sessions share the files, the
+// configuration, the presets and Git.
+type Workspace struct {
+	Cfg  config.Config
+	Proj *project.Project
+	// DataDir is the data directory of the directory. The default session
+	// stores its data here; other sessions under sessions/<id>/.
+	DataDir string
+
+	// gitMu serializes Git operations of all sessions; they run without
+	// holding App.mu.
 	gitMu   sync.Mutex
 	gitOnce sync.Once
 	isRepo  atomic.Bool
+
+	// resync asks a running Watch to watch the data of new sessions.
+	resync chan struct{}
 }
 
-// New opens the project at root with cfg. notify may be nil.
-func New(root string, cfg config.Config, notify func(Event)) (*App, error) {
+// OpenWorkspace opens the directory root with cfg.
+func OpenWorkspace(root string, cfg config.Config) (*Workspace, error) {
 	abs, err := filepath.Abs(root)
 	if err != nil {
 		return nil, err
@@ -91,14 +115,118 @@ func New(root string, cfg config.Config, notify func(Event)) (*App, error) {
 	if err != nil {
 		return nil, err
 	}
-	st, err := store.Open(dataDir)
+	return &Workspace{Cfg: cfg, Proj: proj, DataDir: dataDir, resync: make(chan struct{}, 1)}, nil
+}
+
+// Open opens the session id. notify may be nil.
+func (w *Workspace) Open(id string, notify func(Event)) (*App, error) {
+	info, err := store.ReadSession(w.DataDir, id)
+	if errors.Is(err, fs.ErrNotExist) {
+		return nil, notFound("セッションがありません: %s", id)
+	}
 	if err != nil {
 		return nil, err
 	}
+	dir := store.SessionDir(w.DataDir, id)
+	st, err := store.Open(dir)
+	if err != nil {
+		return nil, err
+	}
+	st.Shared = w.DataDir
 	if notify == nil {
 		notify = func(Event) {}
 	}
-	return &App{Cfg: cfg, Proj: proj, Store: st, DataDir: dataDir, notify: notify, now: time.Now}, nil
+	select {
+	case w.resync <- struct{}{}:
+	default:
+	}
+	return &App{Cfg: w.Cfg, Proj: w.Proj, Store: st, DataDir: dir, SessionID: id, Session: info, ws: w, notify: notify, now: time.Now}, nil
+}
+
+// Sessions lists the sessions of the directory, including archived ones.
+func (w *Workspace) Sessions() ([]store.Session, error) {
+	return store.ListSessions(w.DataDir)
+}
+
+// CreateSession adds a session named name.
+func (w *Workspace) CreateSession(name string) (store.Session, error) {
+	s, err := store.CreateSession(w.DataDir, name, time.Now())
+	if err != nil {
+		if _, cerr := store.CleanSessionName(name); cerr != nil {
+			return s, badRequest("%s", cerr.Error())
+		}
+		return s, err
+	}
+	return s, nil
+}
+
+// New opens the default session of the directory root with cfg. notify may
+// be nil.
+func New(root string, cfg config.Config, notify func(Event)) (*App, error) {
+	w, err := OpenWorkspace(root, cfg)
+	if err != nil {
+		return nil, err
+	}
+	return w.Open(store.DefaultSession, notify)
+}
+
+// Workspace returns the directory the session belongs to.
+func (a *App) Workspace() *Workspace { return a.ws }
+
+// SessionInfo returns the session's metadata.
+func (a *App) SessionInfo() store.Session {
+	a.mu.Lock()
+	defer a.mu.Unlock()
+	return a.Session
+}
+
+// UpdateSession renames the session (when name is not nil) and archives or
+// restores it (when archived is not nil).
+func (a *App) UpdateSession(name *string, archived *bool) (store.Session, error) {
+	a.mu.Lock()
+	s := a.Session
+	if name != nil {
+		n, err := store.CleanSessionName(*name)
+		if err != nil {
+			a.mu.Unlock()
+			return s, badRequest("%s", err.Error())
+		}
+		s.Name = n
+	}
+	if archived != nil {
+		if *archived && a.SessionID == store.DefaultSession {
+			a.mu.Unlock()
+			return s, badRequest("既定のセッションはアーカイブできません")
+		}
+		s.Archived = *archived
+	}
+	if err := store.SaveSession(a.ws.DataDir, s); err != nil {
+		a.mu.Unlock()
+		return a.Session, err
+	}
+	a.Session = s
+	a.mu.Unlock()
+	return s, nil
+}
+
+// sessionLabel prefixes notices of a non-default session with its name.
+func (a *App) sessionLabel() string {
+	if a.SessionID == store.DefaultSession {
+		return ""
+	}
+	a.mu.Lock()
+	defer a.mu.Unlock()
+	return "［" + a.Session.Name + "］"
+}
+
+// runKey is the prefix of idempotency keys of agent runs.
+func (a *App) runKey() string {
+	sum := sha256.Sum256([]byte(a.Proj.Root))
+	key := "reviewer-" + hex.EncodeToString(sum[:6])
+	if a.SessionID != store.DefaultSession {
+		key += "-" + a.SessionID
+	}
+	return key
 }
 
 // Init scans the project, opens round 1 when needed, imports pending agent
@@ -202,7 +330,9 @@ func (a *App) roundPaths(n int) RoundPaths {
 
 // Info summarizes the session.
 type Info struct {
-	Name        string              `json:"name"`
+	Name string `json:"name"`
+	// Session is the review session shown.
+	Session     store.Session       `json:"session"`
 	Root        string              `json:"root"`
 	DataDir     string              `json:"dataDir"`
 	Round       int                 `json:"round"`
@@ -234,7 +364,7 @@ func (a *App) Info() Info {
 	defer a.mu.Unlock()
 	st := a.Store.State
 	info := Info{
-		Name: a.Proj.Name(), Root: a.Proj.Root, DataDir: a.DataDir,
+		Name: a.Proj.Name(), Session: a.Session, Root: a.Proj.Root, DataDir: a.DataDir,
 		Round: st.Round, RoundStatus: st.RoundStatus, Labels: a.Cfg.Labels,
 		Warnings: a.warnings(), Rounds: []RoundSummary{}, Git: isRepo,
 	}
