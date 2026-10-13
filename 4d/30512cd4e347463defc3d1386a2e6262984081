@@ -1,0 +1,21 @@
+README.md
+  s_2458253039bfa2::t_1925fbcce56358 191,195,197
+SPEC.md
+  s_2458253039bfa2::t_1925fbcce56358 135,166
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "4d30512cd4e347463defc3d1386a2e6262984081",
+  "prompts": {},
+  "sessions": {
+    "s_2458253039bfa2": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "44194b0b-d672-496d-be88-ee0b7a7761ad",
+        "model": "claude-opus-5-5"
+      },
+      "human_author": "Yoshi Yamaguchi <ymotongpoo@gmail.com>"
+    }
+  }
+}
