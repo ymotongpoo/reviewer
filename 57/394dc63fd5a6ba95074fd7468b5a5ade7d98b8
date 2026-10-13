@@ -1,0 +1,72 @@
+internal/server/dist/assets/dist-DTXZf7ut.js
+  s_2458253039bfa2::t_d9997a82577ece 1-63
+internal/server/dist/assets/index-CHUQNy0r.css
+  s_2458253039bfa2::t_d9997a82577ece 1
+internal/server/dist/assets/ruby-WtRMytA8.js
+  s_2458253039bfa2::t_d9997a82577ece 1
+internal/agent/t3/client_test.go
+  s_2458253039bfa2::t_a8e2d32d2d0893 128-132,134-137,237,245-248,265,268-285
+internal/server/dist/assets/java-DNiSqMie.js
+  s_2458253039bfa2::t_d9997a82577ece 1
+internal/server/dist/assets/sql-hFqY9icF.js
+  s_2458253039bfa2::t_d9997a82577ece 1
+web/src/style.css
+  s_2458253039bfa2::t_4195633df5f3f3 1477-1487
+internal/server/dist/assets/typescript-Ddq0JaeV.js
+  s_2458253039bfa2::t_d9997a82577ece 1
+internal/server/dist/assets/php-n8H7MYHK.js
+  s_2458253039bfa2::t_d9997a82577ece 1
+internal/server/dist/assets/xml-CN3TC0Wp.js
+  s_2458253039bfa2::t_d9997a82577ece 1
+internal/server/dist/assets/html-derivative-DdDsPTfp.js
+  s_2458253039bfa2::t_d9997a82577ece 1
+internal/server/dist/assets/lua-CE_re6Hj.js
+  s_2458253039bfa2::t_d9997a82577ece 1
+internal/server/dist/assets/index-C--4Ftgp.js
+  s_2458253039bfa2::t_d9997a82577ece 1-252
+internal/server/dist/assets/tsx-D8V1vj_W.js
+  s_2458253039bfa2::t_d9997a82577ece 1
+web/src/components/Agent.tsx
+  s_2458253039bfa2::t_4195633df5f3f3 54-59,61-64,76,89-91,93-120
+internal/server/dist/index.html
+  s_2458253039bfa2::t_d9997a82577ece 8-9
+internal/agent/agent.go
+  s_2458253039bfa2::t_ce7fa81b08bf18 91,95-103,111-127
+internal/server/dist/assets/cpp-CUaOrV2w.js
+  s_2458253039bfa2::t_d9997a82577ece 1
+internal/server/dist/assets/rst-DFugBGbs.js
+  s_2458253039bfa2::t_d9997a82577ece 1
+internal/server/dist/assets/c-CVHOc66G.js
+  s_2458253039bfa2::t_d9997a82577ece 1
+internal/server/dist/assets/graphql-jH_3cXXt.js
+  s_2458253039bfa2::t_d9997a82577ece 1
+internal/server/dist/assets/vue-DoM_eup9.js
+  s_2458253039bfa2::t_d9997a82577ece 1
+internal/server/dist/assets/jsx-FV-mMKHd.js
+  s_2458253039bfa2::t_d9997a82577ece 1
+internal/server/dist/assets/css-T-9jpU7l.js
+  s_2458253039bfa2::t_d9997a82577ece 1
+internal/server/dist/assets/html-C414zUcI.js
+  s_2458253039bfa2::t_d9997a82577ece 1
+web/src/types.ts
+  s_2458253039bfa2::t_4195633df5f3f3 357-365,371-372
+internal/agent/t3/client.go
+  s_2458253039bfa2::t_ce7fa81b08bf18 170-174,208-210,224-227,281-321
+  s_2458253039bfa2::t_fa2fd089ca4766 322
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "57394dc63fd5a6ba95074fd7468b5a5ade7d98b8",
+  "prompts": {},
+  "sessions": {
+    "s_2458253039bfa2": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "44194b0b-d672-496d-be88-ee0b7a7761ad",
+        "model": "claude-opus-5-5"
+      },
+      "human_author": "Yoshi Yamaguchi <ymotongpoo@gmail.com>"
+    }
+  }
+}
