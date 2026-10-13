@@ -1,0 +1,91 @@
+internal/app/agentsession_test.go
+  s_2458253039bfa2::t_e7bfa637dd3117 1-72
+web/src/types.ts
+  s_2458253039bfa2::t_d9036f6d6401f7 349-367
+internal/agent/t3/client.go
+  s_2458253039bfa2::t_37c206fe6b9bee 149-151,156,162-170,181-234,273-275,288-290,301
+internal/app/agent.go
+  s_2458253039bfa2::t_93a70783d1fe52 5,108-119,132-133,175-243
+  s_2458253039bfa2::t_2c5ef621110179 244
+web/src/api.ts
+  s_2458253039bfa2::t_d9036f6d6401f7 5,21,123-125,141
+internal/agent/t3/client_test.go
+  s_2458253039bfa2::t_c17372b456373c 126-131,227-262,265,279
+web/src/style.css
+  s_2458253039bfa2::t_cb6b4b7400362c 1469-1484
+  s_2458253039bfa2::t_87c38c7770e223 1508-1509
+web/src/components/Agent.tsx
+  s_2458253039bfa2::t_683709607f2a9a 6,52-137,154,156,209-211,213-217
+internal/app/annotate.go
+  s_2458253039bfa2::t_93a70783d1fe52 41-42,72-74,135
+web/src/components/Annotate.tsx
+  s_2458253039bfa2::t_cb6b4b7400362c 15-16
+  s_2458253039bfa2::t_683709607f2a9a 46,126,222
+internal/agent/hermes/client.go
+  s_2458253039bfa2::t_e4636036259fca 179
+internal/agent/agent.go
+  s_2458253039bfa2::t_e4636036259fca 81-109
+internal/server/server.go
+  s_2458253039bfa2::t_93a70783d1fe52 132-133,510-523
+  s_2458253039bfa2::t_ba4d59e3b7b296 524
+internal/agent/hermes/client_test.go
+  s_2458253039bfa2::t_e4636036259fca 108,118,154
+internal/server/dist/assets/c-BNL_bPk4.js
+  s_2458253039bfa2::t_0f68146d8c4674 1
+internal/server/dist/assets/cpp-DniTc5Px.js
+  s_2458253039bfa2::t_559e96ce7901ca 1
+internal/server/dist/assets/css-BaDUE8U4.js
+  s_2458253039bfa2::t_b56bfc8d1b15fb 1
+internal/server/dist/assets/dist-bEDCwPDU.js
+  s_2458253039bfa2::t_57aab20d3a46e3 1-2,47
+internal/server/dist/assets/graphql-CKQK_P9T.js
+  s_2458253039bfa2::t_637c03547308e4 1
+internal/server/dist/assets/html-CYatcV86.js
+  s_2458253039bfa2::t_faa17278d2f556 1
+internal/server/dist/assets/html-derivative-DfAQsucV.js
+  s_2458253039bfa2::t_ac5d2f0e800ac4 1
+internal/server/dist/assets/index-7lV6VIWF.css
+  s_2458253039bfa2::t_c3d307cb7a504e 1
+internal/server/dist/assets/index-BZ33ujir.js
+  s_2458253039bfa2::t_44090914038ee7 1-2,69-70,77,80-84,86-88,90-92,100-101,103,120-121,123,125,129,132-133,146,148,238,241-243,246-252
+internal/server/dist/assets/java-B8xXUhUE.js
+  s_2458253039bfa2::t_06e90cc2e3598d 1
+internal/server/dist/assets/jsx-CBBahG1h.js
+  s_2458253039bfa2::t_b765e9002913f6 1
+internal/server/dist/assets/lua-CmdIaBRe.js
+  s_2458253039bfa2::t_8ea33e22e20547 1
+internal/server/dist/assets/php-LI5yZNUR.js
+  s_2458253039bfa2::t_d8de26d6b661db 1
+internal/server/dist/assets/rst-8Up9gd44.js
+  s_2458253039bfa2::t_f09216f9e8692e 1
+internal/server/dist/assets/ruby-OE9WASzH.js
+  s_2458253039bfa2::t_ab17be94d3b49d 1
+internal/server/dist/assets/sql-CkQ40iZl.js
+  s_2458253039bfa2::t_7a431d49303ded 1
+internal/server/dist/assets/tsx-DI7TlgXf.js
+  s_2458253039bfa2::t_efa616c1bfd318 1
+internal/server/dist/assets/typescript-CZ8vyGqH.js
+  s_2458253039bfa2::t_b2d1a150adcc37 1
+internal/server/dist/assets/vue-jPfSJ-YM.js
+  s_2458253039bfa2::t_7a7b8323c56a6d 1
+internal/server/dist/assets/xml-DYijjVJ8.js
+  s_2458253039bfa2::t_2ec6e03616df86 1
+internal/server/dist/index.html
+  s_2458253039bfa2::t_626632bb63957c 8-9
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "d98e903d08b17ac5de8d63e50e7b6188bf4eb1e2",
+  "prompts": {},
+  "sessions": {
+    "s_2458253039bfa2": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "44194b0b-d672-496d-be88-ee0b7a7761ad",
+        "model": "claude-opus-5-5"
+      },
+      "human_author": "Yoshi Yamaguchi <ymotongpoo@gmail.com>"
+    }
+  }
+}
