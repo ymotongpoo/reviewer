@@ -167,7 +167,11 @@ func (c *Client) CreateSession(ctx context.Context, dir, title string, opts agen
 		}
 	}
 	if sel.Model != "" {
-		args["modelSelection"] = map[string]any{"instanceId": sel.Provider, "model": sel.Model}
+		ms := map[string]any{"instanceId": sel.Provider, "model": sel.Model}
+		if len(sel.Options) > 0 {
+			ms["options"] = sel.Options
+		}
+		args["modelSelection"] = ms
 	}
 	var res struct {
 		ThreadID string `json:"threadId"`
@@ -201,8 +205,9 @@ func (c *Client) Models(ctx context.Context, dir string) ([]agent.Model, *agent.
 			ProviderInstanceID string `json:"providerInstanceId"`
 			DisplayName        string `json:"displayName"`
 			Models             []struct {
-				ID    string `json:"id"`
-				Label string `json:"label"`
+				ID      string         `json:"id"`
+				Label   string         `json:"label"`
+				Options []optionDetail `json:"options"`
 			} `json:"models"`
 		} `json:"providers"`
 	}
@@ -216,7 +221,10 @@ func (c *Client) Models(ctx context.Context, dir string) ([]agent.Model, *agent.
 			if label == "" {
 				label = m.ID
 			}
-			models = append(models, agent.Model{ModelRef: agent.ModelRef{Provider: p.ProviderInstanceID, Model: m.ID}, ProviderName: p.DisplayName, Label: label})
+			models = append(models, agent.Model{
+				ModelRef: agent.ModelRef{Provider: p.ProviderInstanceID, Model: m.ID}, ProviderName: p.DisplayName,
+				Label: label, Reasoning: reasoningOption(m.Options),
+			})
 		}
 	}
 	ps, err := c.projects(ctx)
@@ -268,6 +276,48 @@ func (c *Client) Attach(ctx context.Context, sessionID, runID string) (agent.Run
 	run := newRun(c, sessionID, runID, true)
 	go run.loop()
 	return run, nil
+}
+
+// optionDetail describes an option of a model in T3 Code's catalog.
+type optionDetail struct {
+	ID      string `json:"id"`
+	Label   string `json:"label"`
+	Type    string `json:"type"`
+	Options []struct {
+		ID        string `json:"id"`
+		Label     string `json:"label"`
+		IsDefault bool   `json:"isDefault"`
+	} `json:"options"`
+	CurrentValue any `json:"currentValue"`
+}
+
+// reasoningIDs are the ids T3 Code's providers give their reasoning
+// effort option; its label is "Reasoning" for all of them.
+var reasoningIDs = map[string]bool{"reasoningEffort": true, "effort": true}
+
+// reasoningOption returns the reasoning effort option among opts, or nil.
+func reasoningOption(opts []optionDetail) *agent.ModelOption {
+	for _, o := range opts {
+		if o.Type != "select" || len(o.Options) == 0 || !reasoningIDs[o.ID] && !strings.EqualFold(o.Label, "Reasoning") {
+			continue
+		}
+		mo := &agent.ModelOption{ID: o.ID, Label: o.Label, Choices: []agent.Choice{}}
+		for _, c := range o.Options {
+			label := c.Label
+			if label == "" {
+				label = c.ID
+			}
+			mo.Choices = append(mo.Choices, agent.Choice{ID: c.ID, Label: label})
+			if c.IsDefault {
+				mo.Default = c.ID
+			}
+		}
+		if cur, ok := o.CurrentValue.(string); ok && cur != "" {
+			mo.Default = cur
+		}
+		return mo
+	}
+	return nil
 }
 
 // recentModel returns the model of the most recently updated thread of the

@@ -51,10 +51,17 @@ export function AgentChip() {
 
 const modelKey = (m: ModelRef) => `${m.provider}\u0000${m.model}`
 
+/** The model with its reasoning effort set to the model's default. */
+function withDefaults(m: AgentModel): ModelRef {
+  const r = m.reasoning
+  return { provider: m.provider, model: m.model, options: r?.default ? [{ id: r.id, value: r.default }] : undefined }
+}
+
 /**
- * Model of a new session, grouped by provider. It starts at the model most
- * recently used for the directory. Agents without a model catalog render
- * nothing and pick the model themselves.
+ * Model of a new session, grouped by provider, and its reasoning effort
+ * when the model has one. It starts at the model most recently used for
+ * the directory. Agents without a model catalog render nothing and pick
+ * the model themselves.
  */
 export function ModelSelect({ value, onChange }: { value: ModelRef | null; onChange: (m: ModelRef | null) => void }) {
   const [models, setModels] = useState<AgentModel[] | null>(null)
@@ -66,7 +73,7 @@ export function ModelSelect({ value, onChange }: { value: ModelRef | null; onCha
       if (value) return
       const recent = r.recent && r.models.find((m) => modelKey(m) === modelKey(r.recent!))
       const first = recent ?? r.models[0]
-      onChange(first ? { provider: first.provider, model: first.model } : null)
+      onChange(first ? withDefaults(first) : null)
     }).catch((e) => setError((e as Error).message))
   }, [])
   if (!agentInfo.value?.canPickModel) return null
@@ -79,20 +86,38 @@ export function ModelSelect({ value, onChange }: { value: ModelRef | null; onCha
     if (g) g[1].push(m)
     else groups.push([m.providerName, [m]])
   }
+  const selected = value ? models.find((m) => modelKey(m) === modelKey(value)) : undefined
+  const reasoning = selected?.reasoning
+  const level = reasoning && (value?.options?.find((o) => o.id === reasoning.id)?.value ?? reasoning.default ?? '')
   return (
-    <label class="field">
-      <span>モデル</span>
-      <select value={value ? modelKey(value) : ''} onChange={(e) => {
-        const m = models.find((m) => modelKey(m) === e.currentTarget.value)
-        onChange(m ? { provider: m.provider, model: m.model } : null)
-      }}>
-        {groups.map(([name, ms]) => (
-          <optgroup label={name}>
-            {ms.map((m) => <option value={modelKey(m)}>{m.label}</option>)}
-          </optgroup>
-        ))}
-      </select>
-    </label>
+    <div class="model-select">
+      <label class="field">
+        <span>モデル</span>
+        <select value={value ? modelKey(value) : ''} onChange={(e) => {
+          const m = models.find((m) => modelKey(m) === e.currentTarget.value)
+          onChange(m ? withDefaults(m) : null)
+        }}>
+          {groups.map(([name, ms]) => (
+            <optgroup label={name}>
+              {ms.map((m) => <option value={modelKey(m)}>{m.label}</option>)}
+            </optgroup>
+          ))}
+        </select>
+      </label>
+      {reasoning && value && (
+        <label class="field">
+          <span>推論レベル</span>
+          <select value={level} onChange={(e) => {
+            const v = e.currentTarget.value
+            onChange({ ...value, options: [...(value.options ?? []).filter((o) => o.id !== reasoning.id), { id: reasoning.id, value: v }] })
+          }}>
+            {reasoning.choices.map((c) => (
+              <option value={c.id}>{c.label}{c.id === reasoning.default ? '（既定）' : ''}</option>
+            ))}
+          </select>
+        </label>
+      )}
+    </div>
   )
 }
 

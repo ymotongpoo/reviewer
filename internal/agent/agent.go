@@ -88,10 +88,19 @@ type SessionOptions struct {
 	Model ModelRef
 }
 
-// ModelRef names a model of a provider.
+// ModelRef names a model of a provider and the options chosen for it.
 type ModelRef struct {
 	Provider string `json:"provider"`
 	Model    string `json:"model"`
+	// Options are values of the model's options, e.g. its reasoning effort.
+	// Options left out keep their defaults.
+	Options []OptionValue `json:"options,omitempty"`
+}
+
+// OptionValue is the chosen value of a model option.
+type OptionValue struct {
+	ID    string `json:"id"`
+	Value string `json:"value"`
 }
 
 // Model is a model that a new session can use.
@@ -99,6 +108,23 @@ type Model struct {
 	ModelRef
 	ProviderName string `json:"providerName"`
 	Label        string `json:"label"`
+	// Reasoning is the model's reasoning effort option, if it has one.
+	Reasoning *ModelOption `json:"reasoning,omitempty"`
+}
+
+// ModelOption is an option of a model with a fixed set of values.
+type ModelOption struct {
+	ID      string   `json:"id"`
+	Label   string   `json:"label"`
+	Choices []Choice `json:"choices"`
+	// Default is the value used when none is chosen.
+	Default string `json:"default,omitempty"`
+}
+
+// Choice is a value of a ModelOption.
+type Choice struct {
+	ID    string `json:"id"`
+	Label string `json:"label"`
 }
 
 // ModelLister is optionally implemented by agents whose new sessions can

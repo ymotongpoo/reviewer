@@ -125,9 +125,16 @@ func (f *fake) tool(name string, args map[string]any) (any, string) {
 		return map[string]any{"threads": []any{}}, ""
 	case "orchestrator_capabilities":
 		return map[string]any{"providers": []map[string]any{
-			{"providerInstanceId": "codex", "displayName": "Codex", "models": []map[string]any{{"id": "gpt-x", "label": "GPT-X"}}},
+			{"providerInstanceId": "codex", "displayName": "Codex", "models": []map[string]any{{"id": "gpt-x", "label": "GPT-X", "options": []map[string]any{
+				{"id": "reasoningEffort", "label": "Reasoning", "type": "select", "currentValue": "medium", "options": []map[string]any{
+					{"id": "low", "label": "Low"}, {"id": "medium", "label": "Medium", "isDefault": true}, {"id": "xhigh", "label": "Extra High"}}},
+				{"id": "serviceTier", "label": "Service Tier", "type": "select", "options": []map[string]any{{"id": "default", "isDefault": true}}},
+			}}}},
 			{"providerInstanceId": "cursor", "displayName": "Cursor", "models": []any{}},
-			{"providerInstanceId": "claudeAgent", "displayName": "Claude", "models": []map[string]any{{"id": "m-new", "label": "M New"}, {"id": "m-raw"}}},
+			{"providerInstanceId": "claudeAgent", "displayName": "Claude", "models": []map[string]any{{"id": "m-new", "label": "M New", "options": []map[string]any{
+				{"id": "effort", "label": "Reasoning", "type": "select", "options": []map[string]any{{"id": "high", "isDefault": true}, {"id": "max", "label": "Max"}}},
+				{"id": "fastMode", "label": "Fast Mode", "type": "boolean"},
+			}}, {"id": "m-raw", "options": []map[string]any{{"id": "thinking", "label": "Thinking", "type": "boolean"}}}}},
 		}}, ""
 	case "t3_thread_launch":
 		f.mu.Lock()
@@ -227,13 +234,17 @@ func TestRelated(t *testing.T) {
 func TestCreateSessionWithChosenModel(t *testing.T) {
 	f, ts := newFake(t)
 	_, err := client(ts, "tok").CreateSession(context.Background(), "/r/zenn", "x",
-		agent.SessionOptions{Model: agent.ModelRef{Provider: "codex", Model: "gpt-x"}})
+		agent.SessionOptions{Model: agent.ModelRef{Provider: "codex", Model: "gpt-x", Options: []agent.OptionValue{{ID: "reasoningEffort", Value: "xhigh"}}}})
 	if err != nil {
 		t.Fatal(err)
 	}
 	sel, _ := f.launched["modelSelection"].(map[string]any)
 	if f.launched["projectId"] != "p-repo" || sel["instanceId"] != "codex" || sel["model"] != "gpt-x" {
 		t.Errorf("launch = %v", f.launched)
+	}
+	opts, _ := sel["options"].([]any)
+	if len(opts) != 1 || fmt.Sprint(opts[0]) != "map[id:reasoningEffort value:xhigh]" {
+		t.Errorf("options = %v", sel["options"])
 	}
 }
 
@@ -251,8 +262,26 @@ func TestModels(t *testing.T) {
 	if want := "codex/gpt-x=Codex:GPT-X,claudeAgent/m-new=Claude:M New,claudeAgent/m-raw=Claude:m-raw"; strings.Join(got, ",") != want {
 		t.Errorf("models = %v", got)
 	}
-	if recent == nil || *recent != (agent.ModelRef{Provider: "claudeAgent", Model: "m-new"}) {
+	if recent == nil || recent.Provider != "claudeAgent" || recent.Model != "m-new" {
 		t.Errorf("recent = %v", recent)
+	}
+	// The reasoning option of each model, with its current value as default.
+	reasoning := func(m agent.Model) string {
+		if m.Reasoning == nil {
+			return "-"
+		}
+		var ids []string
+		for _, c := range m.Reasoning.Choices {
+			ids = append(ids, c.ID+":"+c.Label)
+		}
+		return m.Reasoning.ID + "[" + strings.Join(ids, " ") + "]=" + m.Reasoning.Default
+	}
+	var rs []string
+	for _, m := range models {
+		rs = append(rs, reasoning(m))
+	}
+	if want := "reasoningEffort[low:Low medium:Medium xhigh:Extra High]=medium,effort[high:high max:Max]=high,-"; strings.Join(rs, ",") != want {
+		t.Errorf("reasoning = %v", rs)
 	}
 	// Outside every project, related projects still tell the recent model.
 	if _, recent, _ := client(ts, "tok").Models(context.Background(), "/r"); recent == nil || recent.Model != "m-new" {

@@ -354,11 +354,22 @@ export interface AgentInfo {
 export interface ModelRef {
   provider: string
   model: string
+  /** Chosen values of the model's options; options left out keep their defaults. */
+  options?: { id: string; value: string }[]
+}
+
+export interface ModelOption {
+  id: string
+  label: string
+  choices: { id: string; label: string }[]
+  default?: string
 }
 
 export interface AgentModel extends ModelRef {
   providerName: string
   label: string
+  /** The model's reasoning effort option, if it has one. */
+  reasoning?: ModelOption
 }
 
 export interface AgentModels {

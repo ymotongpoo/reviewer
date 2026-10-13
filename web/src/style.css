@@ -1474,6 +1474,17 @@ table.rounds th {
   border-radius: 8px;
   padding: 10px 12px;
 }
+.model-select {
+  display: grid;
+  grid-template-columns: minmax(0, 2fr) minmax(0, 1fr);
+  gap: 8px;
+}
+.model-select .field:only-child {
+  grid-column: 1 / -1;
+}
+@media (max-width: 599.98px) {
+  .model-select { grid-template-columns: minmax(0, 1fr); }
+}
 .new-session-actions {
   display: flex;
   justify-content: flex-end;
