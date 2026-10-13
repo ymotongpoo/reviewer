@@ -1,0 +1,57 @@
+internal/app/watch.go
+  s_2458253039bfa2::t_1721bfbbb7d120 19-27,31,38,44-46,49,53-60,68,73-75,80,84-85,88-91,107-112,118-133
+internal/store/git.go
+  s_2458253039bfa2::t_4d80751d454eea 14
+internal/store/store.go
+  s_2458253039bfa2::t_4d80751d454eea 25-29,165-169
+  s_2458253039bfa2::t_83ca53920e15b2 170-171
+internal/store/session_test.go
+  s_2458253039bfa2::t_5fc4bab5e5d738 1-70
+internal/store/session.go
+  s_2458253039bfa2::t_f5ba29785ca791 1-165
+internal/app/git.go
+  s_2458253039bfa2::t_4644c425640116 57,59,61,94-95,166-167,175-176,284-285,341-342,407-408
+internal/server/projects.go
+  s_2458253039bfa2::t_d15ec51b8e074d 28-30,32-55,58,61-62,65-94,102,109,123,214-215,222-227,230-231,233,235,241,245-246,250,252,256,259-288,292-297,301,319-321,324-325,338-371,375,379,382,384,411-412,417-434,448,455-457,467-469,472,479,488-509,511-533,641
+internal/agent/hermes/client.go
+  s_2458253039bfa2::t_461775fe820633 138-141,179,243
+internal/app/app.go
+  s_2458253039bfa2::t_4644c425640116 6-7,52,61-62,64-69,73-75,80-89,91-92,96-98,101-102,118-131,135,139-142,144-196,198-213,215-216,219-225,228-229
+  s_2458253039bfa2::t_121c8b2793f3b2 71-72,143,197,214,217-218,226-227
+  s_2458253039bfa2::t_b4106f074dcdc9 333-335,367
+internal/server/session_test.go
+  s_2458253039bfa2::t_dbd4a1b3f67652 1-145
+internal/agent/hermes/hermestest/fake.go
+  s_2458253039bfa2::t_b4106f074dcdc9 302
+internal/store/annotation.go
+  s_2458253039bfa2::t_4d80751d454eea 239,260
+internal/server/server.go
+  s_2458253039bfa2::t_27276679af7ffe 70,74,92-104,109-111,289-329
+  s_2458253039bfa2::t_cbb292c5e21264 330
+internal/agent/agent.go
+  s_2458253039bfa2::t_ebbf53d8585ad9 1-2,15,68,70,72-74,79,81
+internal/app/annotate.go
+  s_2458253039bfa2::t_f6a5354d2ca806 121
+  s_2458253039bfa2::t_ebbf53d8585ad9 130,158
+  s_2458253039bfa2::t_d6f68b52863f18 171,522,533,535
+internal/agent/hermes/client_test.go
+  s_2458253039bfa2::t_461775fe820633 87,100,108,118,154
+internal/app/agent.go
+  s_2458253039bfa2::t_ebbf53d8585ad9 37-38,40,87,158,279,288,409,420,422
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "4e8e7bc6da938ac932769cccafc8f667468ce5ef",
+  "prompts": {},
+  "sessions": {
+    "s_2458253039bfa2": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "44194b0b-d672-496d-be88-ee0b7a7761ad",
+        "model": "claude-opus-5-5"
+      },
+      "human_author": "Yoshi Yamaguchi <ymotongpoo@gmail.com>"
+    }
+  }
+}
