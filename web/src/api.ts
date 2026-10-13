@@ -2,6 +2,7 @@ import type { DirListing, ProjectSummary, ServerInfo } from './types'
 import type {
   AgentBinding,
   AgentInfo,
+  AgentModels,
   AgentRun,
   AgentRunView,
   AgentSession,
@@ -17,10 +18,13 @@ import type {
   GitSettings,
   GitStatus,
   Info,
+  ModelRef,
   Preset,
   RequestDiff,
+  ReviewSession,
   RoundChanges,
   RoundDiff,
+  SessionSummary,
   SubmitResult,
   TextRange,
   TreeFile,
@@ -34,11 +38,24 @@ export class ApiError extends Error {
   }
 }
 
-/** The id of the project this page shows, from /p/<id>/, or null on the picker. */
-export const projectId: string | null = location.pathname.match(/^\/p\/([0-9a-f]+)\//)?.[1] ?? null
+const pageMatch = location.pathname.match(/^\/p\/([0-9a-f]+)\/(?:s\/([0-9a-z]+)\/)?/)
 
-/** Prefix of the per-project API. */
-export const projectBase = projectId ? `/p/${projectId}` : ''
+/** The id of the project this page shows, from /p/<id>/, or null on the picker. */
+export const projectId: string | null = pageMatch?.[1] ?? null
+
+/** The review session this page shows, from /p/<id>/s/<session>/; "main" for /p/<id>/. */
+export const sessionId: string = pageMatch?.[2] ?? 'main'
+
+/** The page of a session of the project. */
+export function sessionPath(project: string, session: string): string {
+  return session === 'main' ? `/p/${project}/` : `/p/${project}/s/${session}/`
+}
+
+/** Prefix of the per-session API. */
+export const projectBase = projectId ? sessionPath(projectId, sessionId).replace(/\/$/, '') : ''
+
+/** Keys the browser storage of this session, e.g. drafts. */
+export const sessionKey: string | null = projectId && (sessionId === 'main' ? projectId : `${projectId}~${sessionId}`)
 
 async function request<T>(method: string, url: string, body?: unknown): Promise<T> {
   if (url.startsWith('/api/') && !serverPaths.some((p) => url.startsWith(p))) url = projectBase + url
@@ -70,6 +87,9 @@ const serverPaths = ['/api/server', '/api/projects', '/api/fs']
 
 export const api = {
   project: () => request<Info>('GET', '/api/project'),
+  sessions: () => request<{ sessions: SessionSummary[] }>('GET', '/api/sessions').then((r) => r.sessions),
+  createSession: (name: string) => request<{ session: ReviewSession; url: string }>('POST', '/api/sessions', { name }),
+  updateSession: (patch: { name?: string; archived?: boolean }) => request<ReviewSession>('PATCH', '/api/session', patch),
   tree: () => request<{ files: TreeFile[] }>('GET', '/api/tree').then((r) => r.files),
   file: (path: string) => request<FileView>('GET', `/api/file?path=${q(path)}`),
   roundChanges: (round: number, phase: 'review' | 'agent' = 'agent') =>
@@ -100,6 +120,9 @@ export const api = {
   agentSessions: () => request<{ sessions: AgentSession[] }>('GET', '/api/agent/sessions').then((r) => r.sessions),
   bindAgent: (sessionId: string) =>
     request<{ binding: AgentBinding | null }>('PUT', '/api/agent/binding', { sessionId }).then((r) => r.binding),
+  agentModels: () => request<AgentModels>('GET', '/api/agent/models'),
+  createAgentSession: (input: { title?: string; model?: ModelRef }) =>
+    request<{ binding: AgentBinding }>('POST', '/api/agent/sessions', input).then((r) => r.binding),
   agentSend: (round: number) => request<AgentRun>('POST', '/api/agent/send', { round }),
   agentRuns: (round: number) => request<{ runs: AgentRunView[] }>('GET', `/api/agent/runs?round=${round}`).then((r) => r.runs),
   agentStop: (id: string) => request<{ ok: boolean }>('POST', `/api/agent/runs/${q(id)}/stop`),
@@ -115,6 +138,7 @@ export const api = {
     target: AnnotationRequest['target']
     sessionId?: string
     sessionTitle?: string
+    model?: ModelRef
   }) => request<AnnotateResult>('POST', '/api/annotate', input),
   annotationRequests: () => request<{ requests: AnnotationRequest[] }>('GET', '/api/annotate/requests').then((r) => r.requests),
   annotationRequest: (id: string) => request<AnnotationRequestView>('GET', `/api/annotate/requests/${q(id)}`),

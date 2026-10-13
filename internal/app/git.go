@@ -54,11 +54,11 @@ func (a *App) openRepo(ctx context.Context) (*gitops.Repo, error) {
 // gitRepo reports whether the project is inside a Git work tree. It is
 // checked once and updated by every GitStatus.
 func (a *App) gitRepo() bool {
-	a.gitOnce.Do(func() {
+	a.ws.gitOnce.Do(func() {
 		_, err := a.openRepo(context.Background())
-		a.isRepo.Store(err == nil)
+		a.ws.isRepo.Store(err == nil)
 	})
-	return a.isRepo.Load()
+	return a.ws.isRepo.Load()
 }
 
 // GitSettings returns the configured defaults overridden by the project's
@@ -91,8 +91,8 @@ func (a *App) InitGitLanguage(lang string) error {
 	if !gitops.ValidLanguage(lang) {
 		return badRequest("コミットメッセージの言語は ja か en です: %s", lang)
 	}
-	a.gitMu.Lock()
-	defer a.gitMu.Unlock()
+	a.ws.gitMu.Lock()
+	defer a.ws.gitMu.Unlock()
 	if _, ok, err := a.Store.GitSettings(); err != nil || ok {
 		return err
 	}
@@ -163,8 +163,8 @@ func resolveTarget(st *gitops.State, remotes []gitops.Remote, settings config.Gi
 // GitStatus inspects the repository. remote and branch select a push
 // target other than the default for this operation only.
 func (a *App) GitStatus(ctx context.Context, remote, branch string) (*GitStatus, error) {
-	a.gitMu.Lock()
-	defer a.gitMu.Unlock()
+	a.ws.gitMu.Lock()
+	defer a.ws.gitMu.Unlock()
 	out := &GitStatus{
 		Messages: map[string]string{}, Settings: a.GitSettings(), Remotes: []gitops.Remote{},
 		CommitBlockers: []string{}, PushBlockers: []string{},
@@ -172,8 +172,8 @@ func (a *App) GitStatus(ctx context.Context, remote, branch string) (*GitStatus,
 	}
 	repo, err := a.openRepo(ctx)
 	if err == nil || errors.Is(err, gitops.ErrNotRepo) {
-		a.gitOnce.Do(func() {})
-		a.isRepo.Store(err == nil)
+		a.ws.gitOnce.Do(func() {})
+		a.ws.isRepo.Store(err == nil)
 	}
 	if errors.Is(err, gitops.ErrNotRepo) {
 		out.State = &gitops.State{Changes: []gitops.Change{}, OutsideStaged: []string{}}
@@ -281,8 +281,8 @@ func (a *App) SaveGitSettings(ctx context.Context, g config.GitConfig) (config.G
 	if !gitops.ValidLanguage(g.Language) {
 		return config.GitConfig{}, badRequest("コミットメッセージの言語は ja か en です: %s", g.Language)
 	}
-	a.gitMu.Lock()
-	defer a.gitMu.Unlock()
+	a.ws.gitMu.Lock()
+	defer a.ws.gitMu.Unlock()
 	if g.Remote != "" || g.Branch != "" {
 		repo, err := a.openRepo(ctx)
 		if err != nil {
@@ -338,8 +338,8 @@ func (a *App) GitCommit(ctx context.Context, in GitCommitInput) (*GitCommitResul
 	if err != nil {
 		return nil, badRequest("%s", err.Error())
 	}
-	a.gitMu.Lock()
-	defer a.gitMu.Unlock()
+	a.ws.gitMu.Lock()
+	defer a.ws.gitMu.Unlock()
 	repo, err := a.openRepo(ctx)
 	if errors.Is(err, gitops.ErrNotRepo) {
 		return nil, conflict("このディレクトリは Git のリポジトリの中にありません")
@@ -404,8 +404,8 @@ func (a *App) GitPush(ctx context.Context, in GitPushInput) (*GitPushResult, err
 	if in.Remote == "" || in.Branch == "" {
 		return nil, badRequest("push 先の remote とブランチを選んでください")
 	}
-	a.gitMu.Lock()
-	defer a.gitMu.Unlock()
+	a.ws.gitMu.Lock()
+	defer a.ws.gitMu.Unlock()
 	repo, err := a.openRepo(ctx)
 	if errors.Is(err, gitops.ErrNotRepo) {
 		return nil, conflict("このディレクトリは Git のリポジトリの中にありません")

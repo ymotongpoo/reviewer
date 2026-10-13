@@ -1,5 +1,5 @@
-// Package agent abstracts coding agents (Hermes Agent today; Claude Code and
-// Codex later) that reviewer can hand a round of feedback to directly.
+// Package agent abstracts coding agents (T3 Code and Hermes Agent) that
+// reviewer can hand a round of feedback to directly.
 package agent
 
 import (
@@ -12,7 +12,7 @@ import (
 type Session struct {
 	ID        string    `json:"id"`
 	Title     string    `json:"title"`
-	Source    string    `json:"source"` // e.g. "discord", "cli"
+	Source    string    `json:"source"` // e.g. "discord", "cli", "t3"
 	Preview   string    `json:"preview,omitempty"`
 	UpdatedAt time.Time `json:"updatedAt"`
 }
@@ -65,18 +65,74 @@ type Request struct {
 
 // Agent is a connection to an agent.
 type Agent interface {
-	// Kind is a short identifier such as "hermes".
+	// Kind is a short identifier such as "t3" or "hermes".
 	Kind() string
-	// Name is shown in the UI, e.g. "Hermes Agent".
+	// Name is shown in the UI, e.g. "T3 Code".
 	Name() string
-	Sessions(ctx context.Context) ([]Session, error)
+	// Sessions lists the sessions that may work on the directory dir.
+	// Agents that do not know about directories list all sessions.
+	Sessions(ctx context.Context, dir string) ([]Session, error)
 	Start(ctx context.Context, r Request) (Run, error)
 }
 
 // SessionCreator is optionally implemented by agents that can create an empty
-// titled session before a run starts.
+// titled session for the directory dir before a run starts.
 type SessionCreator interface {
-	CreateSession(ctx context.Context, title string) (Session, error)
+	CreateSession(ctx context.Context, dir, title string, opts SessionOptions) (Session, error)
+}
+
+// SessionOptions configure a new session. Agents ignore what they do not
+// support.
+type SessionOptions struct {
+	// Model is the model of the session; the zero value lets the agent pick.
+	Model ModelRef
+}
+
+// ModelRef names a model of a provider and the options chosen for it.
+type ModelRef struct {
+	Provider string `json:"provider"`
+	Model    string `json:"model"`
+	// Options are values of the model's options, e.g. its reasoning effort.
+	// Options left out keep their defaults.
+	Options []OptionValue `json:"options,omitempty"`
+}
+
+// OptionValue is the chosen value of a model option.
+type OptionValue struct {
+	ID    string `json:"id"`
+	Value string `json:"value"`
+}
+
+// Model is a model that a new session can use.
+type Model struct {
+	ModelRef
+	ProviderName string `json:"providerName"`
+	Label        string `json:"label"`
+	// Reasoning is the model's reasoning effort option, if it has one.
+	Reasoning *ModelOption `json:"reasoning,omitempty"`
+}
+
+// ModelOption is an option of a model with a fixed set of values.
+type ModelOption struct {
+	ID      string   `json:"id"`
+	Label   string   `json:"label"`
+	Choices []Choice `json:"choices"`
+	// Default is the value used when none is chosen.
+	Default string `json:"default,omitempty"`
+}
+
+// Choice is a value of a ModelOption.
+type Choice struct {
+	ID    string `json:"id"`
+	Label string `json:"label"`
+}
+
+// ModelLister is optionally implemented by agents whose new sessions can
+// use a chosen model.
+type ModelLister interface {
+	// Models lists the available models and the one most recently used for
+	// the directory dir, if known.
+	Models(ctx context.Context, dir string) (models []Model, recent *ModelRef, err error)
 }
 
 // ErrTitleInUse indicates that a session title is already taken.

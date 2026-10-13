@@ -2,8 +2,7 @@ package app
 
 import (
 	"context"
-	"crypto/sha256"
-	"encoding/hex"
+	"errors"
 	"fmt"
 	"log"
 	"net/http"
@@ -36,10 +35,10 @@ type activeRun struct {
 	run agent.Run
 }
 
-// Attacher is implemented by agents that can resume reading a run after a
-// restart of reviewer.
+// Attacher is implemented by agents that can resume reading a run of the
+// session sessionID after a restart of reviewer.
 type Attacher interface {
-	Attach(ctx context.Context, runID string) (agent.Run, error)
+	Attach(ctx context.Context, sessionID, runID string) (agent.Run, error)
 }
 
 // liveSessioner is implemented by runs that know the session they ended in.
@@ -86,7 +85,7 @@ func (a *App) reattach() {
 	a.agents.mu.Unlock()
 	for _, rec := range stale {
 		if at, ok := ag.(Attacher); ok && ag.Kind() == rec.Kind {
-			if run, err := at.Attach(context.Background(), rec.ID); err == nil {
+			if run, err := at.Attach(context.Background(), rec.SessionID, rec.ID); err == nil {
 				a.follow(rec, run)
 				continue
 			}
@@ -106,14 +105,18 @@ func (a *App) AgentBusy() bool {
 
 // AgentInfo describes the agent connection for the UI.
 type AgentInfo struct {
-	Available bool                `json:"available"`
-	Kind      string              `json:"kind,omitempty"`
-	Name      string              `json:"name,omitempty"`
-	Reason    string              `json:"reason,omitempty"`
-	Notify    string              `json:"notify"`
-	AutoSend  bool                `json:"autoSend"`
-	Binding   *store.AgentBinding `json:"binding,omitempty"`
-	Active    []*store.AgentRun   `json:"active"`
+	Available bool   `json:"available"`
+	Kind      string `json:"kind,omitempty"`
+	Name      string `json:"name,omitempty"`
+	Reason    string `json:"reason,omitempty"`
+	Notify    string `json:"notify"`
+	AutoSend  bool   `json:"autoSend"`
+	// CanCreate tells whether a new session can be created as the target,
+	// and CanPickModel whether its model can be chosen.
+	CanCreate    bool                `json:"canCreate"`
+	CanPickModel bool                `json:"canPickModel"`
+	Binding      *store.AgentBinding `json:"binding,omitempty"`
+	Active       []*store.AgentRun   `json:"active"`
 }
 
 // AgentInfo returns the agent status.
@@ -126,6 +129,8 @@ func (a *App) AgentInfo() AgentInfo {
 	info := AgentInfo{Reason: a.agents.reason, Notify: a.agents.notify, AutoSend: a.Cfg.Agent.AutoSend, Binding: binding, Active: []*store.AgentRun{}}
 	if ag := a.agents.ag; ag != nil {
 		info.Available, info.Kind, info.Name = true, ag.Kind(), ag.Name()
+		_, info.CanCreate = ag.(agent.SessionCreator)
+		_, info.CanPickModel = ag.(agent.ModelLister)
 		if binding != nil && binding.Kind != ag.Kind() {
 			info.Binding = nil
 		}
@@ -157,7 +162,7 @@ func (a *App) AgentSessions(ctx context.Context) ([]agent.Session, error) {
 	if err != nil {
 		return nil, err
 	}
-	ss, err := ag.Sessions(ctx)
+	ss, err := ag.Sessions(ctx, a.Proj.Root)
 	if err != nil {
 		return nil, &Error{Code: http.StatusBadGateway, Msg: err.Error()}
 	}
@@ -165,6 +170,76 @@ func (a *App) AgentSessions(ctx context.Context) ([]agent.Session, error) {
 		ss = []agent.Session{}
 	}
 	return ss, nil
+}
+
+// AgentModels lists the models a new session can use, with the one most
+// recently used for the directory.
+type AgentModels struct {
+	Models []agent.Model   `json:"models"`
+	Recent *agent.ModelRef `json:"recent,omitempty"`
+}
+
+// AgentModels returns the models a new session of the agent can use.
+func (a *App) AgentModels(ctx context.Context) (*AgentModels, error) {
+	ag, err := a.agentOrErr()
+	if err != nil {
+		return nil, err
+	}
+	ml, ok := ag.(agent.ModelLister)
+	if !ok {
+		return &AgentModels{Models: []agent.Model{}}, nil
+	}
+	models, recent, err := ml.Models(ctx, a.Proj.Root)
+	if err != nil {
+		return nil, &Error{Code: http.StatusBadGateway, Msg: err.Error()}
+	}
+	return &AgentModels{Models: models, Recent: recent}, nil
+}
+
+// NewAgentSession is a request to create the session feedback goes to.
+type NewAgentSession struct {
+	// Title is the session's name; empty gives "reviewer: <directory>".
+	Title string         `json:"title"`
+	Model agent.ModelRef `json:"model"`
+}
+
+// CreateAgentSession creates a session of the agent and binds the review
+// session to it.
+func (a *App) CreateAgentSession(ctx context.Context, in NewAgentSession) (*store.AgentBinding, error) {
+	ag, err := a.agentOrErr()
+	if err != nil {
+		return nil, err
+	}
+	creator, ok := ag.(agent.SessionCreator)
+	if !ok {
+		return nil, badRequest("%s では新しいセッションを作れません", ag.Name())
+	}
+	title, err := validateAnnotationSessionTitle(in.Title)
+	if err != nil {
+		return nil, err
+	}
+	if title == "" {
+		title = "reviewer: " + a.Proj.Name() + a.sessionLabel()
+	}
+	s, err := creator.CreateSession(ctx, a.Proj.Root, title, agent.SessionOptions{Model: in.Model})
+	if err != nil {
+		if errors.Is(err, agent.ErrTitleInUse) {
+			return nil, conflict("セッション名「%s」はすでに使われています。別の名前を入力してください", title)
+		}
+		return nil, &Error{Code: http.StatusBadGateway, Msg: "新しいセッションを作成できませんでした: " + err.Error()}
+	}
+	if s.Title == "" {
+		s.Title = title
+	}
+	b := &store.AgentBinding{Kind: ag.Kind(), SessionID: s.ID, Title: s.Title, Source: s.Source, BoundAt: a.now()}
+	a.mu.Lock()
+	err = a.Store.SaveAgentBinding(b)
+	a.mu.Unlock()
+	if err != nil {
+		return nil, err
+	}
+	a.notify(Event{Type: "agent"})
+	return b, nil
 }
 
 // BindAgent ties the project to a session; an empty id removes the binding.
@@ -276,10 +351,9 @@ func (a *App) SendToAgent(ctx context.Context, n int) (*store.AgentRun, error) {
 	}
 	a.agents.mu.Unlock()
 
-	sum := sha256.Sum256([]byte(a.Proj.Root))
 	// The submission time keeps keys unique when a data directory is recreated
 	// and round numbers start over.
-	key := fmt.Sprintf("reviewer-%s-r%d-%d-%d", hex.EncodeToString(sum[:6]), n, m.SubmittedAt.UnixNano(), attempts+1)
+	key := fmt.Sprintf("%s-r%d-%d-%d", a.runKey(), n, m.SubmittedAt.UnixNano(), attempts+1)
 	run, err := ag.Start(ctx, agent.Request{SessionID: binding.SessionID, Prompt: prompt, IdempotencyKey: key})
 	if err != nil {
 		return nil, &Error{Code: http.StatusBadGateway, Msg: "エージェントに送信できませんでした: " + err.Error()}
@@ -288,7 +362,7 @@ func (a *App) SendToAgent(ctx context.Context, n int) (*store.AgentRun, error) {
 	a.saveRun(rec)
 	a.follow(rec, run)
 
-	msg := fmt.Sprintf("📝 reviewer: ラウンド%dのレビューコメント（%d件）を送りました。対応をお願いします。", n, len(m.FeedbackIDs))
+	msg := fmt.Sprintf("📝 reviewer%s: ラウンド%dのレビューコメント（%d件）を送りました。対応をお願いします。", a.sessionLabel(), n, len(m.FeedbackIDs))
 	if u := a.agents.baseURL; u != "" {
 		msg += "\n進捗: " + u
 	}
@@ -409,7 +483,7 @@ func (a *App) finish(rec *store.AgentRun, run agent.Run, ev agent.Event) {
 	var msg string
 	switch status {
 	case agent.StatusCompleted:
-		msg = fmt.Sprintf("✅ reviewer: ラウンド%dの対応が終わりました。", rec.Round)
+		msg = fmt.Sprintf("✅ reviewer%s: ラウンド%dの対応が終わりました。", a.sessionLabel(), rec.Round)
 		if summary == "" {
 			summary = firstLines(text, 300)
 		}
@@ -420,9 +494,9 @@ func (a *App) finish(rec *store.AgentRun, run agent.Run, ev agent.Event) {
 			msg += "\n（response.json が書かれていないため、コメントごとの返答はありません）"
 		}
 	case agent.StatusCancelled:
-		msg = fmt.Sprintf("⏹ reviewer: ラウンド%dの対応を停止しました。", rec.Round)
+		msg = fmt.Sprintf("⏹ reviewer%s: ラウンド%dの対応を停止しました。", a.sessionLabel(), rec.Round)
 	default:
-		msg = fmt.Sprintf("⚠️ reviewer: ラウンド%dの対応が途中で終わりました。", rec.Round)
+		msg = fmt.Sprintf("⚠️ reviewer%s: ラウンド%dの対応が途中で終わりました。", a.sessionLabel(), rec.Round)
 		if errText != "" {
 			msg += "（" + errText + "）"
 		}

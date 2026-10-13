@@ -1,6 +1,6 @@
 import { useKeyboardReveal } from './useKeyboardReveal'
 import { useEffect, useLayoutEffect, useRef, useState } from 'preact/hooks'
-import { api, projectId } from '../api'
+import { api, sessionKey } from '../api'
 import { comments, composerJournalVersion, draftStore, editing, labels, refreshComments, registerComposerFlusher, removeComment, toast, upsertComment, type EditTarget } from '../state'
 import { classifySaveError, composerKey, matchesDraft, shouldDropJournal, type ComposerJournal, type SaveOutcome } from '../drafts'
 import { renderMarkdown } from '../markdown'
@@ -33,7 +33,7 @@ export function Composer({ target, comment, original, onClosed }: Props) {
     kind: 'new' as const, scope: comment.scope, path: comment.path,
     start: comment.origStart, end: comment.origEnd, range: comment.range,
   } : undefined))
-  const key = useRef(composerKey(projectId!, { ...target, commentId: comment?.id, scope: target?.scope ?? comment!.scope }))
+  const key = useRef(composerKey(sessionKey!, { ...target, commentId: comment?.id, scope: target?.scope ?? comment!.scope }))
   const queue = useRef<Promise<SaveOutcome | 'empty'>>(Promise.resolve('empty'))
   const journalQueue = useRef<Promise<void>>(Promise.resolve())
   const ready = useRef<Promise<void>>(Promise.resolve())
@@ -68,7 +68,7 @@ export function Composer({ target, comment, original, onClosed }: Props) {
     ready.current = (async () => {
       let j = await draftStore.get<ComposerJournal>('composer', key.current)
       if (!j && comment) {
-        j = (await draftStore.list<ComposerJournal>('composer', `${projectId}:`)).find((j) => j.commentId === comment.id)
+        j = (await draftStore.list<ComposerJournal>('composer', `${sessionKey}:`)).find((j) => j.commentId === comment.id)
       }
       if (closed.current || !j) return
       key.current = j.key
@@ -156,7 +156,7 @@ export function Composer({ target, comment, original, onClosed }: Props) {
           : await api.createComment({ scope: target!.scope, path: target!.path, start: target!.start, end: target!.end, hash: target!.hash, range: target!.range, label, body })
         id.current = c.id
         upsertComment(c)
-        if (target && editing.value?.kind === 'new' && composerKey(projectId!, editing.value) === key.current) {
+        if (target && editing.value?.kind === 'new' && composerKey(sessionKey!, editing.value) === key.current) {
           editing.value = { ...editing.value, createdId: c.id }
         }
         inFlight.current = false

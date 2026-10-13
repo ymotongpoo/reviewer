@@ -25,20 +25,73 @@ import (
 // maxRecent bounds the recent project list.
 const maxRecent = 50
 
-// Project is an open review directory.
+// Project is an open review session of a directory. The default session
+// of directory id is served under /p/<id>/, the others under
+// /p/<id>/s/<session>/.
 type Project struct {
-	ID     string
-	Root   string
-	App    *app.App
-	Hub    *Hub
-	cancel context.CancelFunc
+	ID      string // the directory's id
+	Session string
+	Root    string
+	App     *app.App
+	Hub     *Hub
+	dir     *Dir
+	reg     *Registry
 
 	muxOnce sync.Once
 	mux     http.Handler
 }
 
-// AgentSetup connects a newly opened project to the shared agent. url is
-// the project's page, used in notifications.
+// URL returns the session's page path.
+func (p *Project) URL() string { return sessionPath(p.ID, p.Session) }
+
+func sessionPath(id, session string) string {
+	if session == store.DefaultSession {
+		return "/p/" + id + "/"
+	}
+	return "/p/" + id + "/s/" + session + "/"
+}
+
+// Dir is an open directory with its open sessions, which share one watcher.
+type Dir struct {
+	ID     string
+	Root   string
+	WS     *app.Workspace
+	cancel context.CancelFunc
+
+	mu       sync.Mutex
+	sessions map[string]*Project
+}
+
+func (d *Dir) apps() []*app.App {
+	d.mu.Lock()
+	defer d.mu.Unlock()
+	out := make([]*app.App, 0, len(d.sessions))
+	for _, p := range d.sessions {
+		out = append(out, p.App)
+	}
+	return out
+}
+
+func (d *Dir) busy() bool {
+	for _, a := range d.apps() {
+		if a.AgentBusy() {
+			return true
+		}
+	}
+	return false
+}
+
+// broadcast sends ev to every open session of the directory.
+func (d *Dir) broadcast(ev app.Event) {
+	d.mu.Lock()
+	defer d.mu.Unlock()
+	for _, p := range d.sessions {
+		p.Hub.Publish(ev)
+	}
+}
+
+// AgentSetup connects a newly opened session to the shared agent. url is
+// the session's page, used in notifications.
 type AgentSetup func(a *app.App, url string)
 
 type recentEntry struct {
@@ -46,14 +99,14 @@ type recentEntry struct {
 	LastOpened time.Time `json:"lastOpened"`
 }
 
-// Registry holds the open projects and the list of recent ones.
+// Registry holds the open directories and the list of recent ones.
 type Registry struct {
 	mu       sync.Mutex
 	roots    []string // absolute, symlinks resolved
 	stateDir string
 	baseURL  string
 	setup    AgentSetup
-	open     map[string]*Project
+	open     map[string]*Dir
 	recent   []recentEntry
 }
 
@@ -67,7 +120,7 @@ func ProjectID(root string) string {
 // "~"). The recent list is read from stateDir. baseURL (without a trailing
 // slash) is used to build project URLs for notifications.
 func NewRegistry(roots []string, stateDir, baseURL string, setup AgentSetup) (*Registry, error) {
-	r := &Registry{stateDir: stateDir, baseURL: strings.TrimRight(baseURL, "/"), setup: setup, open: map[string]*Project{}}
+	r := &Registry{stateDir: stateDir, baseURL: strings.TrimRight(baseURL, "/"), setup: setup, open: map[string]*Dir{}}
 	for _, root := range roots {
 		abs, err := filepath.Abs(config.ExpandHome(root))
 		if err != nil {
@@ -158,57 +211,94 @@ func displayPath(p string) string {
 	return p
 }
 
-// Open opens (or returns the already open) project at path.
+// Open opens (or returns the already open) default session of the
+// directory at path.
 func (r *Registry) Open(path string) (*Project, error) {
 	root, err := r.Resolve(path)
 	if err != nil {
 		return nil, err
 	}
 	r.mu.Lock()
-	defer r.mu.Unlock()
-	return r.openLocked(root)
+	d, err := r.openLocked(root)
+	r.mu.Unlock()
+	if err != nil {
+		return nil, err
+	}
+	return r.session(d, store.DefaultSession)
 }
 
-func (r *Registry) openLocked(root string) (*Project, error) {
+// openLocked opens the directory root and its default session.
+func (r *Registry) openLocked(root string) (*Dir, error) {
 	id := ProjectID(root)
-	if p, ok := r.open[id]; ok {
+	if d, ok := r.open[id]; ok {
 		r.touchLocked(root)
-		return p, nil
+		return d, nil
 	}
 	cfg, err := config.Load(root, "")
 	if err != nil {
 		return nil, &app.Error{Code: http.StatusBadRequest, Msg: err.Error()}
 	}
+	ws, err := app.OpenWorkspace(root, cfg)
+	if err != nil {
+		return nil, err
+	}
+	d := &Dir{ID: id, Root: ws.Proj.Root, WS: ws, sessions: map[string]*Project{}}
+	if _, err := r.openSession(d, store.DefaultSession); err != nil {
+		return nil, err
+	}
+	ctx, cancel := context.WithCancel(context.Background())
+	d.cancel = cancel
+	go func() {
+		if err := ws.Watch(ctx, d.apps); err != nil {
+			log.Printf("watch %s: %v", root, err)
+		}
+	}()
+	r.open[id] = d
+	r.touchLocked(root)
+	log.Printf("opened %s (%s)", root, id)
+	return d, nil
+}
+
+// session returns the open session sid of d, opening it when needed.
+func (r *Registry) session(d *Dir, sid string) (*Project, error) {
+	if !store.ValidSessionID(sid) {
+		return nil, &app.Error{Code: http.StatusNotFound, Msg: "セッションが見つかりません: " + sid}
+	}
+	return r.openSession(d, sid)
+}
+
+func (r *Registry) openSession(d *Dir, sid string) (*Project, error) {
+	d.mu.Lock()
+	defer d.mu.Unlock()
+	if p, ok := d.sessions[sid]; ok {
+		return p, nil
+	}
 	hub := NewHub()
-	a, err := app.New(root, cfg, hub.Publish)
+	a, err := d.WS.Open(sid, hub.Publish)
 	if err != nil {
 		return nil, err
 	}
 	if err := a.Init(); err != nil {
 		return nil, err
 	}
-	ctx, cancel := context.WithCancel(context.Background())
-	go func() {
-		if err := a.Watch(ctx); err != nil {
-			log.Printf("watch %s: %v", root, err)
-		}
-	}()
+	p := &Project{ID: d.ID, Session: sid, Root: d.Root, App: a, Hub: hub, dir: d, reg: r}
 	if r.setup != nil {
-		r.setup(a, r.ProjectURL(id))
+		r.setup(a, r.SessionURL(d.ID, sid))
 	}
-	p := &Project{ID: id, Root: root, App: a, Hub: hub, cancel: cancel}
-	r.open[id] = p
-	r.touchLocked(root)
-	log.Printf("opened %s (%s)", root, id)
+	d.sessions[sid] = p
 	return p, nil
 }
 
-// ProjectURL returns the page of a project (without the token).
-func (r *Registry) ProjectURL(id string) string {
+// ProjectURL returns the page of a directory's default session (without
+// the token).
+func (r *Registry) ProjectURL(id string) string { return r.SessionURL(id, store.DefaultSession) }
+
+// SessionURL returns the page of a session (without the token).
+func (r *Registry) SessionURL(id, sid string) string {
 	if r.baseURL == "" {
 		return ""
 	}
-	return r.baseURL + "/p/" + id + "/"
+	return r.baseURL + sessionPath(id, sid)
 }
 
 func (r *Registry) touchLocked(root string) {
@@ -226,13 +316,13 @@ func (r *Registry) touchLocked(root string) {
 	r.saveRecent()
 }
 
-// Get returns the project with id, reopening a recent project that is not
-// loaded (e.g. after a restart of the server).
-func (r *Registry) Get(id string) (*Project, error) {
+// dir returns the open directory with id, reopening a recent directory that
+// is not loaded (e.g. after a restart of the server).
+func (r *Registry) dir(id string) (*Dir, error) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
-	if p, ok := r.open[id]; ok {
-		return p, nil
+	if d, ok := r.open[id]; ok {
+		return d, nil
 	}
 	for _, e := range r.recent {
 		if ProjectID(e.Path) == id {
@@ -245,20 +335,53 @@ func (r *Registry) Get(id string) (*Project, error) {
 	return nil, &app.Error{Code: http.StatusNotFound, Msg: "プロジェクトが見つかりません。選択画面から開き直してください"}
 }
 
-// Close unloads a project. It refuses while the agent is working on it.
+// Get returns the default session of the directory with id.
+func (r *Registry) Get(id string) (*Project, error) {
+	return r.GetSession(id, store.DefaultSession)
+}
+
+// GetSession returns the session sid of the directory with id.
+func (r *Registry) GetSession(id, sid string) (*Project, error) {
+	d, err := r.dir(id)
+	if err != nil {
+		return nil, err
+	}
+	return r.session(d, sid)
+}
+
+// CreateSession adds a session named name to the directory with id.
+func (r *Registry) CreateSession(id, name string) (*Project, error) {
+	d, err := r.dir(id)
+	if err != nil {
+		return nil, err
+	}
+	s, err := d.WS.CreateSession(name)
+	if err != nil {
+		return nil, err
+	}
+	p, err := r.session(d, s.ID)
+	if err != nil {
+		return nil, err
+	}
+	d.broadcast(app.Event{Type: "session"})
+	return p, nil
+}
+
+// Close unloads a directory with all its sessions. It refuses while the
+// agent is working on one of them.
 func (r *Registry) Close(id string) error {
 	r.mu.Lock()
 	defer r.mu.Unlock()
-	p, ok := r.open[id]
+	d, ok := r.open[id]
 	if !ok {
 		return nil
 	}
-	if p.App.AgentBusy() {
+	if d.busy() {
 		return &app.Error{Code: http.StatusConflict, Msg: "エージェントの対応中は閉じられません"}
 	}
-	p.cancel()
+	d.cancel()
 	delete(r.open, id)
-	log.Printf("closed %s", p.Root)
+	log.Printf("closed %s", d.Root)
 	return nil
 }
 
@@ -285,13 +408,30 @@ func (r *Registry) Forget(id string) error {
 func (r *Registry) CloseAll() {
 	r.mu.Lock()
 	defer r.mu.Unlock()
-	for id, p := range r.open {
-		p.cancel()
+	for id, d := range r.open {
+		d.cancel()
 		delete(r.open, id)
 	}
 }
 
-// ProjectSummary describes a recent project for the picker.
+// SessionSummary describes a review session of a directory.
+type SessionSummary struct {
+	ID          string              `json:"id"`
+	Name        string              `json:"name"`
+	URL         string              `json:"url"`
+	CreatedAt   time.Time           `json:"createdAt"`
+	Archived    bool                `json:"archived,omitempty"`
+	Open        bool                `json:"open"`
+	Initialized bool                `json:"initialized"`
+	Round       int                 `json:"round,omitempty"`
+	RoundStatus string              `json:"roundStatus,omitempty"`
+	Agent       *store.AgentBinding `json:"agent,omitempty"`
+	Busy        bool                `json:"busy,omitempty"`
+}
+
+// ProjectSummary describes a recent project for the picker. The round and
+// agent fields describe the default session; Sessions lists all sessions
+// that are not archived.
 type ProjectSummary struct {
 	ID          string              `json:"id"`
 	Name        string              `json:"name"`
@@ -305,15 +445,16 @@ type ProjectSummary struct {
 	RoundStatus string              `json:"roundStatus,omitempty"`
 	Agent       *store.AgentBinding `json:"agent,omitempty"`
 	Busy        bool                `json:"busy,omitempty"`
+	Sessions    []SessionSummary    `json:"sessions,omitempty"`
 }
 
 // List summarizes the recent projects, newest first.
 func (r *Registry) List() []ProjectSummary {
 	r.mu.Lock()
 	recent := append([]recentEntry{}, r.recent...)
-	open := map[string]*Project{}
-	for id, p := range r.open {
-		open[id] = p
+	open := map[string]*Dir{}
+	for id, d := range r.open {
+		open[id] = d
 	}
 	r.mu.Unlock()
 	out := make([]ProjectSummary, 0, len(recent))
@@ -323,18 +464,19 @@ func (r *Registry) List() []ProjectSummary {
 		if st, err := os.Stat(e.Path); err == nil && st.IsDir() {
 			s.Exists = true
 		}
-		if p, ok := open[id]; ok {
-			s.Open, s.Busy = true, p.App.AgentBusy()
+		d := open[id]
+		if d != nil {
+			s.Open, s.Busy = true, d.busy()
 		}
 		if s.Exists {
-			s.fill()
+			s.fill(d)
 		}
 		out = append(out, s)
 	}
 	return out
 }
 
-func (s *ProjectSummary) fill() {
+func (s *ProjectSummary) fill(d *Dir) {
 	cfg, err := config.Load(s.Path, "")
 	if err != nil {
 		return
@@ -343,11 +485,52 @@ func (s *ProjectSummary) fill() {
 	if err != nil {
 		return
 	}
-	st, binding, ok := store.Peek(dataDir)
-	if !ok {
-		return
+	s.Sessions = sessionSummaries(s.ID, dataDir, d, false)
+	for _, ss := range s.Sessions {
+		if ss.ID == store.DefaultSession {
+			s.Initialized, s.Round, s.RoundStatus, s.Agent = ss.Initialized, ss.Round, ss.RoundStatus, ss.Agent
+		}
 	}
-	s.Initialized, s.Round, s.RoundStatus, s.Agent = true, st.Round, st.RoundStatus, binding
+}
+
+// sessionSummaries describes the sessions stored in dataDir. d, when not
+// nil, tells which sessions are open.
+func sessionSummaries(id, dataDir string, d *Dir, archived bool) []SessionSummary {
+	sessions, err := store.ListSessions(dataDir)
+	if err != nil {
+		return nil
+	}
+	open := map[string]*Project{}
+	if d != nil {
+		d.mu.Lock()
+		for sid, p := range d.sessions {
+			open[sid] = p
+		}
+		d.mu.Unlock()
+	}
+	out := []SessionSummary{}
+	for _, ss := range sessions {
+		if p, ok := open[ss.ID]; ok {
+			ss = p.App.SessionInfo()
+		}
+		if ss.Archived && !archived {
+			continue
+		}
+		sum := SessionSummary{ID: ss.ID, Name: ss.Name, URL: sessionPath(id, ss.ID), CreatedAt: ss.CreatedAt, Archived: ss.Archived}
+		if st, binding, ok := store.Peek(store.SessionDir(dataDir, ss.ID)); ok {
+			sum.Initialized, sum.Round, sum.RoundStatus, sum.Agent = true, st.Round, st.RoundStatus, binding
+		}
+		if p, ok := open[ss.ID]; ok {
+			sum.Open, sum.Busy = true, p.App.AgentBusy()
+		}
+		out = append(out, sum)
+	}
+	return out
+}
+
+// Sessions describes the sessions of p's directory, archived ones included.
+func (p *Project) Sessions() []SessionSummary {
+	return sessionSummaries(p.ID, p.dir.WS.DataDir, p.dir, true)
 }
 
 // DirEntry is a subdirectory in the browser.
@@ -455,7 +638,7 @@ func (s *Server) handleOpenProject(w http.ResponseWriter, r *http.Request) {
 		writeError(w, err)
 		return
 	}
-	writeJSON(w, map[string]string{"id": p.ID, "url": "/p/" + p.ID + "/", "path": p.Root})
+	writeJSON(w, map[string]string{"id": p.ID, "url": p.URL(), "path": p.Root})
 }
 
 func (s *Server) handleCloseProject(w http.ResponseWriter, r *http.Request) {

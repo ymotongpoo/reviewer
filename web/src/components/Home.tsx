@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'preact/hooks'
 import { api } from '../api'
-import type { DirEntry, DirListing, ProjectSummary, ServerInfo } from '../types'
+import type { DirEntry, DirListing, ProjectSummary, ServerInfo, SessionSummary } from '../types'
 import { fmt } from './Overview'
 import { ThemeToggle } from './ThemeToggle'
 
@@ -8,6 +8,11 @@ function statusText(p: ProjectSummary) {
   if (!p.exists) return 'ディレクトリがありません'
   if (!p.initialized) return 'まだレビューしていません'
   return `ラウンド${p.round}・${p.roundStatus === 'submitted' ? '提出済み' : '下書き中'}`
+}
+
+function sessionText(s: SessionSummary) {
+  if (!s.initialized || !s.round) return 'まだレビューしていません'
+  return `ラウンド${s.round}・${s.roundStatus === 'submitted' ? '提出済み' : '下書き中'}`
 }
 
 function parentOf(path: string) {
@@ -109,11 +114,28 @@ export function Home() {
                   </span>
                   <span class="project-path">{p.display}</span>
                   <span class="project-meta">
-                    <span class={`chip ${p.roundStatus === 'submitted' ? 'status-addressed' : ''}`}>{statusText(p)}</span>
-                    {p.agent && <span class="chip">🤖 {p.agent.title}</span>}
+                    {(p.sessions?.length ?? 0) <= 1 && <>
+                      <span class={`chip ${p.roundStatus === 'submitted' ? 'status-addressed' : ''}`}>{statusText(p)}</span>
+                      {p.agent && <span class="chip">🤖 {p.agent.title}</span>}
+                    </>}
+                    {!p.exists && <span class="chip">{statusText(p)}</span>}
                     <span class="muted small">{fmt(p.lastOpened)}</span>
                   </span>
                 </a>
+                {p.exists && (p.sessions?.length ?? 0) > 1 && (
+                  <div class="project-sessions">
+                    {p.sessions!.map((ss) => (
+                      <a class="project-session" href={ss.url}>
+                        <span class="session-name">
+                          {ss.name}
+                          {ss.busy && <span class="dot busy" title="エージェントが対応中" />}
+                        </span>
+                        <span class={`chip ${ss.roundStatus === 'submitted' ? 'status-addressed' : ''}`}>{sessionText(ss)}</span>
+                        {ss.agent && <span class="chip">🤖 {ss.agent.title}</span>}
+                      </a>
+                    ))}
+                  </div>
+                )}
                 <div class="project-actions">
                   {p.open && !p.busy && (
                     <button class="btn small" onClick={async () => {

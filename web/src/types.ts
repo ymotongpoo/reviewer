@@ -97,8 +97,31 @@ export interface RoundSummary {
   response?: ResponseInfo
 }
 
+/** A review session of a directory, with its own rounds, comments and agent binding. */
+export interface ReviewSession {
+  id: string
+  name: string
+  createdAt: string
+  archived?: boolean
+}
+
+export interface SessionSummary {
+  id: string
+  name: string
+  url: string
+  createdAt: string
+  archived?: boolean
+  open: boolean
+  initialized: boolean
+  round?: number
+  roundStatus?: 'open' | 'submitted'
+  agent?: AgentBinding
+  busy?: boolean
+}
+
 export interface Info {
   name: string
+  session: ReviewSession
   root: string
   dataDir: string
   round: number
@@ -177,7 +200,7 @@ export interface SubmitResult extends RoundPaths {
 }
 
 export interface ServerEvent {
-  type: 'files' | 'tree' | 'comments' | 'round' | 'response' | 'agent' | 'annotate' | 'annotations' | 'git'
+  type: 'files' | 'tree' | 'comments' | 'round' | 'response' | 'agent' | 'annotate' | 'annotations' | 'git' | 'session'
   paths?: string[]
   round?: number
   request?: string
@@ -323,6 +346,36 @@ export interface AgentInfo {
   autoSend: boolean
   binding?: AgentBinding
   active: AgentRun[]
+  /** Whether a new session can be created as the target, and whether its model can be chosen. */
+  canCreate?: boolean
+  canPickModel?: boolean
+}
+
+export interface ModelRef {
+  provider: string
+  model: string
+  /** Chosen values of the model's options; options left out keep their defaults. */
+  options?: { id: string; value: string }[]
+}
+
+export interface ModelOption {
+  id: string
+  label: string
+  choices: { id: string; label: string }[]
+  default?: string
+}
+
+export interface AgentModel extends ModelRef {
+  providerName: string
+  label: string
+  /** The model's reasoning effort option, if it has one. */
+  reasoning?: ModelOption
+}
+
+export interface AgentModels {
+  models: AgentModel[]
+  /** The model most recently used for the directory. */
+  recent?: ModelRef
 }
 
 export interface AgentSession {
@@ -352,6 +405,7 @@ export interface ProjectSummary {
   roundStatus?: 'open' | 'submitted'
   agent?: AgentBinding
   busy?: boolean
+  sessions?: SessionSummary[]
 }
 
 export interface DirEntry {

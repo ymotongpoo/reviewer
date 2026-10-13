@@ -135,9 +135,10 @@ type apiSession struct {
 	Parent     *string `json:"parent_session_id"`
 }
 
-// Sessions implements agent.Agent. Discord sessions come first, then the
-// rest, each ordered by last activity.
-func (c *Client) Sessions(ctx context.Context) ([]agent.Session, error) {
+// Sessions implements agent.Agent. Hermes sessions are not tied to a
+// directory, so all of them are listed. Discord sessions come first, then
+// the rest, each ordered by last activity.
+func (c *Client) Sessions(ctx context.Context, _ string) ([]agent.Session, error) {
 	var res struct {
 		Data []apiSession `json:"data"`
 	}
@@ -175,7 +176,7 @@ func (c *Client) Sessions(ctx context.Context) ([]agent.Session, error) {
 }
 
 // CreateSession creates an empty Hermes session with a title.
-func (c *Client) CreateSession(ctx context.Context, title string) (agent.Session, error) {
+func (c *Client) CreateSession(ctx context.Context, _, title string, _ agent.SessionOptions) (agent.Session, error) {
 	var res struct {
 		Session apiSession `json:"session"`
 	}
@@ -239,7 +240,7 @@ func (c *Client) Start(ctx context.Context, r agent.Request) (agent.Run, error) 
 }
 
 // Attach follows an existing run, e.g. after reviewer restarted.
-func (c *Client) Attach(ctx context.Context, runID string) (agent.Run, error) {
+func (c *Client) Attach(ctx context.Context, _, runID string) (agent.Run, error) {
 	run := &Run{c: c, id: runID, events: make(chan agent.Event, 256), done: make(chan struct{})}
 	st, err := run.status(ctx)
 	if err != nil {

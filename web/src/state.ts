@@ -1,5 +1,5 @@
 import { batch, computed, signal } from '@preact/signals'
-import { api, ApiError, projectBase, projectId } from './api'
+import { api, ApiError, projectBase, sessionKey } from './api'
 import { createDraftStore } from './localstore'
 import type { SaveOutcome } from './drafts'
 import { connectionGeneration, createConnection } from './connection'
@@ -14,6 +14,7 @@ import type {
   Info,
   Preset,
   ServerEvent,
+  SessionSummary,
   TextRange,
   TreeFile,
 } from './types'
@@ -23,6 +24,8 @@ export const tree = signal<TreeFile[]>([])
 export const comments = signal<Comment[]>([])
 export const fatal = signal<string | null>(null)
 export const agentInfo = signal<AgentInfo | null>(null)
+/** Review sessions of the directory, archived ones included. */
+export const sessions = signal<SessionSummary[]>([])
 /** Runs of the round shown in the agent panel, keyed by run id. */
 export const agentRuns = signal<AgentRunView[]>([])
 export const agentRound = signal<number>(0)
@@ -197,6 +200,7 @@ async function loadAnnotationRequests() {
 }
 
 export const refreshInfo = () => latestOnly('info', api.project, (v) => { info.value = v })
+export const refreshSessions = () => latestOnly('sessions', api.sessions, (v) => { sessions.value = v })
 export const refreshTree = () => latestOnly('tree', api.tree, (v) => { tree.value = v })
 export const refreshComments = () => latestOnly('comments', api.comments, (v) => { comments.value = v })
 export const refreshAgent = () => latestOnly('agent', loadAgent, setAgent)
@@ -211,7 +215,7 @@ export async function showAgentRound(round: number) {
   await refreshAgent()
 }
 
-const responseSeenKey = `reviewer.responseSeen.${projectId}`
+const responseSeenKey = `reviewer.responseSeen.${sessionKey}`
 export function markResponseSeen() {
   const importedAt = info.value?.response?.importedAt ?? ''
   try {
@@ -240,6 +244,7 @@ export async function refreshAll(gen = connectionGeneration.value) {
   const commits = await Promise.all([
     prepareLatest('info', () => project, (v) => { info.value = v }),
     prepareLatest('git', async () => (await project).git ? api.gitStatus().catch(() => null) : null, (v) => { gitStatus.value = v }),
+    prepareLatest('sessions', () => api.sessions().catch(() => []), (v) => { sessions.value = v }),
     prepareLatest('tree', api.tree, (v) => { tree.value = v }),
     prepareLatest('comments', api.comments, (v) => { comments.value = v }),
     prepareLatest('agent', loadAgent, setAgent),
@@ -347,6 +352,10 @@ export function dispatchEvent(ev: ServerEvent) {
       break
     case 'git':
       lazyGit()
+      break
+    case 'session':
+      refreshRoundInfo()
+      void refreshSessions().catch(() => {})
       break
     case 'tree':
       lazyTree()

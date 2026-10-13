@@ -2,8 +2,6 @@ package app
 
 import (
 	"context"
-	"crypto/sha256"
-	"encoding/hex"
 	"errors"
 	"fmt"
 	"io/fs"
@@ -40,6 +38,8 @@ type AnnotateInput struct {
 	Target       string   `json:"target,omitempty"`
 	SessionID    string   `json:"sessionId,omitempty"`
 	SessionTitle *string  `json:"sessionTitle,omitempty"`
+	// Model is the model of a new session; empty lets the agent pick.
+	Model agent.ModelRef `json:"model,omitempty"`
 }
 
 // AnnotateResult is returned after the agent run starts.
@@ -68,6 +68,9 @@ func (a *App) Annotate(ctx context.Context, in AnnotateInput) (*AnnotateResult, 
 		if err != nil {
 			return nil, err
 		}
+	}
+	if in.Model.Model != "" && target != AnnotationTargetNew {
+		return nil, badRequest("モデルは新規セッションの場合だけ指定できます")
 	}
 	prompt, preset, err := a.annotationPrompt(in.Preset, in.Prompt)
 	if err != nil {
@@ -120,7 +123,7 @@ func (a *App) Annotate(ctx context.Context, in AnnotateInput) (*AnnotateResult, 
 			baseTitle := sessionTitle
 			attempts := 1
 			if baseTitle == "" {
-				baseTitle = fmt.Sprintf("reviewer: %s %s %s", a.Proj.Name(), id, name)
+				baseTitle = fmt.Sprintf("reviewer: %s%s %s %s", a.Proj.Name(), a.sessionLabel(), id, name)
 				attempts = 5
 			}
 			var session agent.Session
@@ -129,7 +132,7 @@ func (a *App) Annotate(ctx context.Context, in AnnotateInput) (*AnnotateResult, 
 				if attempt > 1 {
 					title = fmt.Sprintf("%s (%d)", baseTitle, attempt)
 				}
-				session, err = creator.CreateSession(ctx, title)
+				session, err = creator.CreateSession(ctx, a.Proj.Root, title, agent.SessionOptions{Model: in.Model})
 				if !errors.Is(err, agent.ErrTitleInUse) {
 					break
 				}
@@ -156,9 +159,8 @@ func (a *App) Annotate(ctx context.Context, in AnnotateInput) (*AnnotateResult, 
 		}
 	}
 	promptText := autoSentHeader + fmt.Sprintf("`%s` の確認依頼を読み、指示に従って annotations.json を書いてください。", instructionsPath)
-	sum := sha256.Sum256([]byte(a.Proj.Root))
 	// Request numbers start over when the data directory is recreated.
-	key := fmt.Sprintf("reviewer-%s-%s-%d", hex.EncodeToString(sum[:6]), strings.ToLower(id), req.CreatedAt.UnixNano())
+	key := fmt.Sprintf("%s-%s-%d", a.runKey(), strings.ToLower(id), req.CreatedAt.UnixNano())
 	run, err := ag.Start(ctx, agent.Request{SessionID: sessionID, Prompt: promptText, IdempotencyKey: key})
 	if err != nil {
 		a.deleteFailedAnnotationRequest(id)
@@ -171,7 +173,7 @@ func (a *App) Annotate(ctx context.Context, in AnnotateInput) (*AnnotateResult, 
 	a.saveRun(rec)
 	a.follow(rec, run)
 	if target != AnnotationTargetNew {
-		msg := fmt.Sprintf("🔎 reviewer: %s の確認依頼を送りました。", id)
+		msg := fmt.Sprintf("🔎 reviewer%s: %s の確認依頼を送りました。", a.sessionLabel(), id)
 		if u := a.agents.baseURL; u != "" {
 			msg += "\n進捗: " + u
 		}
@@ -522,7 +524,7 @@ func (a *App) finishAnnotationRun(rec *store.AgentRun) {
 	var msg string
 	switch status {
 	case agent.StatusCompleted:
-		msg = fmt.Sprintf("✅ reviewer: %s の確認が終わりました。", rec.Request)
+		msg = fmt.Sprintf("✅ reviewer%s: %s の確認が終わりました。", a.sessionLabel(), rec.Request)
 		if summary == "" {
 			summary = firstLines(text, 300)
 		}
@@ -533,9 +535,9 @@ func (a *App) finishAnnotationRun(rec *store.AgentRun) {
 			msg += "\n（annotations.json が書かれていないため、指摘はありません）"
 		}
 	case agent.StatusCancelled:
-		msg = fmt.Sprintf("⏹ reviewer: %s の確認を停止しました。", rec.Request)
+		msg = fmt.Sprintf("⏹ reviewer%s: %s の確認を停止しました。", a.sessionLabel(), rec.Request)
 	default:
-		msg = fmt.Sprintf("⚠️ reviewer: %s の確認が途中で終わりました。", rec.Request)
+		msg = fmt.Sprintf("⚠️ reviewer%s: %s の確認が途中で終わりました。", a.sessionLabel(), rec.Request)
 		if errText != "" {
 			msg += "（" + errText + "）"
 		}

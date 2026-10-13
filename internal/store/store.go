@@ -22,7 +22,11 @@ const stateVersion = 1
 
 // Store is the on-disk review database rooted at a data directory.
 type Store struct {
-	Dir                string
+	Dir string
+	// Shared is the data directory of the whole directory under review,
+	// holding settings shared by its sessions (presets, Git). Empty means
+	// Dir.
+	Shared             string
 	State              State
 	comments           map[string]*Comment
 	logLines           int
@@ -156,6 +160,13 @@ func (s *Store) appendLog(r logRecord) error {
 	}
 	s.logLines++
 	return nil
+}
+
+func (s *Store) sharedDir() string {
+	if s.Shared != "" {
+		return s.Shared
+	}
+	return s.Dir
 }
 
 // SaveState writes state.json.

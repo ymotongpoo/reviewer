@@ -97,14 +97,26 @@ type GitConfig struct {
 
 // AgentConfig configures sending feedback directly to a coding agent.
 type AgentConfig struct {
-	// Kind is "auto" (use Hermes when its API server is configured),
-	// "hermes", or "none".
+	// Kind is "auto" (T3 Code when it is installed, otherwise Hermes when
+	// its API server is configured), "t3", "hermes", or "none".
 	Kind string `toml:"kind"`
 	// AutoSend is the initial state of "send to the agent" on submit.
 	AutoSend bool `toml:"auto_send"`
-	// Notify selects where start/finish notices go: "hermes" (the session's
-	// own conversation, e.g. its Discord thread), "discord-webhook" or "none".
+	// Notify selects where start/finish notices go: "auto" (the session's
+	// own conversation for Hermes, nowhere for T3 Code, which shows the run
+	// itself), "hermes", "discord-webhook" or "none".
 	Notify string `toml:"notify"`
+	T3     struct {
+		// URL is the T3 Code server; empty means the running one.
+		URL string `toml:"url"`
+		// TokenEnv names an environment variable holding an MCP client
+		// token. Without it reviewer signs in with the t3 CLI.
+		TokenEnv string `toml:"token_env"`
+		Command  string `toml:"command"`
+		Home     string `toml:"home"`
+		// Access is the permission ceiling of reviewer's token.
+		Access string `toml:"access"`
+	} `toml:"t3"`
 	Hermes struct {
 		URL       string `toml:"url"`
 		APIKeyEnv string `toml:"api_key_env"`
@@ -140,8 +152,9 @@ func Default() Config {
 	c.Anchor.FuzzyThreshold = 0.7
 	c.Agent.Kind = "auto"
 	c.Agent.AutoSend = true
-	c.Agent.Notify = "hermes"
+	c.Agent.Notify = "auto"
 	c.Agent.Hermes.APIKeyEnv = "HERMES_API_KEY"
+	c.Agent.T3.TokenEnv = "T3_MCP_TOKEN"
 	c.Git.Language = "ja"
 	return c
 }
