@@ -78,7 +78,35 @@ type Agent interface {
 // SessionCreator is optionally implemented by agents that can create an empty
 // titled session for the directory dir before a run starts.
 type SessionCreator interface {
-	CreateSession(ctx context.Context, dir, title string) (Session, error)
+	CreateSession(ctx context.Context, dir, title string, opts SessionOptions) (Session, error)
+}
+
+// SessionOptions configure a new session. Agents ignore what they do not
+// support.
+type SessionOptions struct {
+	// Model is the model of the session; the zero value lets the agent pick.
+	Model ModelRef
+}
+
+// ModelRef names a model of a provider.
+type ModelRef struct {
+	Provider string `json:"provider"`
+	Model    string `json:"model"`
+}
+
+// Model is a model that a new session can use.
+type Model struct {
+	ModelRef
+	ProviderName string `json:"providerName"`
+	Label        string `json:"label"`
+}
+
+// ModelLister is optionally implemented by agents whose new sessions can
+// use a chosen model.
+type ModelLister interface {
+	// Models lists the available models and the one most recently used for
+	// the directory dir, if known.
+	Models(ctx context.Context, dir string) (models []Model, recent *ModelRef, err error)
 }
 
 // ErrTitleInUse indicates that a session title is already taken.

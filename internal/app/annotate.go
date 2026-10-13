@@ -38,6 +38,8 @@ type AnnotateInput struct {
 	Target       string   `json:"target,omitempty"`
 	SessionID    string   `json:"sessionId,omitempty"`
 	SessionTitle *string  `json:"sessionTitle,omitempty"`
+	// Model is the model of a new session; empty lets the agent pick.
+	Model agent.ModelRef `json:"model,omitempty"`
 }
 
 // AnnotateResult is returned after the agent run starts.
@@ -66,6 +68,9 @@ func (a *App) Annotate(ctx context.Context, in AnnotateInput) (*AnnotateResult, 
 		if err != nil {
 			return nil, err
 		}
+	}
+	if in.Model.Model != "" && target != AnnotationTargetNew {
+		return nil, badRequest("モデルは新規セッションの場合だけ指定できます")
 	}
 	prompt, preset, err := a.annotationPrompt(in.Preset, in.Prompt)
 	if err != nil {
@@ -127,7 +132,7 @@ func (a *App) Annotate(ctx context.Context, in AnnotateInput) (*AnnotateResult, 
 				if attempt > 1 {
 					title = fmt.Sprintf("%s (%d)", baseTitle, attempt)
 				}
-				session, err = creator.CreateSession(ctx, a.Proj.Root, title)
+				session, err = creator.CreateSession(ctx, a.Proj.Root, title, agent.SessionOptions{Model: in.Model})
 				if !errors.Is(err, agent.ErrTitleInUse) {
 					break
 				}

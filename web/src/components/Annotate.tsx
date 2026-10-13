@@ -12,8 +12,8 @@ import {
   tree,
 } from '../state'
 import { route } from '../router'
-import type { AgentSession, AnnotationRequest, Preset, PresetScope } from '../types'
-import { SessionPicker } from './Agent'
+import type { AgentSession, AnnotationRequest, ModelRef, Preset, PresetScope } from '../types'
+import { ModelSelect, SessionPicker } from './Agent'
 
 const originText = { builtin: '組み込み', global: 'グローバル', project: 'プロジェクト' }
 const scopeText = { all: '全体', current: '現在のファイル', selected: 'ファイルを選択' }
@@ -43,6 +43,7 @@ function AnnotateDialog({ onClose }: { onClose: () => void }) {
   const [saveName, setSaveName] = useState(first?.name ?? '')
   const [target, setTarget] = useState<AnnotationRequest['target']>('new')
   const [sessionTitle, setSessionTitle] = useState('')
+  const [model, setModel] = useState<ModelRef | null>(null)
   const sessionTitleInput = useRef<HTMLInputElement>(null)
   const [session, setSession] = useState<AgentSession | null>(null)
   const [picking, setPicking] = useState(false)
@@ -122,6 +123,7 @@ function AnnotateDialog({ onClose }: { onClose: () => void }) {
         target,
         sessionId: target === 'session' ? session!.id : undefined,
         sessionTitle: target === 'new' ? sessionTitle.trim() || undefined : undefined,
+        model: target === 'new' && model ? model : undefined,
       })
       await Promise.all([refreshAnnotationRequests(), refreshAnnotations()])
       toast(`${result.request.id} を ${agentInfo.value?.name ?? 'エージェント'} に送りました`, 'success')
@@ -217,6 +219,7 @@ function AnnotateDialog({ onClose }: { onClose: () => void }) {
               />
             </label>
           )}
+          {target === 'new' && <ModelSelect value={model} onChange={setModel} />}
           <label>
             <input
               type="radio"

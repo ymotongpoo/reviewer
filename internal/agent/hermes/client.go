@@ -176,7 +176,7 @@ func (c *Client) Sessions(ctx context.Context, _ string) ([]agent.Session, error
 }
 
 // CreateSession creates an empty Hermes session with a title.
-func (c *Client) CreateSession(ctx context.Context, _, title string) (agent.Session, error) {
+func (c *Client) CreateSession(ctx context.Context, _, title string, _ agent.SessionOptions) (agent.Session, error) {
 	var res struct {
 		Session apiSession `json:"session"`
 	}

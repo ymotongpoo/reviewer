@@ -346,6 +346,25 @@ export interface AgentInfo {
   autoSend: boolean
   binding?: AgentBinding
   active: AgentRun[]
+  /** Whether a new session can be created as the target, and whether its model can be chosen. */
+  canCreate?: boolean
+  canPickModel?: boolean
+}
+
+export interface ModelRef {
+  provider: string
+  model: string
+}
+
+export interface AgentModel extends ModelRef {
+  providerName: string
+  label: string
+}
+
+export interface AgentModels {
+  models: AgentModel[]
+  /** The model most recently used for the directory. */
+  recent?: ModelRef
 }
 
 export interface AgentSession {

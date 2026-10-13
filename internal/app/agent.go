@@ -2,6 +2,7 @@ package app
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"log"
 	"net/http"
@@ -104,14 +105,18 @@ func (a *App) AgentBusy() bool {
 
 // AgentInfo describes the agent connection for the UI.
 type AgentInfo struct {
-	Available bool                `json:"available"`
-	Kind      string              `json:"kind,omitempty"`
-	Name      string              `json:"name,omitempty"`
-	Reason    string              `json:"reason,omitempty"`
-	Notify    string              `json:"notify"`
-	AutoSend  bool                `json:"autoSend"`
-	Binding   *store.AgentBinding `json:"binding,omitempty"`
-	Active    []*store.AgentRun   `json:"active"`
+	Available bool   `json:"available"`
+	Kind      string `json:"kind,omitempty"`
+	Name      string `json:"name,omitempty"`
+	Reason    string `json:"reason,omitempty"`
+	Notify    string `json:"notify"`
+	AutoSend  bool   `json:"autoSend"`
+	// CanCreate tells whether a new session can be created as the target,
+	// and CanPickModel whether its model can be chosen.
+	CanCreate    bool                `json:"canCreate"`
+	CanPickModel bool                `json:"canPickModel"`
+	Binding      *store.AgentBinding `json:"binding,omitempty"`
+	Active       []*store.AgentRun   `json:"active"`
 }
 
 // AgentInfo returns the agent status.
@@ -124,6 +129,8 @@ func (a *App) AgentInfo() AgentInfo {
 	info := AgentInfo{Reason: a.agents.reason, Notify: a.agents.notify, AutoSend: a.Cfg.Agent.AutoSend, Binding: binding, Active: []*store.AgentRun{}}
 	if ag := a.agents.ag; ag != nil {
 		info.Available, info.Kind, info.Name = true, ag.Kind(), ag.Name()
+		_, info.CanCreate = ag.(agent.SessionCreator)
+		_, info.CanPickModel = ag.(agent.ModelLister)
 		if binding != nil && binding.Kind != ag.Kind() {
 			info.Binding = nil
 		}
@@ -163,6 +170,76 @@ func (a *App) AgentSessions(ctx context.Context) ([]agent.Session, error) {
 		ss = []agent.Session{}
 	}
 	return ss, nil
+}
+
+// AgentModels lists the models a new session can use, with the one most
+// recently used for the directory.
+type AgentModels struct {
+	Models []agent.Model   `json:"models"`
+	Recent *agent.ModelRef `json:"recent,omitempty"`
+}
+
+// AgentModels returns the models a new session of the agent can use.
+func (a *App) AgentModels(ctx context.Context) (*AgentModels, error) {
+	ag, err := a.agentOrErr()
+	if err != nil {
+		return nil, err
+	}
+	ml, ok := ag.(agent.ModelLister)
+	if !ok {
+		return &AgentModels{Models: []agent.Model{}}, nil
+	}
+	models, recent, err := ml.Models(ctx, a.Proj.Root)
+	if err != nil {
+		return nil, &Error{Code: http.StatusBadGateway, Msg: err.Error()}
+	}
+	return &AgentModels{Models: models, Recent: recent}, nil
+}
+
+// NewAgentSession is a request to create the session feedback goes to.
+type NewAgentSession struct {
+	// Title is the session's name; empty gives "reviewer: <directory>".
+	Title string         `json:"title"`
+	Model agent.ModelRef `json:"model"`
+}
+
+// CreateAgentSession creates a session of the agent and binds the review
+// session to it.
+func (a *App) CreateAgentSession(ctx context.Context, in NewAgentSession) (*store.AgentBinding, error) {
+	ag, err := a.agentOrErr()
+	if err != nil {
+		return nil, err
+	}
+	creator, ok := ag.(agent.SessionCreator)
+	if !ok {
+		return nil, badRequest("%s では新しいセッションを作れません", ag.Name())
+	}
+	title, err := validateAnnotationSessionTitle(in.Title)
+	if err != nil {
+		return nil, err
+	}
+	if title == "" {
+		title = "reviewer: " + a.Proj.Name() + a.sessionLabel()
+	}
+	s, err := creator.CreateSession(ctx, a.Proj.Root, title, agent.SessionOptions{Model: in.Model})
+	if err != nil {
+		if errors.Is(err, agent.ErrTitleInUse) {
+			return nil, conflict("セッション名「%s」はすでに使われています。別の名前を入力してください", title)
+		}
+		return nil, &Error{Code: http.StatusBadGateway, Msg: "新しいセッションを作成できませんでした: " + err.Error()}
+	}
+	if s.Title == "" {
+		s.Title = title
+	}
+	b := &store.AgentBinding{Kind: ag.Kind(), SessionID: s.ID, Title: s.Title, Source: s.Source, BoundAt: a.now()}
+	a.mu.Lock()
+	err = a.Store.SaveAgentBinding(b)
+	a.mu.Unlock()
+	if err != nil {
+		return nil, err
+	}
+	a.notify(Event{Type: "agent"})
+	return b, nil
 }
 
 // BindAgent ties the project to a session; an empty id removes the binding.

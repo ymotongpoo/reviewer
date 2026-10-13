@@ -2,6 +2,7 @@ import type { DirListing, ProjectSummary, ServerInfo } from './types'
 import type {
   AgentBinding,
   AgentInfo,
+  AgentModels,
   AgentRun,
   AgentRunView,
   AgentSession,
@@ -17,6 +18,7 @@ import type {
   GitSettings,
   GitStatus,
   Info,
+  ModelRef,
   Preset,
   RequestDiff,
   ReviewSession,
@@ -118,6 +120,9 @@ export const api = {
   agentSessions: () => request<{ sessions: AgentSession[] }>('GET', '/api/agent/sessions').then((r) => r.sessions),
   bindAgent: (sessionId: string) =>
     request<{ binding: AgentBinding | null }>('PUT', '/api/agent/binding', { sessionId }).then((r) => r.binding),
+  agentModels: () => request<AgentModels>('GET', '/api/agent/models'),
+  createAgentSession: (input: { title?: string; model?: ModelRef }) =>
+    request<{ binding: AgentBinding }>('POST', '/api/agent/sessions', input).then((r) => r.binding),
   agentSend: (round: number) => request<AgentRun>('POST', '/api/agent/send', { round }),
   agentRuns: (round: number) => request<{ runs: AgentRunView[] }>('GET', `/api/agent/runs?round=${round}`).then((r) => r.runs),
   agentStop: (id: string) => request<{ ok: boolean }>('POST', `/api/agent/runs/${q(id)}/stop`),
@@ -133,6 +138,7 @@ export const api = {
     target: AnnotationRequest['target']
     sessionId?: string
     sessionTitle?: string
+    model?: ModelRef
   }) => request<AnnotateResult>('POST', '/api/annotate', input),
   annotationRequests: () => request<{ requests: AnnotationRequest[] }>('GET', '/api/annotate/requests').then((r) => r.requests),
   annotationRequest: (id: string) => request<AnnotationRequestView>('GET', `/api/annotate/requests/${q(id)}`),

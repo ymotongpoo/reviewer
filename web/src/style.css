@@ -1466,6 +1466,22 @@ table.rounds th {
   text-overflow: ellipsis;
   white-space: nowrap;
 }
+.new-session {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 10px 12px;
+}
+.new-session-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+}
+.new-session-toggle {
+  align-self: flex-start;
+}
 .session-preview {
   grid-column: 2 / 4;
   color: var(--fg-muted);
@@ -1489,6 +1505,8 @@ input.search {
 }
 .compact-select,
 .field select,
+.new-session input[type='text'],
+.session-form input[type='text'],
 .preset-save input,
 .file-picker input[type='search'] {
   font: inherit;

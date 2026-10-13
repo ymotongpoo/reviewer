@@ -123,6 +123,12 @@ func (f *fake) tool(name string, args map[string]any) (any, string) {
 			}}, ""
 		}
 		return map[string]any{"threads": []any{}}, ""
+	case "orchestrator_capabilities":
+		return map[string]any{"providers": []map[string]any{
+			{"providerInstanceId": "codex", "displayName": "Codex", "models": []map[string]any{{"id": "gpt-x", "label": "GPT-X"}}},
+			{"providerInstanceId": "cursor", "displayName": "Cursor", "models": []any{}},
+			{"providerInstanceId": "claudeAgent", "displayName": "Claude", "models": []map[string]any{{"id": "m-new", "label": "M New"}, {"id": "m-raw"}}},
+		}}, ""
 	case "t3_thread_launch":
 		f.mu.Lock()
 		f.launched = args
@@ -218,9 +224,45 @@ func TestRelated(t *testing.T) {
 	}
 }
 
+func TestCreateSessionWithChosenModel(t *testing.T) {
+	f, ts := newFake(t)
+	_, err := client(ts, "tok").CreateSession(context.Background(), "/r/zenn", "x",
+		agent.SessionOptions{Model: agent.ModelRef{Provider: "codex", Model: "gpt-x"}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	sel, _ := f.launched["modelSelection"].(map[string]any)
+	if f.launched["projectId"] != "p-repo" || sel["instanceId"] != "codex" || sel["model"] != "gpt-x" {
+		t.Errorf("launch = %v", f.launched)
+	}
+}
+
+func TestModels(t *testing.T) {
+	_, ts := newFake(t)
+	models, recent, err := client(ts, "tok").Models(context.Background(), "/r/zenn/books/a")
+	if err != nil {
+		t.Fatal(err)
+	}
+	var got []string
+	for _, m := range models {
+		got = append(got, m.Provider+"/"+m.Model+"="+m.ProviderName+":"+m.Label)
+	}
+	// Providers without models are left out; a missing label falls back to the id.
+	if want := "codex/gpt-x=Codex:GPT-X,claudeAgent/m-new=Claude:M New,claudeAgent/m-raw=Claude:m-raw"; strings.Join(got, ",") != want {
+		t.Errorf("models = %v", got)
+	}
+	if recent == nil || *recent != (agent.ModelRef{Provider: "claudeAgent", Model: "m-new"}) {
+		t.Errorf("recent = %v", recent)
+	}
+	// Outside every project, related projects still tell the recent model.
+	if _, recent, _ := client(ts, "tok").Models(context.Background(), "/r"); recent == nil || recent.Model != "m-new" {
+		t.Errorf("recent outside projects = %v", recent)
+	}
+}
+
 func TestCreateSessionInInnermostProject(t *testing.T) {
 	f, ts := newFake(t)
-	s, err := client(ts, "tok").CreateSession(context.Background(), "/r/zenn/books/a/ch1", "reviewer: Q-1")
+	s, err := client(ts, "tok").CreateSession(context.Background(), "/r/zenn/books/a/ch1", "reviewer: Q-1", agent.SessionOptions{})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -234,7 +276,7 @@ func TestCreateSessionInInnermostProject(t *testing.T) {
 	if sel["model"] != "m-new" || sel["instanceId"] != "claudeAgent" {
 		t.Errorf("modelSelection = %v", sel)
 	}
-	if _, err := client(ts, "tok").CreateSession(context.Background(), "/elsewhere", "x"); err == nil {
+	if _, err := client(ts, "tok").CreateSession(context.Background(), "/elsewhere", "x", agent.SessionOptions{}); err == nil {
 		t.Error("created a thread outside every project")
 	}
 }

@@ -129,6 +129,8 @@ func (p *Project) Handler() http.Handler {
 		mux.HandleFunc("GET /api/agent", p.handleAgent)
 		mux.HandleFunc("GET /api/agent/sessions", p.handleAgentSessions)
 		mux.HandleFunc("PUT /api/agent/binding", p.handleAgentBinding)
+		mux.HandleFunc("GET /api/agent/models", p.handleAgentModels)
+		mux.HandleFunc("POST /api/agent/sessions", p.handleCreateAgentSession)
 		mux.HandleFunc("POST /api/agent/send", p.handleAgentSend)
 		mux.HandleFunc("GET /api/agent/runs", p.handleAgentRuns)
 		mux.HandleFunc("POST /api/agent/runs/{id}/stop", p.handleAgentStop)
@@ -503,6 +505,21 @@ func (p *Project) handleSubmit(w http.ResponseWriter, r *http.Request) {
 
 func (p *Project) handleAgent(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, p.App.AgentInfo())
+}
+
+func (p *Project) handleAgentModels(w http.ResponseWriter, r *http.Request) {
+	m, err := p.App.AgentModels(r.Context())
+	respond(w, m, err)
+}
+
+func (p *Project) handleCreateAgentSession(w http.ResponseWriter, r *http.Request) {
+	var req app.NewAgentSession
+	if err := decode(r, &req); err != nil {
+		writeError(w, err)
+		return
+	}
+	b, err := p.App.CreateAgentSession(r.Context(), req)
+	respond(w, map[string]any{"binding": b}, err)
 }
 
 func (p *Project) handleAgentSessions(w http.ResponseWriter, r *http.Request) {

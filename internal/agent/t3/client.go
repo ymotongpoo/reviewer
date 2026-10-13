@@ -146,29 +146,28 @@ func (c *Client) Sessions(ctx context.Context, dir string) ([]agent.Session, err
 }
 
 // CreateSession implements agent.SessionCreator: an idle thread in the
-// innermost T3 project containing dir.
-func (c *Client) CreateSession(ctx context.Context, dir, title string) (agent.Session, error) {
+// innermost T3 project containing dir, using the model of opts or else the
+// model of the latest thread working on dir.
+func (c *Client) CreateSession(ctx context.Context, dir, title string, opts agent.SessionOptions) (agent.Session, error) {
 	ps, err := c.projects(ctx)
 	if err != nil {
 		return agent.Session{}, err
 	}
-	var best *project
-	for i, p := range ps {
-		root := filepath.Clean(p.WorkspaceRoot)
-		if root == filepath.Clean(dir) || within(root, filepath.Clean(dir)) {
-			if best == nil || len(root) > len(filepath.Clean(best.WorkspaceRoot)) {
-				best = &ps[i]
-			}
-		}
-	}
+	best := innermost(ps, dir)
 	if best == nil {
 		return agent.Session{}, fmt.Errorf("%s を含む T3 Code のプロジェクトがありません。T3 Code でプロジェクトとして追加してください", dir)
 	}
 	args := map[string]any{"projectId": best.ID, "title": title}
 	// A client outside T3 gets the project's default model, which may be
-	// unset; use the model of the latest thread working on dir instead.
-	if sel := c.recentModel(ctx, ps, best.ID, dir); sel != nil {
-		args["modelSelection"] = sel
+	// unset.
+	sel := opts.Model
+	if sel.Model == "" {
+		if recent := c.recentModel(ctx, ps, best.ID, dir); recent != nil {
+			sel = *recent
+		}
+	}
+	if sel.Model != "" {
+		args["modelSelection"] = map[string]any{"instanceId": sel.Provider, "model": sel.Model}
 	}
 	var res struct {
 		ThreadID string `json:"threadId"`
@@ -177,6 +176,60 @@ func (c *Client) CreateSession(ctx context.Context, dir, title string) (agent.Se
 		return agent.Session{}, err
 	}
 	return agent.Session{ID: res.ThreadID, Title: title, Source: "t3", Preview: best.Title, UpdatedAt: time.Now()}, nil
+}
+
+// innermost returns the deepest project containing dir, or nil.
+func innermost(ps []project, dir string) *project {
+	dir = filepath.Clean(dir)
+	var best *project
+	for i, p := range ps {
+		root := filepath.Clean(p.WorkspaceRoot)
+		if root == dir || within(root, dir) {
+			if best == nil || len(root) > len(filepath.Clean(best.WorkspaceRoot)) {
+				best = &ps[i]
+			}
+		}
+	}
+	return best
+}
+
+// Models implements agent.ModelLister with the catalog T3 Code offers for
+// new threads. Providers without models are left out.
+func (c *Client) Models(ctx context.Context, dir string) ([]agent.Model, *agent.ModelRef, error) {
+	var res struct {
+		Providers []struct {
+			ProviderInstanceID string `json:"providerInstanceId"`
+			DisplayName        string `json:"displayName"`
+			Models             []struct {
+				ID    string `json:"id"`
+				Label string `json:"label"`
+			} `json:"models"`
+		} `json:"providers"`
+	}
+	if err := c.call(ctx, "orchestrator_capabilities", map[string]any{}, &res); err != nil {
+		return nil, nil, err
+	}
+	models := []agent.Model{}
+	for _, p := range res.Providers {
+		for _, m := range p.Models {
+			label := m.Label
+			if label == "" {
+				label = m.ID
+			}
+			models = append(models, agent.Model{ModelRef: agent.ModelRef{Provider: p.ProviderInstanceID, Model: m.ID}, ProviderName: p.DisplayName, Label: label})
+		}
+	}
+	ps, err := c.projects(ctx)
+	if err != nil {
+		return models, nil, nil
+	}
+	var recent *agent.ModelRef
+	if best := innermost(ps, dir); best != nil {
+		recent = c.recentModel(ctx, ps, best.ID, dir)
+	} else {
+		recent = c.recentModel(ctx, ps, "", dir)
+	}
+	return models, recent, nil
 }
 
 // Start implements agent.Agent. The message is queued behind a turn that
@@ -217,9 +270,9 @@ func (c *Client) Attach(ctx context.Context, sessionID, runID string) (agent.Run
 	return run, nil
 }
 
-// recentModel returns the model selection of the most recently updated
-// thread of the project projectID, or else of a project related to dir.
-func (c *Client) recentModel(ctx context.Context, ps []project, projectID, dir string) map[string]any {
+// recentModel returns the model of the most recently updated thread of the
+// project projectID, or else of a project related to dir.
+func (c *Client) recentModel(ctx context.Context, ps []project, projectID, dir string) *agent.ModelRef {
 	var latest *thread
 	consider := func(id string) {
 		ts, err := c.threads(ctx, id)
@@ -232,7 +285,9 @@ func (c *Client) recentModel(ctx context.Context, ps []project, projectID, dir s
 			}
 		}
 	}
-	consider(projectID)
+	if projectID != "" {
+		consider(projectID)
+	}
 	if latest == nil {
 		for _, p := range ps {
 			if p.ID != projectID && related(p.WorkspaceRoot, dir) {
@@ -243,5 +298,5 @@ func (c *Client) recentModel(ctx context.Context, ps []project, projectID, dir s
 	if latest == nil {
 		return nil
 	}
-	return map[string]any{"instanceId": latest.ProviderInstanceID, "model": latest.Model}
+	return &agent.ModelRef{Provider: latest.ProviderInstanceID, Model: latest.Model}
 }

@@ -3,7 +3,7 @@ import { useEffect, useState } from 'preact/hooks'
 import { api } from '../api'
 import { agentInfo, agentRuns, info, refreshAgent, showAgentRound, toast } from '../state'
 import { renderMarkdown } from '../markdown'
-import type { AgentEvent, AgentRunView, AgentSession } from '../types'
+import type { AgentEvent, AgentModel, AgentRunView, AgentSession, ModelRef } from '../types'
 import { fmt } from './Overview'
 
 export const choiceText: Record<string, string> = {
@@ -49,6 +49,92 @@ export function AgentChip() {
   )
 }
 
+const modelKey = (m: ModelRef) => `${m.provider}\u0000${m.model}`
+
+/**
+ * Model of a new session, grouped by provider. It starts at the model most
+ * recently used for the directory. Agents without a model catalog render
+ * nothing and pick the model themselves.
+ */
+export function ModelSelect({ value, onChange }: { value: ModelRef | null; onChange: (m: ModelRef | null) => void }) {
+  const [models, setModels] = useState<AgentModel[] | null>(null)
+  const [error, setError] = useState<string | null>(null)
+  useEffect(() => {
+    if (!agentInfo.value?.canPickModel) return
+    api.agentModels().then((r) => {
+      setModels(r.models)
+      if (value) return
+      const recent = r.recent && r.models.find((m) => modelKey(m) === modelKey(r.recent!))
+      const first = recent ?? r.models[0]
+      onChange(first ? { provider: first.provider, model: first.model } : null)
+    }).catch((e) => setError((e as Error).message))
+  }, [])
+  if (!agentInfo.value?.canPickModel) return null
+  if (error) return <div class="banner error">モデルの一覧を取得できませんでした: {error}</div>
+  if (!models) return <div class="muted small">モデルを読み込み中…</div>
+  if (models.length === 0) return null
+  const groups: [string, AgentModel[]][] = []
+  for (const m of models) {
+    const g = groups.find(([name]) => name === m.providerName)
+    if (g) g[1].push(m)
+    else groups.push([m.providerName, [m]])
+  }
+  return (
+    <label class="field">
+      <span>モデル</span>
+      <select value={value ? modelKey(value) : ''} onChange={(e) => {
+        const m = models.find((m) => modelKey(m) === e.currentTarget.value)
+        onChange(m ? { provider: m.provider, model: m.model } : null)
+      }}>
+        {groups.map(([name, ms]) => (
+          <optgroup label={name}>
+            {ms.map((m) => <option value={modelKey(m)}>{m.label}</option>)}
+          </optgroup>
+        ))}
+      </select>
+    </label>
+  )
+}
+
+/** Creates a session of the agent and makes it the target of the feedback. */
+function NewSessionForm({ onCreated, onCancel }: { onCreated: () => void; onCancel?: () => void }) {
+  const i = info.value
+  const [title, setTitle] = useState('')
+  const [model, setModel] = useState<ModelRef | null>(null)
+  const [busy, setBusy] = useState(false)
+  const placeholder = `reviewer: ${i?.name ?? ''}${i && i.session.id !== 'main' ? `［${i.session.name}］` : ''}`
+  async function create() {
+    setBusy(true)
+    try {
+      const b = await api.createAgentSession({ title: title.trim() || undefined, model: model ?? undefined })
+      await refreshAgent()
+      toast(`「${b.title}」を作成して送信先にしました`, 'success')
+      onCreated()
+    } catch (e) {
+      toast((e as Error).message, 'error')
+    } finally {
+      setBusy(false)
+    }
+  }
+  return (
+    <form class="new-session" onSubmit={(e) => { e.preventDefault(); void create() }}>
+      <label class="field">
+        <span>名前（空欄なら自動）</span>
+        <input type="text" value={title} placeholder={placeholder} maxLength={100}
+          onInput={(e) => setTitle(e.currentTarget.value)} />
+      </label>
+      <ModelSelect value={model} onChange={setModel} />
+      <p class="muted small">
+        {agentInfo.value?.name} に空の新しい{agentInfo.value?.kind === 't3' ? 'スレッド' : 'セッション'}を作ります。最初に提出したフィードバックが、その最初のメッセージになります。
+      </p>
+      <div class="new-session-actions">
+        {onCancel && <button type="button" class="btn small" onClick={onCancel}>やめる</button>}
+        <button type="submit" class="btn small primary" disabled={busy}>{busy ? '作成中…' : '作成して送信先にする'}</button>
+      </div>
+    </form>
+  )
+}
+
 export function SessionPicker({
   onClose,
   onSelect,
@@ -65,7 +151,9 @@ export function SessionPicker({
   const [sessions, setSessions] = useState<AgentSession[] | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [filter, setFilter] = useState('')
+  const [creating, setCreating] = useState(false)
   const current = selected ?? agentInfo.value?.binding?.sessionId
+  const canCreate = !onSelect && !!agentInfo.value?.canCreate
 
   useEffect(() => {
     api
@@ -118,8 +206,15 @@ export function SessionPicker({
               {s.preview && <span class="session-preview">{s.preview}</span>}
             </button>
           ))}
-          {sessions && shown.length === 0 && <div class="empty small">セッションがありません</div>}
+          {sessions && shown.length === 0 && <div class="empty small">
+            {filter ? '一致するセッションがありません' : 'このディレクトリで使えるセッションがありません'}
+          </div>}
         </div>
+        {canCreate && sessions && (creating || (sessions.length === 0 && !error)
+          ? <NewSessionForm onCreated={onClose} onCancel={sessions.length > 0 ? () => setCreating(false) : undefined} />
+          : <button class="btn small new-session-toggle" onClick={() => setCreating(true)}>
+            ＋ 新しい{agentInfo.value?.kind === 't3' ? 'スレッド' : 'セッション'}を作る
+          </button>)}
         <div class="modal-actions">
           {!onSelect && current && (
             <button class="btn danger-text" onClick={() => bind('')}>

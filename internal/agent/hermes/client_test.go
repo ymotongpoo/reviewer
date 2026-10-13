@@ -105,7 +105,7 @@ func TestSessions(t *testing.T) {
 func TestCreateSession(t *testing.T) {
 	f := &hermestest.Fake{Key: "k"}
 	c := newClient(t, f)
-	session, err := c.CreateSession(context.Background(), "", "reviewer: Q-1 test")
+	session, err := c.CreateSession(context.Background(), "", "reviewer: Q-1 test", agent.SessionOptions{})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -115,7 +115,7 @@ func TestCreateSession(t *testing.T) {
 	if len(f.SessionRequests) != 1 || f.SessionRequests[0].Source != "api_server" {
 		t.Fatalf("requests = %+v", f.SessionRequests)
 	}
-	_, err = c.CreateSession(context.Background(), "", session.Title)
+	_, err = c.CreateSession(context.Background(), "", session.Title, agent.SessionOptions{})
 	var apiErr *APIError
 	if !errors.Is(err, agent.ErrTitleInUse) || !errors.As(err, &apiErr) {
 		t.Fatalf("duplicate title error = %v", err)
@@ -151,7 +151,7 @@ func TestCreateSessionTitleConflictErrors(t *testing.T) {
 			}))
 			defer ts.Close()
 			c := New(Options{URL: ts.URL})
-			_, err := c.CreateSession(context.Background(), "", "title")
+			_, err := c.CreateSession(context.Background(), "", "title", agent.SessionOptions{})
 			if errors.Is(fmt.Errorf("create session: %w", err), agent.ErrTitleInUse) != tt.conflict {
 				t.Fatalf("title conflict = %v, error = %v", tt.conflict, err)
 			}
