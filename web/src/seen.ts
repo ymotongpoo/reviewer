@@ -1,9 +1,9 @@
 import { signal } from '@preact/signals'
-import { projectId } from './api'
+import { sessionKey } from './api'
 
 // Annotations the reviewer has already looked at, per project and browser.
 // New annotations open by default; seen ones start collapsed.
-const KEY = `reviewer.seenAnnotations.${projectId ?? 'none'}`
+const KEY = `reviewer.seenAnnotations.${sessionKey ?? 'none'}`
 const MAX = 2000
 
 function load(): string[] {

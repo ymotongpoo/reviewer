@@ -184,6 +184,7 @@ pre {
   border-radius: 999px;
   border: 1px solid var(--border);
   background: var(--bg);
+  white-space: nowrap;
 }
 .round-chip.submitted {
   border-color: var(--success);
@@ -2166,6 +2167,36 @@ table.frontmatter td {
   display: flex;
   gap: 6px;
 }
+.project-row:has(.project-sessions) {
+  flex-wrap: wrap;
+}
+.project-sessions {
+  flex-basis: 100%;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding-left: 12px;
+  border-left: 2px solid var(--border);
+}
+.project-session {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 6px;
+  padding: 2px 6px;
+  border-radius: 6px;
+  color: var(--fg);
+}
+.project-session:hover {
+  background: var(--bg-muted);
+  text-decoration: none;
+}
+.session-name {
+  font-weight: 600;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
 .dot {
   width: 8px;
   height: 8px;
@@ -2217,7 +2248,8 @@ table.frontmatter td {
 .switcher {
   position: relative;
 }
-.switcher .project {
+.switcher .project,
+.switcher .session-button {
   border: none;
   background: none;
   color: var(--fg);
@@ -2227,7 +2259,8 @@ table.frontmatter td {
   padding: 2px 6px;
   border-radius: 6px;
 }
-.switcher .project:hover {
+.switcher .project:hover,
+.switcher .session-button:hover {
   background: var(--bg-muted);
 }
 .switcher-menu {
@@ -2266,6 +2299,40 @@ table.frontmatter td {
   border-top: 1px solid var(--border);
   margin-top: 4px;
   font-size: 12px;
+}
+.switcher .session-button {
+  font-weight: 500;
+  max-width: 260px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.switcher-heading {
+  padding: 6px 10px 2px;
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--fg-muted);
+}
+.switcher-heading ~ .switcher-heading {
+  margin-top: 6px;
+  border-top: 1px solid var(--border);
+  padding-top: 8px;
+}
+.switcher-item.archived {
+  opacity: 0.7;
+}
+.archived-toggle {
+  display: block;
+  padding: 4px 10px;
+}
+.session-form {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 6px 4px;
+}
+.session-form .modal-actions {
+  margin-top: 0;
 }
 
 .suggestion-note {

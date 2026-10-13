@@ -1,8 +1,8 @@
 import { Portal } from './Portal'
 import { useEffect, useState } from 'preact/hooks'
-import { api, projectId } from '../api'
+import { api, projectId, sessionId } from '../api'
 import { copyText } from '../clipboard'
-import { agentInfo, comments, dirtyReplies, draftCount, flushComposers, refreshComments, dismissResponseBanner, info, refreshAll, responseBanner, toast } from '../state'
+import { agentInfo, comments, dirtyReplies, draftCount, flushComposers, refreshComments, dismissResponseBanner, info, refreshAll, refreshInfo, refreshSessions, responseBanner, sessions, toast } from '../state'
 import { connState } from '../connection'
 import { AgentChip } from './Agent'
 import { AnnotateButton } from './Annotate'
@@ -10,7 +10,7 @@ import { GitButton } from './Git'
 import { isCompact, isNarrow } from '../media'
 import { closeTransientUI, drawerOpen, headerMenuOpen } from '../ui'
 import { SheetBackdrop, useDismiss } from './Sheet'
-import type { ProjectSummary, SubmitResult } from '../types'
+import type { ProjectSummary, SessionSummary, SubmitResult } from '../types'
 
 export function CopyPrompt({ prompt, label = '指示文をコピー' }: { prompt: string; label?: string }) {
   const [done, setDone] = useState(false)
@@ -40,20 +40,28 @@ function ProjectSwitcher({ name, root }: { name: string; root: string }) {
   const [open, setOpen] = useState(false)
   const dismiss = useDismiss(open, () => setOpen(false))
   const [list, setList] = useState<ProjectSummary[] | null>(null)
+  const session = info.value?.session
+  const narrow = isNarrow.value
   useEffect(() => {
-    document.title = `${name} - reviewer`
-  }, [name])
+    document.title = session && session.id !== 'main' ? `${session.name} · ${name} - reviewer` : `${name} - reviewer`
+  }, [name, session?.id, session?.name])
   async function toggle() {
     if (!open) api.projects().then(setList).catch(() => setList([]))
     setOpen(!open)
   }
   return (
     <span class="switcher" ref={dismiss}>
-      <button class="project" title={root} aria-expanded={open} aria-controls="project-menu" onClick={() => void toggle()}>
-        {name} ▾
+      <button class="project" title={session && session.id !== 'main' ? `${root}（セッション: ${session.name}）` : root}
+        aria-expanded={open} aria-controls="project-menu" onClick={() => void toggle()}>
+        {narrow && session && session.id !== 'main' ? `📑 ${session.name}` : name} ▾
       </button>
       {open && (
-        <div id="project-menu" class="switcher-menu" onMouseLeave={() => setOpen(false)}>
+        <div id="project-menu" class="switcher-menu" onMouseLeave={narrow ? undefined : () => setOpen(false)}>
+          {narrow && <>
+            <div class="switcher-heading">{name} のレビューセッション</div>
+            <SessionMenu />
+            <div class="switcher-heading">ディレクトリ</div>
+          </>}
           {list === null && <div class="muted small">読み込み中…</div>}
           {list
             ?.filter((p) => p.exists)
@@ -81,6 +89,137 @@ function ProjectSwitcher({ name, root }: { name: string; root: string }) {
               </button>
             )}
           </div>
+        </div>
+      )}
+    </span>
+  )
+}
+
+function sessionStatus(s: SessionSummary) {
+  if (!s.initialized || !s.round) return 'まだレビューしていません'
+  return `ラウンド${s.round}・${s.roundStatus === 'submitted' ? '提出済み' : '下書き中'}`
+}
+
+/**
+ * The sessions of the directory with actions to add, rename and archive
+ * them. A directory holding several books or talks gets one session for
+ * each, each with its own rounds, comments and agent.
+ */
+function SessionMenu() {
+  const current = info.value!.session
+  const [mode, setMode] = useState<'list' | 'create' | 'rename'>('list')
+  const [name, setName] = useState('')
+  const [showArchived, setShowArchived] = useState(false)
+  const [busy, setBusy] = useState(false)
+  useEffect(() => { void refreshSessions().catch(() => {}) }, [])
+  const all = sessions.value
+  const visible = all.filter((s) => !s.archived || s.id === sessionId)
+  const archived = all.filter((s) => s.archived && s.id !== sessionId)
+
+  async function create() {
+    setBusy(true)
+    try {
+      const r = await api.createSession(name)
+      location.href = r.url
+    } catch (e) {
+      toast((e as Error).message, 'error')
+      setBusy(false)
+    }
+  }
+  async function update(patch: { name?: string; archived?: boolean }) {
+    setBusy(true)
+    try {
+      await api.updateSession(patch)
+      await Promise.all([refreshInfo(), refreshSessions()])
+      setMode('list')
+      if (patch.archived) toast(`「${current.name}」をアーカイブしました`, 'success')
+      if (patch.archived === false) toast(`「${current.name}」を元に戻しました`, 'success')
+    } catch (e) {
+      toast((e as Error).message, 'error')
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  if (mode !== 'list') return (
+    <form class="session-form" onSubmit={(e) => {
+      e.preventDefault()
+      if (mode === 'create') void create()
+      else void update({ name })
+    }}>
+      <label class="field">
+        <span>{mode === 'create' ? '新しいセッションの名前' : 'セッションの名前'}</span>
+        <input type="text" value={name} autoFocus maxLength={80}
+          placeholder="例: tinygo-otel-esp32 の第3章"
+          onInput={(e) => setName(e.currentTarget.value)} />
+      </label>
+      {mode === 'create' && (
+        <p class="muted small">
+          セッションごとにラウンド、コメント、AI指摘、エージェントの送信先を別々に持ちます。ファイルとプリセットは共有します。
+        </p>
+      )}
+      <div class="modal-actions">
+        <button type="button" class="btn small" onClick={() => setMode('list')}>キャンセル</button>
+        <button type="submit" class="btn small primary" disabled={busy || !name.trim()}>
+          {mode === 'create' ? '作成して開く' : '保存'}
+        </button>
+      </div>
+    </form>
+  )
+  return (
+    <div class="session-menu">
+      {visible.map((s) => (
+        <a class={`switcher-item ${s.id === sessionId ? 'on' : ''}`} href={s.url}>
+          <span class="project-name">
+            {s.name}
+            {s.busy && <span class="dot busy" title="エージェントが対応中" />}
+          </span>
+          <span class="muted small">
+            {sessionStatus(s)}
+            {s.agent && ` · 🤖 ${s.agent.title}`}
+          </span>
+        </a>
+      ))}
+      {archived.length > 0 && (
+        <button class="link small archived-toggle" onClick={() => setShowArchived(!showArchived)}>
+          {showArchived ? '▾' : '▸'} アーカイブ済み（{archived.length}）
+        </button>
+      )}
+      {showArchived && archived.map((s) => (
+        <a class="switcher-item archived" href={s.url}>
+          <span class="project-name">{s.name}</span>
+          <span class="muted small">{sessionStatus(s)}</span>
+        </a>
+      ))}
+      <div class="switcher-foot">
+        <button class="link" onClick={() => { setName(''); setMode('create') }}>＋ 新しいセッション</button>
+        <button class="link" onClick={() => { setName(current.name); setMode('rename') }}>名前を変更</button>
+        {current.id !== 'main' && (
+          current.archived
+            ? <button class="link" disabled={busy} onClick={() => void update({ archived: false })}>元に戻す</button>
+            : <button class="link" disabled={busy} onClick={() => {
+              if (confirm(`「${current.name}」をアーカイブしますか？ 一覧から隠れますが、データは残ります。`)) void update({ archived: true })
+            }}>アーカイブ</button>
+        )}
+      </div>
+    </div>
+  )
+}
+
+/** The review session with its menu. Narrow headers have no room for it; there the directory menu holds the sessions. */
+function SessionSwitcher() {
+  const current = info.value!.session
+  const [open, setOpen] = useState(false)
+  const dismiss = useDismiss(open, () => setOpen(false))
+  return (
+    <span class="switcher session-switcher" ref={dismiss}>
+      <button class="session-button" title={`レビューセッション: ${current.name}`}
+        aria-expanded={open} aria-controls="session-menu" onClick={() => setOpen(!open)}>
+        📑 {current.name}{current.archived ? '（アーカイブ済み）' : ''} ▾
+      </button>
+      {open && (
+        <div id="session-menu" class="switcher-menu">
+          <SessionMenu />
         </div>
       )}
     </span>
@@ -121,6 +260,7 @@ export function Header() {
           reviewer
         </a>
         <ProjectSwitcher name={i.name} root={i.root} />
+        {!narrow && <SessionSwitcher />}
         <span class={`round-chip ${i.roundStatus}`}>
           <span class="long" hidden={isCompact.value}>ラウンド {i.round} · {submitted ? '提出済み' : '下書き中'}</span>
           <span class="short" hidden={!isCompact.value} title={submitted ? '提出済み' : '下書き中'}>R{i.round}</span>

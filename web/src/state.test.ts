@@ -12,7 +12,7 @@ function deferred<T>() {
   return { promise, resolve }
 }
 function project(importedAt?: string, round = 1): Info {
-  return { name: 'project', root: '/test', dataDir: '/test/.reviewer', round, roundStatus: 'open',
+  return { name: 'project', session: { id: 'main', name: 'メイン', createdAt: '' }, root: '/test', dataDir: '/test/.reviewer', round, roundStatus: 'open',
     openedAt: '', baseRound: 0, labels: [], warnings: null, rounds: [], git: false,
     response: importedAt ? { importedAt, hash: 'hash', count: 1 } : undefined }
 }
@@ -22,6 +22,7 @@ beforeEach(() => {
   state.info.value = null; state.responseBanner.value = null; state.comments.value = []
   vi.spyOn(api, 'project').mockResolvedValue(project())
   vi.spyOn(api, 'tree').mockResolvedValue([])
+  vi.spyOn(api, 'sessions').mockResolvedValue([])
   vi.spyOn(api, 'comments').mockResolvedValue([])
   vi.spyOn(api, 'agent').mockResolvedValue({ available: false } as Awaited<ReturnType<typeof api.agent>>)
   vi.spyOn(api, 'presets').mockResolvedValue([])

@@ -21,7 +21,7 @@ const runStatusText: Record<string, string> = {
   error: 'エラー',
 }
 
-const sourceText: Record<string, string> = { discord: 'Discord', cli: 'CLI', telegram: 'Telegram', slack: 'Slack' }
+const sourceText: Record<string, string> = { discord: 'Discord', cli: 'CLI', telegram: 'Telegram', slack: 'Slack', t3: 'T3 Code' }
 
 /** Header chip showing where feedback goes. */
 export function AgentChip() {

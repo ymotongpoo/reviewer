@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'preact/hooks'
-import { api, projectId } from '../api'
+import { api, sessionKey } from '../api'
 import {
   annotationRequests,
   annotations,
@@ -31,7 +31,7 @@ export function Overview() {
   const journalVersion = composerJournalVersion.value
   useEffect(() => {
     let active = true
-    void draftStore.list<ComposerJournal>('composer', `${projectId}:`).then((list) => { if (active) setJournals(list) })
+    void draftStore.list<ComposerJournal>('composer', `${sessionKey}:`).then((list) => { if (active) setJournals(list) })
     return () => { active = false }
   }, [journalVersion])
   const [filter, setFilter] = useState<Filter>('unresolved')

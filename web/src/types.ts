@@ -97,8 +97,31 @@ export interface RoundSummary {
   response?: ResponseInfo
 }
 
+/** A review session of a directory, with its own rounds, comments and agent binding. */
+export interface ReviewSession {
+  id: string
+  name: string
+  createdAt: string
+  archived?: boolean
+}
+
+export interface SessionSummary {
+  id: string
+  name: string
+  url: string
+  createdAt: string
+  archived?: boolean
+  open: boolean
+  initialized: boolean
+  round?: number
+  roundStatus?: 'open' | 'submitted'
+  agent?: AgentBinding
+  busy?: boolean
+}
+
 export interface Info {
   name: string
+  session: ReviewSession
   root: string
   dataDir: string
   round: number
@@ -177,7 +200,7 @@ export interface SubmitResult extends RoundPaths {
 }
 
 export interface ServerEvent {
-  type: 'files' | 'tree' | 'comments' | 'round' | 'response' | 'agent' | 'annotate' | 'annotations' | 'git'
+  type: 'files' | 'tree' | 'comments' | 'round' | 'response' | 'agent' | 'annotate' | 'annotations' | 'git' | 'session'
   paths?: string[]
   round?: number
   request?: string
@@ -352,6 +375,7 @@ export interface ProjectSummary {
   roundStatus?: 'open' | 'submitted'
   agent?: AgentBinding
   busy?: boolean
+  sessions?: SessionSummary[]
 }
 
 export interface DirEntry {

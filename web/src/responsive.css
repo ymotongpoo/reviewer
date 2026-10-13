@@ -30,6 +30,7 @@
     min-width: 0;
   }
   .app-header > .switcher { flex: 1 1 180px; }
+  .app-header > .switcher.session-switcher { flex: 0 1 auto; }
   .app-header > .header-actions { flex: 1 1 auto; }
 }
 
@@ -184,7 +185,7 @@
 }
 
 @media (max-width: 839.98px), (hover: none) and (pointer: coarse) {
-  .app-header .btn, .app-header button.project, .header-actions .agent-chip,
+  .app-header .btn, .app-header button.project, .app-header button.session-button, .header-actions .agent-chip,
   .sidebar .tree-row, .modal .btn, .modal .session-row, .modal select,
   .switcher-item, .switcher-foot a, .switcher-foot button {
     min-height: 44px;

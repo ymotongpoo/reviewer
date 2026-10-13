@@ -212,7 +212,7 @@ function AnnotateDialog({ onClose }: { onClose: () => void }) {
                 type="text"
                 ref={sessionTitleInput}
                 value={sessionTitle}
-                placeholder={`reviewer: ${info.value?.name ?? ''} Q-… ${presetName.trim() || 'AI確認'}`}
+                placeholder={`reviewer: ${info.value?.name ?? ''}${info.value && info.value.session.id !== 'main' ? `［${info.value.session.name}］` : ''} Q-… ${presetName.trim() || 'AI確認'}`}
                 onInput={(e) => setSessionTitle(e.currentTarget.value)}
               />
             </label>
