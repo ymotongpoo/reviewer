@@ -1,0 +1,42 @@
+internal/agent/t3/detect.go
+  s_2458253039bfa2::t_7b85d9f82115d1 1,4-12,15,17-18,20-21,24,27,30,32,35,37,40,47,52,55-57,59-62,64-67,70,73,81-82,84-89,96,105,107-108,110-114,117,121-126,136,148,150
+  s_2458253039bfa2::t_db118b6b1c594e 2-3,13-14,16,19,22-23,25-26,28-29,31,33-34,36,38-39,41-46,48-51,53-54,58,63,68-69,71-72,74-80,83,90-95,97,100-101,106,109,115-116,118-120,127-135,137-147,149
+  s_2458253039bfa2::t_dee317151e16ef 98-99,102-104
+cmd/reviewer/agent.go
+  s_2458253039bfa2::t_540626214ec757 5,9,35-43,47-76,84,94-95
+cmd/reviewer/agent_test.go
+  s_2458253039bfa2::t_670bc7edaf72f9 1-39
+internal/agent/t3/run.go
+  s_2458253039bfa2::t_7dfb264a9e54b9 146-150,153
+  s_2458253039bfa2::t_6160bdeed068d1 1-145,151-152,154-303
+internal/config/config.go
+  s_2458253039bfa2::t_c2a6389cbe6d2a 100-101,105-107,109-119,155,157
+internal/agent/t3/auth.go
+  s_2458253039bfa2::t_936fa903930dbb 1-271
+internal/agent/t3/client.go
+  s_2458253039bfa2::t_130ae6faeb492c 89-92,95
+  s_2458253039bfa2::t_eaed795e8e2f95 1-88,96-97,115-131,134-135,137-166,173-175,177-217,247
+  s_2458253039bfa2::t_1c969b6519a606 93-94,98-114,132-133,136,167-172,176,218-246
+internal/agent/t3/mcp.go
+  s_2458253039bfa2::t_9b24713ca8fbdd 1-268
+internal/agent/t3/client_test.go
+  s_2458253039bfa2::t_182fa3888d1cbc 1-52,54-55,57-389,391-405,407,409-473
+  s_2458253039bfa2::t_33dc61db06f456 53,56,406,408
+  s_2458253039bfa2::t_7dfb264a9e54b9 390
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "515d9f04927a760907b159c0f52cad1437d3f2ec",
+  "prompts": {},
+  "sessions": {
+    "s_2458253039bfa2": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "44194b0b-d672-496d-be88-ee0b7a7761ad",
+        "model": "claude-opus-5-5"
+      },
+      "human_author": "Yoshi Yamaguchi <ymotongpoo@gmail.com>"
+    }
+  }
+}
