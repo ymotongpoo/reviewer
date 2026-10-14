@@ -1986,6 +1986,56 @@ input.search {
   color: var(--fg);
   font-family: var(--sans);
 }
+/* Commented places in the preview: bars in the left padding, and the text. */
+.preview-marks {
+  position: absolute;
+  top: 0;
+  left: 0;
+}
+.preview-mark {
+  position: absolute;
+  left: calc(6px + min(var(--lane, 0), 2) * 6px);
+  width: 4px;
+  padding: 0;
+  border: 0;
+  border-radius: 2px;
+  background: var(--warn);
+  opacity: 0.8;
+}
+.preview-mark.kind-annotation {
+  background: var(--label-question);
+}
+button.preview-mark {
+  cursor: pointer;
+}
+button.preview-mark::before {
+  content: '';
+  position: absolute;
+  inset: 0 -1px;
+}
+button.preview-mark:hover,
+button.preview-mark:focus-visible {
+  opacity: 1;
+  outline: 2px solid var(--accent);
+  outline-offset: 1px;
+}
+::highlight(review-comment) {
+  background-color: color-mix(in srgb, var(--warn) 24%, transparent);
+}
+::highlight(review-annotation) {
+  background-color: color-mix(in srgb, var(--label-question) 18%, transparent);
+  text-decoration: underline wavy var(--label-question);
+}
+.review-marked.kind-comment {
+  border-radius: 3px;
+  background-color: color-mix(in srgb, var(--warn) 10%, transparent);
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--warn) 40%, transparent);
+}
+.review-marked.kind-annotation {
+  border-radius: 3px;
+  background-color: color-mix(in srgb, var(--label-question) 8%, transparent);
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--label-question) 35%, transparent);
+}
 .preview-pane[data-theme='dark'] .znc {
   color: #e6edf3;
 }

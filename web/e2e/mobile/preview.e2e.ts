@@ -1,6 +1,7 @@
 import { mkdir, writeFile } from 'node:fs/promises'
 import { join } from 'node:path'
 import { test, expect } from '../support/fixtures'
+import { belowPreviewTop, belowTop, scrollPreviewToTop, scrollToTop } from '../support/scroll'
 
 test('preview resolves relative images through the project asset endpoint', async ({ page, project, openFile }) => {
   await mkdir(join(project.dir, 'docs'), { recursive: true })
@@ -14,7 +15,8 @@ test('preview resolves relative images through the project asset endpoint', asyn
   await expect(image).toHaveAttribute('src', /\/api\/asset\?path=images%2Fpixel\.png/)
   await expect.poll(() => image.evaluate((el: HTMLImageElement) => el.naturalWidth)).toBeGreaterThan(0)
 })
-test('C11 preview tabs preserve scroll ratio and source draft; larger widths retain split panes', async ({ page, project, openFile }, info) => {
+test('C11 preview tabs keep the line at the top and source draft; larger widths retain split panes', async ({ page, project, openFile }, info) => {
+  // Heading i is on line 4i + 1.
   await writeFile(join(project.dir, 'tabs.md'), Array.from({ length: 80 }, (_, i) => `## 見出し ${i}\n\n説明文です。\n`).join('\n'))
   await openFile('tabs.md')
   await page.locator('.file-preview-toggle').tap()
@@ -26,14 +28,15 @@ test('C11 preview tabs preserve scroll ratio and source draft; larger widths ret
     const preview = page.getByRole('tab', { name: 'プレビュー', exact: true })
     await expect(source).toHaveAttribute('aria-selected', 'true')
     await expect(page.locator('.preview-pane')).toBeHidden()
-    await page.locator('.main').evaluate((el) => { el.scrollTop = (el.scrollHeight - el.clientHeight) * 0.45 })
-    // Activation must not scroll the tab into view before measuring the ratio.
+    await scrollToTop(page, '#L121')
+    // Activation must not scroll the tab into view before measuring the line.
     await preview.evaluate((el: HTMLButtonElement) => el.click())
     await expect(preview).toHaveAttribute('aria-selected', 'true')
-    await expect.poll(() => page.locator('.main').evaluate((el) => el.scrollTop / (el.scrollHeight - el.clientHeight))).toBeCloseTo(0.45, 2)
+    await expect.poll(async () => Math.abs(await belowTop(page, '.preview-pane [data-source-line="121"]'))).toBeLessThan(2)
     await expect(page.locator('.file-src')).toBeHidden()
+    await scrollToTop(page, '.preview-pane [data-source-line="201"]')
     await source.evaluate((el: HTMLButtonElement) => el.click())
-    await expect.poll(() => page.locator('.main').evaluate((el) => el.scrollTop / (el.scrollHeight - el.clientHeight))).toBeCloseTo(0.45, 2)
+    await expect.poll(async () => Math.abs(await belowTop(page, '#L201'))).toBeLessThan(2)
     await page.locator('.main').evaluate((el) => { el.scrollTop = 0 })
     await source.focus()
     await source.press('ArrowRight')
@@ -79,19 +82,17 @@ test('Markdown preview footnote links stay inside the preview pane', async ({ pa
   await expect(page).toHaveURL(before)
   await expect(page.locator('.preview-pane [id^="fn-"]')).toBeVisible()
 })
-test('split preview scroll follows source and source follows preview', async ({ page, project, openFile }) => {
+test('split preview scroll follows source and source follows preview by line', async ({ page, project, openFile }) => {
   test.skip((page.viewportSize()?.width ?? 0) < 840, 'split panes are only available at expanded widths')
   await writeFile(join(project.dir, 'scroll.md'), Array.from({ length: 120 }, (_, i) => `## 見出し ${i}\n\n説明文です。\n`).join('\n'))
   await openFile('scroll.md')
   await page.locator('.file-preview-toggle').click()
   await expect(page.locator('.preview-pane .spinner')).toHaveCount(0)
-  const source = page.locator('.main')
-  const preview = page.locator('.preview-pane')
-  await expect(preview).toBeVisible()
-  await preview.evaluate((el) => { el.scrollTop = (el.scrollHeight - el.clientHeight) * 0.6 })
-  await expect.poll(() => source.evaluate((el) => el.scrollTop / Math.max(1, el.scrollHeight - el.clientHeight))).toBeCloseTo(0.6, 1)
-  await source.evaluate((el) => { el.scrollTop = (el.scrollHeight - el.clientHeight) * 0.25 })
-  await expect.poll(() => preview.evaluate((el) => el.scrollTop / Math.max(1, el.scrollHeight - el.clientHeight))).toBeCloseTo(0.25, 1)
+  await expect(page.locator('.preview-pane')).toBeVisible()
+  await scrollPreviewToTop(page, '[data-source-line="241"]')
+  await expect.poll(async () => Math.abs(await belowTop(page, '#L241'))).toBeLessThan(2)
+  await scrollToTop(page, '#L101')
+  await expect.poll(async () => Math.abs(await belowPreviewTop(page, '[data-source-line="101"]'))).toBeLessThan(2)
 })
 test('C11 file menu exposes auxiliary controls with Escape and focus return', async ({ page, openFile }) => {
   await openFile('guide.md')

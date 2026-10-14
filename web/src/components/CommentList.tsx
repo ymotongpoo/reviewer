@@ -16,7 +16,7 @@ function aiLocation(a: Annotation): string {
   return lineRange(a.loc.start, a.loc.end)
 }
 
-function jumpTo(id: string, revealSource?: () => void) {
+export function jumpTo(id: string, revealSource?: () => void) {
   if (revealSource) {
     revealSource()
     requestAnimationFrame(() => jumpTo(id))

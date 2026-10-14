@@ -2,6 +2,7 @@ import { projectId } from '../api'
 import DOMPurify from 'dompurify'
 import { Marked } from 'marked'
 import { tokenize } from '../highlight'
+import { bodyOffset, numberLines, renderLines } from './sourcemap'
 
 export type Renderer = 'zenn' | 'markdown'
 
@@ -10,16 +11,16 @@ export interface Frontmatter {
   fields: [string, string][]
 }
 
-/** Splits a leading "---" YAML block from the body. */
-export function splitFrontmatter(src: string): { fm: Frontmatter | null; body: string } {
+/** Splits a leading "---" YAML block from the body, which starts at line offset (0-based). */
+export function splitFrontmatter(src: string): { fm: Frontmatter | null; body: string; offset: number } {
   const m = src.match(/^---\r?\n([\s\S]*?)\r?\n---\r?\n?/)
-  if (!m) return { fm: null, body: src }
+  if (!m) return { fm: null, body: src, offset: 0 }
   const fields: [string, string][] = []
   for (const line of m[1].split(/\r?\n/)) {
     const kv = line.match(/^([A-Za-z_][\w-]*):\s*(.*)$/)
     if (kv) fields.push([kv[1], kv[2].replace(/^["']|["']$/g, '')])
   }
-  return { fm: { raw: m[1], fields }, body: src.slice(m[0].length) }
+  return { fm: { raw: m[1], fields }, body: src.slice(m[0].length), offset: bodyOffset(m[0]) }
 }
 
 /** Zenn articles and book chapters carry emoji/type/topics or live under books/. */
@@ -91,15 +92,14 @@ async function highlightCode(root: HTMLElement) {
 
 /** Renders src into el and returns nothing; errors are shown in place. */
 export async function renderInto(el: HTMLElement, src: string, renderer: Renderer, path = ''): Promise<void> {
-  const { body } = splitFrontmatter(src)
+  const { body, offset } = splitFrontmatter(src)
   let html: string
   if (renderer === 'zenn') {
     const { default: markdownToHtml } = await import('zenn-markdown-html')
     await import('zenn-content-css/lib/index.css')
     html = await markdownToHtml(body)
   } else {
-    const md = new Marked({ gfm: true, breaks: false })
-    html = md.parse(body, { async: false }) as string
+    html = renderLines(new Marked({ gfm: true, breaks: false }), body)
   }
   // zenn-markdown-html sanitizes already; sanitize both paths the same way
   // while keeping Zenn's custom math element and embed iframes (replaced below).
@@ -107,6 +107,7 @@ export async function renderInto(el: HTMLElement, src: string, renderer: Rendere
     ADD_TAGS: ['embed-katex', 'eq', 'eqn', 'iframe'],
     ADD_ATTR: ['display-mode', 'target', 'data-content', 'allowfullscreen'],
   })
+  numberLines(el, offset)
   placeholderEmbeds(el)
   el.querySelectorAll<HTMLImageElement>('img[src]').forEach((img) => {
     const src = img.getAttribute('src') ?? ''

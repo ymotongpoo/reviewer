@@ -60,8 +60,10 @@ import { Composer } from './Composer'
 import { Thread } from './Thread'
 import { Preview } from './Preview'
 import { isMarkdown } from '../preview/render'
+import type { PreviewMark } from '../preview/marks'
+import { ScrollSync } from '../scrollsync'
 import { AnnotationCard } from './AnnotationCard'
-import { CommentList } from './CommentList'
+import { CommentList, jumpTo } from './CommentList'
 import { CodeRow, type InputHandlers, type InputState, type RowHandlers } from './CodeRow'
 import { EditBar, EditReview, type EditError } from './EditBar'
 import { isSeen, markSeen } from '../seen'
@@ -158,26 +160,26 @@ export function FileView({ path, line }: { path: string; line?: number }) {
     if (narrow && optionsOpen) document.getElementById('file-options')?.focus({ preventScroll: true })
   }, [narrow, optionsOpen])
   const [previewTab, setPreviewTab] = useState<'source' | 'preview'>('source')
-  const tabScroll = useRef<number | null>(null)
+  const [sync] = useState(() => new ScrollSync())
+  // The line at the top when switching tabs, shown at the top of the other tab.
+  const tabLine = useRef<number | null>(null)
   useEffect(() => { setOptionsOpen(false); setPreviewTab('source') }, [path])
   useEffect(() => { if (!narrow) setOptionsOpen(false) }, [narrow])
   useLayoutEffect(() => {
-    const main = document.querySelector<HTMLElement>('.main')
-    if (main && tabScroll.current !== null) {
-      main.scrollTop = tabScroll.current * Math.max(0, main.scrollHeight - main.clientHeight)
-      if (previewTab !== 'preview' || !main.querySelector('.preview-pane .spinner')) tabScroll.current = null
-    }
+    if (tabLine.current === null) return
+    if (previewTab === 'source') sync.showSource(tabLine.current)
+    else if (document.querySelector('.preview-pane .spinner')) return
+    else sync.showPreview(tabLine.current)
+    tabLine.current = null
   }, [previewTab])
   function switchTab(next: 'source' | 'preview') {
     if (next === previewTab) return
-    const main = document.querySelector<HTMLElement>('.main')
-    if (main) tabScroll.current = main.scrollTop / Math.max(1, main.scrollHeight - main.clientHeight)
+    tabLine.current = previewTab === 'source' ? sync.sourceLine() : sync.previewLine()
     cancelSelectionRead()
     setTouchSel({ kind: 'none' })
     window.getSelection()?.removeAllRanges()
     setPreviewTab(next)
   }
-  const [scrollRatio, setScrollRatio] = useState(0)
   // Tokens, and the draft lines they were computed from while editing.
   const [hl, setHl] = useState<{ tokens?: Token[][]; lines?: string[] }>({})
   const [error, setError] = useState<string | null>(null)
@@ -453,6 +455,49 @@ export function FileView({ path, line }: { path: string; line?: number }) {
   if (newLine?.range) addMarks(newLine.range)
   const targetLine = line !== undefined ? toDraft(line) : undefined
 
+  // The commented lines of the draft, marked in the preview.
+  const previewMarks: PreviewMark[] = []
+  if (showPreview) {
+    const lineOf = (no: number, at: number) => toDraft(no) ?? at
+    // Characters of a range on its first and last line, where the draft still has them.
+    const chars = (r: TextRange | undefined, start: number, end: number) => {
+      if (!r) return {}
+      const same = (no: number, d: number) => textLine(displayLines[d - 1] ?? '') === diskText[no - 1]
+      return {
+        from: same(r.startLine, start) ? lineMark(diskText, r, r.startLine)?.[0] : undefined,
+        to: same(r.endLine, end) ? lineMark(diskText, r, r.endLine)?.[1] : undefined,
+      }
+    }
+    for (const c of located) {
+      const at = placeOf(c.loc!)!
+      const start = lineOf(c.loc!.start, at)
+      const end = lineOf(c.loc!.end, at)
+      const r = c.range ? c.loc!.range ?? c.range : undefined
+      previewMarks.push({ kind: 'comment', target: `comment-${c.id}`, label: `コメント ${c.id}`, start, end, ...chars(r, start, end) })
+    }
+    for (const a of locatedAnnotations) {
+      if (a.state !== 'pending') continue
+      const at = placeOf(a.loc!)!
+      previewMarks.push({ kind: 'annotation', target: `annotation-${a.id}`, label: `AI指摘 ${a.id}`, start: lineOf(a.loc!.start, at), end: lineOf(a.loc!.end, at) })
+    }
+    if (newLine && newLineAt?.start && newLineAt.end) {
+      previewMarks.push({
+        kind: 'comment', target: '', label: '書きかけのコメント', start: newLineAt.start, end: newLineAt.end,
+        ...chars(newLine.range, newLineAt.start, newLineAt.end),
+      })
+    }
+  }
+
+  /** Shows the comment of a preview mark in the source. */
+  function revealMark(m: PreviewMark) {
+    if (!m.target) return
+    const a = locatedAnnotations.find((x) => `annotation-${x.id}` === m.target)
+    jumpTo(m.target, () => {
+      if (compact) setPreviewTab('source')
+      if (a) setAnnotationToggles((prev) => new Map(prev).set(placeOf(a.loc!)!, true))
+    })
+  }
+
   // Scroll to a deep-linked line once content is there.
   useEffect(() => {
     if (!line || !file) return
@@ -479,18 +524,22 @@ export function FileView({ path, line }: { path: string; line?: number }) {
     if (ids.length > 0) markSeen(ids)
   }, [fileComments.map((c) => c.id).join(',')])
 
+  // Side by side, the preview follows the source as it scrolls or its comments open and close.
+  sync.rows = displayLines.length
   useEffect(() => {
-    if (!showPreview) return
-    const main = document.querySelector('.main')
-    if (!main) return
-    const on = () => {
-      const max = main.scrollHeight - main.clientHeight
-      setScrollRatio(max > 0 ? main.scrollTop / max : 0)
-    }
+    const main = sync.main()
+    const code = codeRef.current
+    if (!showPreview || compact || !main) return
+    const on = () => { if (!sync.own(main)) sync.fromSource() }
     main.addEventListener('scroll', on, { passive: true })
-    on()
-    return () => main.removeEventListener('scroll', on)
-  }, [showPreview])
+    const ro = typeof ResizeObserver === 'undefined' || !code ? null : new ResizeObserver(() => sync.fromSource())
+    if (code) ro?.observe(code)
+    sync.fromSource()
+    return () => {
+      main.removeEventListener('scroll', on)
+      ro?.disconnect()
+    }
+  }, [showPreview, compact, !!file])
 
   useEffect(() => {
     const up = () => {
@@ -1485,17 +1534,14 @@ export function FileView({ path, line }: { path: string; line?: number }) {
             {displayLines.length === 0 && <div class="empty">（空のファイル）</div>}
           </div>
         </div>
-        {showPreview && file && <Preview path={path} content={previewDraft ?? file.content} scrollRatio={scrollRatio} onScrollRatio={(ratio) => {
-          setScrollRatio(ratio)
-          const main = document.querySelector<HTMLElement>('.main')
-          if (main) main.scrollTop = ratio * Math.max(0, main.scrollHeight - main.clientHeight)
-        }} tabbed={compact} hidden={compact && previewTab !== 'preview'} onReady={() => {
-          const main = document.querySelector<HTMLElement>('.main')
-          if (compact && previewTab === 'preview' && main && tabScroll.current !== null) {
-            main.scrollTop = tabScroll.current * Math.max(0, main.scrollHeight - main.clientHeight)
-            tabScroll.current = null
-          }
-        }} />}
+        {showPreview && file && <Preview path={path} content={previewDraft ?? file.content} sync={sync}
+          marks={previewMarks} onMark={revealMark}
+          tabbed={compact} hidden={compact && previewTab !== 'preview'} onReady={() => {
+            if (compact && previewTab === 'preview' && tabLine.current !== null) {
+              sync.showPreview(tabLine.current)
+              tabLine.current = null
+            }
+          }} />}
       </div>
       {touchUI && <SelectionBar selection={touchSel} insert={session?.mode === 'insert' || !!review || (showPreview && compact && previewTab === 'preview')}
         onClear={() => { cancelSelectionRead(); setTouchSel({ kind: 'none' }) }}
