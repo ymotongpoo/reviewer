@@ -339,7 +339,7 @@ function EditStep({
         {st.changes.length === 0 ? (
           <p class="muted small">コミットする変更はありません。</p>
         ) : (
-          <ul class="git-changes">
+          <ul class="git-changes" aria-label="未コミットの変更">
             {st.changes.map((c) => (
               <li class={`git-change kind-${c.kind}`}>
                 <span class={`chip git-kind kind-${c.kind}`}>{kindText[c.kind] ?? c.kind}</span>
@@ -361,6 +361,11 @@ function EditStep({
               </li>
             ))}
           </ul>
+        )}
+        {st.hidden > 0 && (
+          <p class="muted small">
+            このセッションで変更したファイルだけを表示しています。ほかの未コミットの変更（{st.hidden}件）はコミットしません。
+          </p>
         )}
         {st.commitBlockers.length > 0 && <Blockers title="コミットできません" items={st.commitBlockers} />}
       </section>
@@ -565,9 +570,9 @@ function ConfirmCommit({
     <>
       <h2 id="git-title">コミットの確認</h2>
       <p>
-        次の{snap.changes.length}件の変更をすべてステージし、ブランチ <code>{snap.branch}</code> にコミットします。
+        次の{snap.changes.length}件の変更を、いまの内容でブランチ <code>{snap.branch}</code> にコミットします。
       </p>
-      <ul class="git-changes compact">
+      <ul class="git-changes compact" aria-label="コミットする変更">
         {snap.changes.map((c) => (
           <li class="git-change">
             <span class={`chip git-kind kind-${c.kind}`}>{kindText[c.kind] ?? c.kind}</span>
@@ -576,6 +581,11 @@ function ConfirmCommit({
           </li>
         ))}
       </ul>
+      {snap.otherStaged.length > 0 && (
+        <p class="muted small">
+          ほかにステージ済みの変更が{snap.otherStaged.length}件ありますが、このコミットには含めず、ステージしたまま残します。
+        </p>
+      )}
       <pre class="git-message-preview">{message.trim()}</pre>
       {snap.identity && <p class="muted small">コミットする人: {snap.identity}</p>}
       {pushAfterCommit(snap) && (

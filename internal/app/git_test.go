@@ -7,8 +7,10 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"slices"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/ymotongpoo/reviewer/internal/config"
 	"github.com/ymotongpoo/reviewer/internal/gitops"
@@ -58,6 +60,18 @@ func gitSetup(t *testing.T) (a *App, top, bare string) {
 	return a, top, bare
 }
 
+// save writes a file from the session's editor.
+func save(t *testing.T, a *App, rel, content string) {
+	t.Helper()
+	view, err := a.File(rel)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := a.SaveFile(SaveFileInput{Path: rel, Content: content, Hash: view.Hash}); err != nil {
+		t.Fatal(err)
+	}
+}
+
 func errCode(err error) int {
 	var ae *Error
 	if errors.As(err, &ae) {
@@ -72,15 +86,17 @@ func TestGitCommitAndPush(t *testing.T) {
 	if !a.Info().Git {
 		t.Fatal("Info().Git = false")
 	}
-	write(t, top, "docs/ch1.md", "# ch1\nedited\n")
+	save(t, a, "ch1.md", "# ch1\nedited\n")
 	write(t, top, "src/main.go", "package main\n\n// untouched by reviewer\n")
+	// Not the session's doing.
+	write(t, top, "docs/notes.md", "notes\n")
 
 	st, err := a.GitStatus(ctx, "", "")
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(st.Changes) != 1 || st.Changes[0].Path != "ch1.md" || st.Prefix != "docs/" {
-		t.Fatalf("changes = %+v prefix %q", st.Changes, st.Prefix)
+	if len(st.Changes) != 1 || st.Changes[0].Path != "ch1.md" || st.Prefix != "docs/" || st.Hidden != 1 {
+		t.Fatalf("changes = %+v hidden %d prefix %q", st.Changes, st.Hidden, st.Prefix)
 	}
 	if st.Target.Remote != "origin" || st.Target.Branch != "main" || !st.Target.Tracked || st.Target.Ahead != 0 {
 		t.Fatalf("target = %+v", st.Target)
@@ -110,8 +126,8 @@ func TestGitCommitAndPush(t *testing.T) {
 	if files != "docs/ch1.md\n" {
 		t.Fatalf("committed = %q", files)
 	}
-	if got := runGit(t, top, "status", "--porcelain", "--", "src"); got != " M src/main.go\n" {
-		t.Fatalf("outside change = %q", got)
+	if got := runGit(t, top, "status", "--porcelain", "--", "src", "docs/notes.md"); got != " M src/main.go\n?? docs/notes.md\n" {
+		t.Fatalf("other changes = %q", got)
 	}
 
 	st, _ = a.GitStatus(ctx, "", "")
@@ -183,26 +199,131 @@ func TestGitPushTargets(t *testing.T) {
 	}
 }
 
-func TestGitCommitRefusesOutsideStaged(t *testing.T) {
+func TestGitCommitLeavesOtherStagedChanges(t *testing.T) {
 	a, top, _ := gitSetup(t)
 	ctx := context.Background()
-	write(t, top, "docs/ch1.md", "# ch1\nedited\n")
+	save(t, a, "ch1.md", "# ch1\nedited\n")
 	write(t, top, "src/main.go", "package main // staged\n")
 	runGit(t, top, "add", "src/main.go")
 	st, err := a.GitStatus(ctx, "", "")
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(st.CommitBlockers) != 1 || !strings.Contains(st.CommitBlockers[0], "src/main.go") {
-		t.Fatalf("blockers = %v", st.CommitBlockers)
+	if len(st.CommitBlockers) != 0 || len(st.OtherStaged) != 1 || st.OtherStaged[0] != "src/main.go" {
+		t.Fatalf("blockers = %v other staged = %v", st.CommitBlockers, st.OtherStaged)
 	}
-	if _, err := a.GitCommit(ctx, GitCommitInput{Message: "docs: x", Fingerprint: st.Fingerprint}); errCode(err) != http.StatusConflict {
-		t.Fatalf("commit: %v", err)
+	if _, err := a.GitCommit(ctx, GitCommitInput{Message: "docs: x", Fingerprint: st.Fingerprint}); err != nil {
+		t.Fatal(err)
 	}
-	// Nothing was staged or committed.
-	if got := runGit(t, top, "status", "--porcelain"); got != " M docs/ch1.md\nM  src/main.go\n?? docs/.reviewer/\n" {
+	if files := runGit(t, top, "show", "--name-only", "--format=", "HEAD"); files != "docs/ch1.md\n" {
+		t.Fatalf("committed = %q", files)
+	}
+	if got := runGit(t, top, "status", "--porcelain"); got != "M  src/main.go\n?? docs/.reviewer/\n" {
 		t.Fatalf("status = %q", got)
 	}
+}
+
+// TestGitShowsOnlyTheSessionsChanges follows two sessions of a directory
+// with changes from before them and from elsewhere.
+func TestGitShowsOnlyTheSessionsChanges(t *testing.T) {
+	a, top, _ := gitSetup(t)
+	ctx := context.Background()
+	clock := time.Now().Add(time.Hour)
+	now := func() time.Time { return clock }
+	a.now = now
+	// at writes a file of the project at the next minute.
+	at := func(rel, content string) {
+		t.Helper()
+		clock = clock.Add(time.Minute)
+		write(t, top, "docs/"+rel, content)
+		if err := os.Chtimes(filepath.Join(top, "docs", rel), clock, clock); err != nil {
+			t.Fatal(err)
+		}
+		clock = clock.Add(time.Minute)
+	}
+	paths := func(app *App) ([]string, int) {
+		t.Helper()
+		st, err := app.GitStatus(ctx, "", "")
+		if err != nil {
+			t.Fatal(err)
+		}
+		out := []string{}
+		for _, c := range st.Changes {
+			out = append(out, c.Path)
+		}
+		return out, st.Hidden
+	}
+	check := func(app *App, want []string, hidden int) {
+		t.Helper()
+		if got, h := paths(app); !slices.Equal(got, want) || h != hidden {
+			t.Fatalf("changes = %v hidden %d, want %v hidden %d", got, h, want, hidden)
+		}
+	}
+
+	at("old.md", "from before\n")
+	at("ch1.md", "# ch1\nedited before\n")
+	info, err := a.Workspace().CreateSession("second")
+	if err != nil {
+		t.Fatal(err)
+	}
+	b, err := a.Workspace().Open(info.ID, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	b.now = now
+	if err := b.Init(); err != nil {
+		t.Fatal(err)
+	}
+	// Neither session made the changes.
+	check(a, []string{}, 2)
+	check(b, []string{}, 2)
+
+	// A comment makes a changed file the session's; one changed since the
+	// start of the session is needed too.
+	if _, err := a.CreateComment(NewComment{Scope: "file", Path: "ch1.md", Label: "must", Body: "x"}); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := b.CreateComment(NewComment{Scope: "file", Path: "ch1.md", Label: "must", Body: "x"}); err != nil {
+		t.Fatal(err)
+	}
+	check(a, []string{"ch1.md"}, 1)
+	check(b, []string{}, 2)
+
+	// What changes while the agent works on a round is the session's.
+	if _, err := b.Submit(); err != nil {
+		t.Fatal(err)
+	}
+	at("agent.md", "by the agent\n")
+	b.HandleChanges([]string{"agent.md"}, false)
+	// Unseen by the watcher, but changed then.
+	at("agent.png", "\x89PNG\x00\x00")
+	check(b, []string{"agent.md", "agent.png"}, 2)
+	check(a, []string{"ch1.md"}, 3)
+	// Commenting again opens the next round; the agent is done.
+	if _, err := b.CreateComment(NewComment{Scope: "project", Label: "must", Body: "again"}); err != nil {
+		t.Fatal(err)
+	}
+	at("late.md", "after the agent\n")
+	b.HandleChanges([]string{"late.md"}, false)
+	at("agent.md", "by the agent, then edited\n")
+	check(b, []string{"agent.md", "agent.png"}, 3)
+
+	// Saving from the editor makes a file the session's.
+	save(t, a, "old.md", "saved by the reviewer\n")
+	check(a, []string{"ch1.md", "old.md"}, 3)
+
+	st, err := b.GitStatus(ctx, "", "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := b.GitCommit(ctx, GitCommitInput{Message: st.Messages["en"], Fingerprint: st.Fingerprint}); err != nil {
+		t.Fatal(err)
+	}
+	if files := runGit(t, top, "show", "--name-only", "--format=", "HEAD"); files != "docs/agent.md\ndocs/agent.png\n" {
+		t.Fatalf("committed = %q", files)
+	}
+	check(b, []string{}, 3)
+	check(a, []string{"ch1.md", "old.md"}, 1)
 }
 
 func TestGitNotRepoAndLanguage(t *testing.T) {
@@ -243,6 +364,9 @@ func TestGitPushFailureKeepsCommit(t *testing.T) {
 	runGit(t, top, "fetch", "-q", "origin")
 
 	write(t, top, "docs/ch2.md", "# ch2\n")
+	if _, err := a.CreateComment(NewComment{Scope: "file", Path: "ch2.md", Label: "must", Body: "x"}); err != nil {
+		t.Fatal(err)
+	}
 	st, err := a.GitStatus(ctx, "", "")
 	if err != nil {
 		t.Fatal(err)

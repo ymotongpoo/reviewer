@@ -86,7 +86,7 @@ func TestStatusAndCommitKeepOutsideChanges(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if st.Branch != "main" || st.Unborn || st.Operation != "" || len(st.OutsideStaged) != 0 {
+	if st.Branch != "main" || st.Unborn || st.Operation != "" || len(st.Staged) != 0 {
 		t.Fatalf("state = %+v", st)
 	}
 	want := []Change{{Path: "ch1.md", Kind: Modified}, {Path: "日本語.md", Kind: Added, Untracked: true}}
@@ -105,7 +105,7 @@ func TestStatusAndCommitKeepOutsideChanges(t *testing.T) {
 		t.Fatal("fingerprint did not change")
 	}
 
-	if _, err := r.Commit(ctx, "docs: update ch1\n"); err != nil {
+	if _, err := r.Commit(ctx, "docs: update ch1\n", st2.Changes); err != nil {
 		t.Fatal(err)
 	}
 	if got := git(t, top, "log", "-1", "--format=%s"); got != "docs: update ch1\n" {
@@ -125,7 +125,7 @@ func TestStatusAndCommitKeepOutsideChanges(t *testing.T) {
 	}
 }
 
-func TestStatusReportsOutsideStagedAndOperations(t *testing.T) {
+func TestStatusReportsStagedAndOperations(t *testing.T) {
 	top, project, _ := fixture(t)
 	ctx := context.Background()
 	writeFile(t, filepath.Join(top, "other", "x.txt"), "staged\n")
@@ -138,8 +138,8 @@ func TestStatusReportsOutsideStagedAndOperations(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if !slices.Equal(st.OutsideStaged, []string{"other/x.txt"}) {
-		t.Fatalf("outside staged = %v", st.OutsideStaged)
+	if !slices.Equal(st.Staged, []string{"other/x.txt"}) || len(st.Changes) != 0 {
+		t.Fatalf("staged = %v changes = %+v", st.Staged, st.Changes)
 	}
 	writeFile(t, filepath.Join(r.GitDir, "MERGE_HEAD"), "0000\n")
 	if st, _ := r.Status(ctx); st.Operation != "merge" {
@@ -173,7 +173,7 @@ func TestRemotesAndPush(t *testing.T) {
 	}
 
 	writeFile(t, filepath.Join(project, "ch2.md"), "# ch2\n")
-	if _, err := r.Commit(ctx, "docs: add ch2\n"); err != nil {
+	if _, err := commitAll(ctx, r, "docs: add ch2\n"); err != nil {
 		t.Fatal(err)
 	}
 	if ahead, behind, ok := r.Divergence(ctx, "origin", "main"); !ok || ahead != 1 || behind != 0 {
@@ -192,7 +192,7 @@ func TestRemotesAndPush(t *testing.T) {
 	git(t, other, "-c", "user.name=O", "-c", "user.email=o@example.com", "commit", "-q", "--allow-empty", "-m", "remote work")
 	git(t, other, "push", "-q", "origin", "main")
 	writeFile(t, filepath.Join(project, "ch3.md"), "# ch3\n")
-	if _, err := r.Commit(ctx, "docs: add ch3\n"); err != nil {
+	if _, err := commitAll(ctx, r, "docs: add ch3\n"); err != nil {
 		t.Fatal(err)
 	}
 	_, err = r.Push(ctx, "origin", "main")
@@ -304,7 +304,7 @@ func TestPushRefusesMirrorAndReportsRemoteMessages(t *testing.T) {
 	os.Chmod(filepath.Join(bare, "hooks", "post-receive"), 0o755)
 	r, _ := Open(ctx, project, ".reviewer")
 	writeFile(t, filepath.Join(project, "ch2.md"), "# ch2\n")
-	if _, err := r.Commit(ctx, "docs: add ch2\n"); err != nil {
+	if _, err := commitAll(ctx, r, "docs: add ch2\n"); err != nil {
 		t.Fatal(err)
 	}
 	out, err := r.Push(ctx, "origin", "main")
@@ -330,19 +330,43 @@ func TestPushRefusesMirrorAndReportsRemoteMessages(t *testing.T) {
 	}
 }
 
-func TestCommitChecksIndexAfterStaging(t *testing.T) {
+func TestCommitTakesOnlyTheGivenChanges(t *testing.T) {
 	top, project, _ := fixture(t)
 	ctx := context.Background()
 	writeFile(t, filepath.Join(project, "ch1.md"), "# ch1\nedited\n")
+	writeFile(t, filepath.Join(project, "ch2.md"), "# ch2\n")
+	// Read as a glob, ch[3].md would also take ch3.md.
+	writeFile(t, filepath.Join(project, "ch[3].md"), "# ch[3]\n")
+	writeFile(t, filepath.Join(project, "ch3.md"), "# ch3\n")
+	writeFile(t, filepath.Join(project, "notes.md"), "not part of it\n")
 	writeFile(t, filepath.Join(top, "other", "x.txt"), "staged elsewhere\n")
-	git(t, top, "add", "other/x.txt")
+	git(t, top, "add", "other/x.txt", "docs/notes.md")
+	git(t, top, "mv", "docs/ch1.md", "docs/one.md")
 	r, _ := Open(ctx, project, ".reviewer")
-	head := git(t, top, "rev-parse", "HEAD")
-	if _, err := r.Commit(ctx, "docs: x\n"); !errors.Is(err, ErrOutsideStaged) {
-		t.Fatalf("err = %v", err)
+	st, err := r.Status(ctx)
+	if err != nil {
+		t.Fatal(err)
 	}
-	if got := git(t, top, "rev-parse", "HEAD"); got != head {
-		t.Fatal("a commit was created")
+	var take []Change
+	for _, c := range st.Changes {
+		if c.Path != "notes.md" && c.Path != "ch3.md" {
+			take = append(take, c)
+		}
+	}
+	// The rename and two new files.
+	if len(take) != 3 {
+		t.Fatalf("changes = %+v", st.Changes)
+	}
+	if _, err := r.Commit(ctx, "docs: x\n", take); err != nil {
+		t.Fatal(err)
+	}
+	files := git(t, top, "show", "--name-status", "--no-renames", "--format=", "HEAD")
+	if files != "D\tdocs/ch1.md\nA\tdocs/ch2.md\nA\tdocs/ch[3].md\nA\tdocs/one.md\n" {
+		t.Fatalf("committed = %q", files)
+	}
+	// What was staged for other paths stays staged.
+	if got := git(t, top, "status", "--porcelain"); got != "A  docs/notes.md\nM  other/x.txt\n?? docs/ch3.md\n" {
+		t.Fatalf("status = %q", got)
 	}
 }
 
@@ -366,10 +390,19 @@ func TestFirstCommitOnUnbornBranch(t *testing.T) {
 	if !st.Unborn || st.Branch != "main" || !slices.Equal(st.Changes, []Change{{Path: "a.md", Kind: Added, Untracked: true}}) {
 		t.Fatalf("state = %+v", st)
 	}
-	if _, err := r.Commit(ctx, "docs: add a.md\n"); err != nil {
+	if _, err := commitAll(ctx, r, "docs: add a.md\n"); err != nil {
 		t.Fatal(err)
 	}
 	if got := git(t, top, "show", "--name-only", "--format=", "HEAD"); got != "a.md\n" {
 		t.Fatalf("committed = %q", got)
 	}
+}
+
+// commitAll commits every change of the project.
+func commitAll(ctx context.Context, r *Repo, message string) (string, error) {
+	st, err := r.Status(ctx)
+	if err != nil {
+		return "", err
+	}
+	return r.Commit(ctx, message, st.Changes)
 }

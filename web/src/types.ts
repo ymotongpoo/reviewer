@@ -465,8 +465,12 @@ export interface GitStatus {
   head?: string
   upstream: { remote?: string; branch?: string }
   operation?: string
+  /** Changes the session made; the commit takes only these. */
   changes: GitChange[]
-  outsideStaged: string[]
+  /** Uncommitted changes of the directory that the session did not make. */
+  hidden: number
+  /** Staged paths, relative to the repository, that a commit leaves out. */
+  otherStaged: string[]
   fingerprint: string
   identity?: string
   messages: Partial<Record<GitLanguage, string>>

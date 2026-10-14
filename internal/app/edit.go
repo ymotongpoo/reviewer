@@ -38,6 +38,7 @@ func (a *App) SaveFile(in SaveFileInput) (*SaveFileResult, error) {
 		// the returned hash anchor to it, like content served by File. The
 		// file is already written, so a failure here only loses that.
 		_, _ = a.Store.PutBlob(content)
+		a.touch([]string{in.Path})
 	}
 	a.mu.Unlock()
 	if err != nil {

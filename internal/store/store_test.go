@@ -189,3 +189,31 @@ func TestGitSettings(t *testing.T) {
 		t.Fatal("broken git.toml accepted")
 	}
 }
+
+func TestTouchedPersists(t *testing.T) {
+	dir := t.TempDir()
+	s, err := Open(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got, err := s.Touched(); err != nil || len(got) != 0 {
+		t.Fatalf("touched = %v, %v", got, err)
+	}
+	if err := s.Touch("b.md", "a.md", ""); err != nil {
+		t.Fatal(err)
+	}
+	if err := s.Touch("a.md"); err != nil {
+		t.Fatal(err)
+	}
+	b, _ := os.ReadFile(filepath.Join(dir, "touched.json"))
+	if string(b) != "{\n  \"paths\": [\n    \"a.md\",\n    \"b.md\"\n  ]\n}\n" {
+		t.Fatalf("touched.json = %q", b)
+	}
+	s, err = Open(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got, _ := s.Touched(); !reflect.DeepEqual(got, map[string]bool{"a.md": true, "b.md": true}) {
+		t.Fatalf("reloaded = %v", got)
+	}
+}

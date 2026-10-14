@@ -32,6 +32,8 @@ type Store struct {
 	logLines           int
 	annotations        map[string]*Annotation
 	annotationLogLines int
+	// touched is loaded on first use.
+	touched map[string]bool
 }
 
 // ErrNotInitialized is returned by OpenExisting for a missing data dir.

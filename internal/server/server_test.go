@@ -395,6 +395,14 @@ func TestGitAPI(t *testing.T) {
 	var opened struct{ ID string }
 	json.Unmarshal([]byte(body), &opened)
 	base := e.ts.URL + "/p/" + opened.ID
+	// Git offers what the session changed: a.md, saved from the editor.
+	_, body = do(t, "GET", base+"/api/file?path=a.md", "", bearer)
+	var fv struct{ Hash string }
+	json.Unmarshal([]byte(body), &fv)
+	b, _ = json.Marshal(map[string]string{"path": "a.md", "content": "# a\nfrom the editor\n", "hash": fv.Hash})
+	if res, body := do(t, "PUT", base+"/api/file", string(b), bearer); res.StatusCode != 200 {
+		t.Fatalf("save: %d %s", res.StatusCode, body)
+	}
 
 	res, body = do(t, "GET", base+"/api/git", "", bearer)
 	var st app.GitStatus

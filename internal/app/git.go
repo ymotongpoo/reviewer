@@ -37,6 +37,12 @@ type GitStatus struct {
 	Settings config.GitConfig `json:"settings"`
 	Remotes  []gitops.Remote  `json:"remotes"`
 	Target   GitTarget        `json:"target"`
+	// Hidden counts the uncommitted changes of the project that the session
+	// did not make; they are neither listed nor committed.
+	Hidden int `json:"hidden"`
+	// OtherStaged lists staged paths, relative to the repository, that a
+	// commit leaves staged and out of it.
+	OtherStaged []string `json:"otherStaged"`
 	// CommitBlockers and PushBlockers explain why an operation is not
 	// possible right now.
 	CommitBlockers []string   `json:"commitBlockers"`
@@ -167,7 +173,7 @@ func (a *App) GitStatus(ctx context.Context, remote, branch string) (*GitStatus,
 	defer a.ws.gitMu.Unlock()
 	out := &GitStatus{
 		Messages: map[string]string{}, Settings: a.GitSettings(), Remotes: []gitops.Remote{},
-		CommitBlockers: []string{}, PushBlockers: []string{},
+		OtherStaged: []string{}, CommitBlockers: []string{}, PushBlockers: []string{},
 		Env: gitops.Env{SSHAgent: sshAgent()},
 	}
 	repo, err := a.openRepo(ctx)
@@ -176,7 +182,7 @@ func (a *App) GitStatus(ctx context.Context, remote, branch string) (*GitStatus,
 		a.ws.isRepo.Store(err == nil)
 	}
 	if errors.Is(err, gitops.ErrNotRepo) {
-		out.State = &gitops.State{Changes: []gitops.Change{}, OutsideStaged: []string{}}
+		out.State = &gitops.State{Changes: []gitops.Change{}, Staged: []string{}}
 		out.CommitBlockers = append(out.CommitBlockers, "このディレクトリは Git のリポジトリの中にありません")
 		out.PushBlockers = append(out.PushBlockers, "このディレクトリは Git のリポジトリの中にありません")
 		return out, nil
@@ -189,7 +195,10 @@ func (a *App) GitStatus(ctx context.Context, remote, branch string) (*GitStatus,
 	if err != nil {
 		return nil, gitError("Git の状態を読めませんでした", err)
 	}
-	out.State = st
+	all := len(st.Changes)
+	st.Changes = a.sessionChanges(st.Changes)
+	st.Fingerprint = repo.Fingerprint(st.Head, st.Changes)
+	out.State, out.Hidden, out.OtherStaged = st, all-len(st.Changes), otherStaged(repo, st, st.Changes)
 	out.Env.CredentialHelper = repo.CredentialHelper(ctx)
 	if ident, err := repo.Identity(ctx); err == nil {
 		out.Identity = ident
@@ -236,9 +245,6 @@ func commitBlockers(st *gitops.State, identity string) []string {
 	if slices.ContainsFunc(st.Changes, func(c gitops.Change) bool { return c.Kind == gitops.Conflict }) {
 		out = append(out, "コンフリクトしているファイルがあります。ターミナルで解決してください")
 	}
-	if len(st.OutsideStaged) > 0 {
-		out = append(out, fmt.Sprintf("このプロジェクトの外（またはデータディレクトリ）にステージ済みの変更があり、コミットに含まれてしまいます: %s。ターミナルで `git restore --staged <path>` するか、先にコミットしてください", summarize(st.OutsideStaged, 5)))
-	}
 	if identity == "" {
 		out = append(out, "コミットする人の名前とメールアドレスが Git に設定されていません。`git config --global user.name \"名前\"` と `git config --global user.email you@example.com` で設定してください")
 	}
@@ -261,13 +267,6 @@ func pushBlockers(st *gitops.State, remotes []gitops.Remote, t GitTarget) []stri
 		out = append(out, "push 先のブランチを選んでください")
 	}
 	return out
-}
-
-func summarize(items []string, n int) string {
-	if len(items) <= n {
-		return strings.Join(items, ", ")
-	}
-	return strings.Join(items[:n], ", ") + fmt.Sprintf(" ほか%d件", len(items)-n)
 }
 
 // gitError wraps a git failure; the message is already masked.
@@ -331,8 +330,8 @@ type GitCommitResult struct {
 	Files   int    `json:"files"`
 }
 
-// GitCommit stages the project's changes and commits them. Changes outside
-// the project and the data directory are never staged.
+// GitCommit commits the changes the session made, as they are in the work
+// tree. Other changes, staged or not, are left as they are.
 func (a *App) GitCommit(ctx context.Context, in GitCommitInput) (*GitCommitResult, error) {
 	msg, err := gitops.ValidateMessage(in.Message)
 	if err != nil {
@@ -351,6 +350,7 @@ func (a *App) GitCommit(ctx context.Context, in GitCommitInput) (*GitCommitResul
 	if err != nil {
 		return nil, gitError("Git の状態を読めませんでした", err)
 	}
+	st.Changes = a.sessionChanges(st.Changes)
 	ident, _ := repo.Identity(ctx)
 	if b := commitBlockers(st, ident); len(b) > 0 {
 		return nil, conflict("%s", b[0])
@@ -358,22 +358,12 @@ func (a *App) GitCommit(ctx context.Context, in GitCommitInput) (*GitCommitResul
 	if len(st.Changes) == 0 {
 		return nil, conflict("コミットする変更がありません")
 	}
-	if in.Fingerprint != st.Fingerprint {
+	if in.Fingerprint != repo.Fingerprint(st.Head, st.Changes) {
 		return nil, conflict("確認したあとに変更内容が変わりました。内容を確認し直してください")
 	}
-	if err := repo.Stage(ctx); err != nil {
-		return nil, &Error{Code: http.StatusUnprocessableEntity, Msg: "変更をステージできませんでした（ファイルの内容は変わっていません）: " + gitops.Mask(err.Error())}
-	}
-	// Something else may have staged files since Status; git would commit them.
-	if outside, err := repo.OutsideStaged(ctx, st.Unborn); err != nil || len(outside) > 0 {
-		if err != nil {
-			return nil, gitError("ステージした内容を確認できませんでした（変更はステージされた状態で残っています）", err)
-		}
-		return nil, conflict("このプロジェクトの外にステージ済みの変更が増えたため、コミットを中止しました（このプロジェクトの変更はステージされた状態で残っています）: %s", summarize(outside, 5))
-	}
-	commit, err := repo.CommitStaged(ctx, msg)
+	commit, err := repo.Commit(ctx, msg, st.Changes)
 	if err != nil {
-		return nil, &Error{Code: http.StatusUnprocessableEntity, Msg: "コミットできませんでした（変更はステージされた状態で残っています。ファイルの内容は変わっていません）: " + gitops.Mask(err.Error())}
+		return nil, &Error{Code: http.StatusUnprocessableEntity, Msg: "コミットできませんでした（ファイルの内容は変わっていません。新しいファイルはステージされたまま残ることがあります）: " + gitops.Mask(err.Error())}
 	}
 	subject, _, _ := strings.Cut(msg, "\n")
 	a.notify(Event{Type: "git"})

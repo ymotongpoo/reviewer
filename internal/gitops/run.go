@@ -42,6 +42,8 @@ type Runner struct {
 	Bin string
 	// Env overrides the parent environment (for tests); nil uses os.Environ.
 	Env []string
+	// Extra variables are set on top of the environment.
+	Extra []string
 }
 
 // CmdError is a failed git command. Stderr is already masked.
@@ -71,8 +73,8 @@ func (e *CmdError) Error() string {
 
 func (e *CmdError) Unwrap() error { return e.Err }
 
-// clearedEnv lists variables that would redirect git away from the project
-// or let it ask for secrets interactively.
+// clearedEnv lists variables that would redirect git away from the project,
+// change how pathspecs are read, or let it ask for secrets interactively.
 var clearedEnv = []string{
 	"GIT_DIR", "GIT_WORK_TREE", "GIT_INDEX_FILE", "GIT_OBJECT_DIRECTORY",
 	"GIT_ALTERNATE_OBJECT_DIRECTORIES", "GIT_COMMON_DIR", "GIT_NAMESPACE",
@@ -80,6 +82,7 @@ var clearedEnv = []string{
 	"GIT_ASKPASS", "SSH_ASKPASS", "SSH_ASKPASS_REQUIRE", "GIT_TERMINAL_PROMPT",
 	"GCM_INTERACTIVE", "GIT_EDITOR", "GIT_SEQUENCE_EDITOR", "GIT_PAGER", "PAGER",
 	"GIT_TRACE", "GIT_TRACE_CURL", "GIT_TRACE_PACKET", "GIT_CURL_VERBOSE",
+	"GIT_LITERAL_PATHSPECS", "GIT_GLOB_PATHSPECS", "GIT_NOGLOB_PATHSPECS", "GIT_ICASE_PATHSPECS",
 	"LANG", "LANGUAGE", "LC_ALL", "LC_MESSAGES",
 }
 
@@ -110,7 +113,7 @@ func (r *Runner) environ() []string {
 			out = append(out, kv)
 		}
 	}
-	return append(out, promptlessEnv...)
+	return append(append(out, promptlessEnv...), r.Extra...)
 }
 
 // baseArgs precede every command: no pager, no colors, and paths printed

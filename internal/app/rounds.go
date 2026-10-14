@@ -315,6 +315,10 @@ func (a *App) HandleChanges(paths []string, dataChanged bool) {
 	if err := a.rescan(); err != nil {
 		return
 	}
+	// Changes while the agent works on a round are taken as its own.
+	if len(paths) > 0 && a.agentWorking() {
+		a.touch(paths)
+	}
 	var changed []string
 	treeChanged := len(before) != len(a.files)
 	for _, f := range a.files {

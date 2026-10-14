@@ -1370,6 +1370,75 @@ table.rounds th {
   justify-content: flex-end;
   gap: 8px;
 }
+/* The Git dialog stays on screen: it scrolls with its buttons kept at the
+   bottom, and a long file list scrolls within. */
+.git-modal {
+  max-height: calc(100dvh - 10vh - 16px);
+  overflow: auto;
+  overscroll-behavior: contain;
+  padding-bottom: 0;
+  /* What is scrolled to, such as a focused control, clears the buttons. */
+  scroll-padding-bottom: 96px;
+}
+.git-modal > * {
+  flex-shrink: 0;
+}
+.git-modal .modal-actions {
+  position: sticky;
+  bottom: 0;
+  z-index: 1;
+  margin-top: auto;
+  padding: 10px 0 max(16px, env(safe-area-inset-bottom));
+  background: var(--bg);
+  border-top: 1px solid var(--border);
+}
+.git-section {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.git-section h3 {
+  margin: 6px 0 0;
+  font-size: 14px;
+}
+.git-head,
+.git-message-head,
+.git-target,
+.git-defaults {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px 8px;
+}
+.git-head h2,
+.git-message-head h3 {
+  margin: 0;
+}
+.git-target .field {
+  flex: 1 1 200px;
+  min-width: 0;
+}
+.git-changes {
+  list-style: none;
+  margin: 0;
+  padding: 4px 0;
+  max-height: min(16rem, 35vh);
+  overflow: auto;
+  overscroll-behavior: contain;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+}
+.git-change {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 2px 8px;
+  padding: 3px 10px;
+}
+.git-path {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
 .submit-summary {
   margin: 0;
   padding-left: 20px;

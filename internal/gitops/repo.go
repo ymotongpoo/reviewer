@@ -100,16 +100,16 @@ type State struct {
 	// progress.
 	Operation string   `json:"operation,omitempty"`
 	Changes   []Change `json:"changes"`
-	// OutsideStaged lists staged paths (relative to the repository) that a
-	// commit would include although they are not part of the project.
-	OutsideStaged []string `json:"outsideStaged"`
+	// Staged lists the paths with staged changes, relative to the
+	// repository, including those outside the project.
+	Staged []string `json:"-"`
 	// Fingerprint changes whenever the set or content of changes changes.
 	Fingerprint string `json:"fingerprint"`
 }
 
 // Status inspects the branch, the operation in progress and the changes.
 func (r *Repo) Status(ctx context.Context) (*State, error) {
-	st := &State{Changes: []Change{}, OutsideStaged: []string{}}
+	st := &State{Changes: []Change{}, Staged: []string{}}
 	if out, err := r.Run(ctx, ReadTimeout, nil, "symbolic-ref", "--quiet", "--short", "HEAD"); err == nil {
 		st.Branch = strings.TrimSpace(string(out))
 	}
@@ -133,12 +133,8 @@ func (r *Repo) Status(ctx context.Context) (*State, error) {
 	if err != nil {
 		return nil, err
 	}
-	for _, p := range splitZ(index) {
-		if !r.inScope(p) {
-			st.OutsideStaged = append(st.OutsideStaged, p)
-		}
-	}
-	st.Fingerprint = r.fingerprint(append(out, index...), st.Changes)
+	st.Staged = append(st.Staged, splitZ(index)...)
+	st.Fingerprint = r.Fingerprint(st.Head, st.Changes)
 	return st, nil
 }
 
@@ -151,22 +147,6 @@ func (r *Repo) staged(ctx context.Context, unborn bool) ([]byte, error) {
 	}
 	top := Runner{Dir: r.Toplevel, Bin: r.Bin, Env: r.Env}
 	return top.Run(ctx, ReadTimeout, nil, args...)
-}
-
-// OutsideStaged lists staged paths that are not part of the project, as
-// they would be committed now.
-func (r *Repo) OutsideStaged(ctx context.Context, unborn bool) ([]string, error) {
-	index, err := r.staged(ctx, unborn)
-	if err != nil {
-		return nil, err
-	}
-	out := []string{}
-	for _, p := range splitZ(index) {
-		if !r.inScope(p) {
-			out = append(out, p)
-		}
-	}
-	return out, nil
 }
 
 // upstream returns the remote and remote branch name the branch tracks.
@@ -191,19 +171,12 @@ func (r *Repo) operation() string {
 	return ""
 }
 
-// inScope reports whether a repository-relative path belongs to the project
-// and is not in the data directory.
-func (r *Repo) inScope(repoPath string) bool {
-	rel, ok := strings.CutPrefix(repoPath, r.Prefix)
-	if !ok {
-		return false
-	}
-	return r.Exclude == "" || (rel != r.Exclude && !strings.HasPrefix(rel, r.Exclude+"/"))
-}
-
 func (r *Repo) rel(repoPath string) string {
 	return strings.TrimPrefix(repoPath, r.Prefix)
 }
+
+// RepoPath returns the repository-relative path of a project-relative one.
+func (r *Repo) RepoPath(rel string) string { return r.Prefix + rel }
 
 // parseStatus reads `git status --porcelain=v2 -z`. Paths in it are
 // relative to the repository root.
@@ -271,14 +244,15 @@ func splitZ(b []byte) []string {
 	return out
 }
 
-// fingerprint hashes the status and index listing together with the size and modification
-// time of every changed file, so that edits to an already modified file
-// change it too.
-func (r *Repo) fingerprint(listing []byte, changes []Change) string {
+// Fingerprint hashes HEAD and changes together with the size and
+// modification time of every changed file, so that edits to an already
+// modified file change it too. A commit takes the files as they are, so
+// what else is staged does not matter.
+func (r *Repo) Fingerprint(head string, changes []Change) string {
 	h := sha256.New()
-	h.Write(listing)
+	h.Write([]byte(head))
 	for _, c := range changes {
-		fmt.Fprintf(h, "\x00%s\x00%s\x00%s\x00%t", c.Kind, c.Path, c.From, c.Staged)
+		fmt.Fprintf(h, "\x00%s\x00%s\x00%s\x00%t\x00%t", c.Kind, c.Path, c.From, c.Staged, c.Untracked)
 		if fi, err := os.Lstat(filepath.Join(r.Dir, filepath.FromSlash(c.Path))); err == nil {
 			fmt.Fprintf(h, "\x00%d\x00%d\x00%s", fi.Size(), fi.ModTime().UnixNano(), fi.Mode())
 		}
@@ -412,22 +386,46 @@ func (r *Repo) CredentialHelper(ctx context.Context) bool {
 	return err == nil && strings.TrimSpace(string(out)) != ""
 }
 
-// ErrOutsideStaged is returned by Commit when the index holds changes that
-// are not part of the project.
-var ErrOutsideStaged = errors.New("changes outside the project are staged")
-
-// Stage adds every change of the project (not the data directory) to the
-// index. Changes outside the project are left as they are.
-func (r *Repo) Stage(ctx context.Context) error {
-	_, err := r.Run(ctx, CommitTimeout, nil, append([]string{"add", "--all"}, r.pathspec()...)...)
-	return err
-}
-
-// CommitStaged commits the index with message and returns the new HEAD.
-func (r *Repo) CommitStaged(ctx context.Context, message string) (string, error) {
+// Commit commits the changed paths as they are in the work tree, and only
+// them: what is staged for other paths stays staged and out of the commit.
+// It returns the new HEAD.
+func (r *Repo) Commit(ctx context.Context, message string, changes []Change) (string, error) {
+	if len(changes) == 0 {
+		return "", errors.New("no changes to commit")
+	}
+	var add, paths []string
+	for _, c := range changes {
+		if c.Untracked {
+			add = append(add, c.Path)
+		}
+		paths = append(paths, c.Path)
+		if c.From != "" {
+			paths = append(paths, c.From)
+		}
+	}
+	// git commit only takes paths that it knows.
+	if len(add) > 0 {
+		if _, err := r.literal().Run(ctx, CommitTimeout, nulList(add), "add", "--pathspec-from-file=-", "--pathspec-file-nul"); err != nil {
+			return "", err
+		}
+	}
+	// The message is read from stdin, so the paths go through a file.
+	f, err := os.CreateTemp("", "reviewer-pathspec-*")
+	if err != nil {
+		return "", err
+	}
+	defer os.Remove(f.Name())
+	_, err = f.Write(nulList(paths))
+	if cerr := f.Close(); err == nil {
+		err = cerr
+	}
+	if err != nil {
+		return "", err
+	}
 	// --cleanup=strip would drop lines starting with '#'; keep the message
 	// as written apart from surrounding whitespace.
-	if _, err := r.Run(ctx, CommitTimeout, []byte(message), "commit", "--quiet", "--cleanup=whitespace", "--file=-"); err != nil {
+	if _, err := r.literal().Run(ctx, CommitTimeout, []byte(message), "commit", "--quiet", "--cleanup=whitespace", "--file=-",
+		"--only", "--pathspec-from-file="+f.Name(), "--pathspec-file-nul"); err != nil {
 		return "", err
 	}
 	out, err := r.Run(ctx, ReadTimeout, nil, "rev-parse", "HEAD")
@@ -437,23 +435,20 @@ func (r *Repo) CommitStaged(ctx context.Context, message string) (string, error)
 	return strings.TrimSpace(string(out)), nil
 }
 
-// Commit stages the project and commits it with message. When the index
-// also holds changes outside the project the commit is refused (with the
-// project's changes left staged), because git would include them.
-func (r *Repo) Commit(ctx context.Context, message string) (string, error) {
-	unborn := false
-	if _, err := r.Run(ctx, ReadTimeout, nil, "rev-parse", "--verify", "--quiet", "HEAD^{commit}"); err != nil {
-		unborn = true
+// literal is a runner that takes every pathspec as a plain path.
+func (r *Repo) literal() *Runner {
+	run := r.Runner
+	run.Extra = append(append([]string{}, run.Extra...), "GIT_LITERAL_PATHSPECS=1")
+	return &run
+}
+
+func nulList(items []string) []byte {
+	var b bytes.Buffer
+	for _, s := range items {
+		b.WriteString(s)
+		b.WriteByte(0)
 	}
-	if err := r.Stage(ctx); err != nil {
-		return "", err
-	}
-	if outside, err := r.OutsideStaged(ctx, unborn); err != nil {
-		return "", err
-	} else if len(outside) > 0 {
-		return "", ErrOutsideStaged
-	}
-	return r.CommitStaged(ctx, message)
+	return b.Bytes()
 }
 
 // ErrMirror is returned by Push for a remote configured as a mirror.
