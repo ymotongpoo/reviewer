@@ -132,6 +132,16 @@ func (a *App) buildDoc(n int, files map[string]string) (*feedback.Doc, error) {
 			Round: c.Round, Status: c.Status, CarriedOver: carried, Located: true,
 			Suggestions: feedback.Suggestions(c.Body),
 		}
+		for _, att := range c.Attachments {
+			p, err := a.Store.AttachmentPath(att.ID)
+			if err != nil {
+				continue
+			}
+			rel, err := filepath.Rel(a.Store.RoundDir(n), p)
+			if err == nil {
+				it.Attachments = append(it.Attachments, feedback.Attachment{Name: att.Name, Path: filepath.ToSlash(rel)})
+			}
+		}
 		if c.Scope == store.ScopeLine && c.Loc != nil {
 			it.StartLine, it.EndLine = c.Loc.Start, c.Loc.End
 			lines := linesOf(c.Path)

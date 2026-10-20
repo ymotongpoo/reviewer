@@ -47,6 +47,12 @@ export interface Reply {
   updatedAt: string
 }
 
+export interface Attachment {
+  id: string
+  name: string
+  size: number
+}
+
 export interface Comment {
   id: string
   round: number
@@ -54,6 +60,7 @@ export interface Comment {
   path?: string
   label: string
   body: string
+  attachments?: Attachment[]
   status: Status
   anchor?: Anchor
   origStart?: number

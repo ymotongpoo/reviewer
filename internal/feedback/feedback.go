@@ -25,13 +25,20 @@ type ThreadEntry struct {
 	Body   string `json:"body"`
 }
 
+// Attachment is an image available relative to feedback.md.
+type Attachment struct {
+	Name string `json:"name"`
+	Path string `json:"path"`
+}
+
 // Item is a comment as presented to the agent.
 type Item struct {
-	ID    string `json:"id"`
-	Scope string `json:"scope"`
-	Path  string `json:"path,omitempty"`
-	Label string `json:"label"`
-	Body  string `json:"body"`
+	ID          string       `json:"id"`
+	Scope       string       `json:"scope"`
+	Path        string       `json:"path,omitempty"`
+	Label       string       `json:"label"`
+	Body        string       `json:"body"`
+	Attachments []Attachment `json:"attachments,omitempty"`
 	// StartLine and EndLine refer to the submitted snapshot.
 	StartLine int `json:"startLine,omitempty"`
 	EndLine   int `json:"endLine,omitempty"`
@@ -116,6 +123,9 @@ func (d *Doc) Markdown() []byte {
 		w("`L3:5-4:2` のように列を含む位置は、行の一部へのコメントです（列は1から数えた文字位置で、終端の文字を含みます）。対象の文字列は「対象の文字列」に示します。\n")
 	}
 	w("言語名が `suggestion` のコードブロックは、指定した行範囲をブロックの内容で置き換える提案です。\n\n")
+	if slices.ContainsFunc(d.Items, func(it Item) bool { return len(it.Attachments) > 0 }) {
+		w("添付画像はこのフィードバックファイルからの相対パスにあります。必要に応じて画像を開いて内容を確認してください。\n\n")
+	}
 
 	var project, carried []Item
 	files := map[string][]Item{}
@@ -135,6 +145,7 @@ func (d *Doc) Markdown() []byte {
 		for _, it := range project {
 			w("### [%s][%s]\n\n", it.ID, it.Label)
 			writeBody(&b, it.Body)
+			writeAttachments(&b, it.Attachments)
 		}
 	}
 
@@ -152,6 +163,7 @@ func (d *Doc) Markdown() []byte {
 			writeQuote(&b, it.Quote)
 			writeRangeText(&b, it.Range)
 			writeBody(&b, it.Body)
+			writeAttachments(&b, it.Attachments)
 		}
 	}
 
@@ -167,6 +179,7 @@ func (d *Doc) Markdown() []byte {
 			writeQuote(&b, it.Quote)
 			writeRangeText(&b, it.Range)
 			writeBody(&b, it.Body)
+			writeAttachments(&b, it.Attachments)
 			for _, t := range it.Thread {
 				who := "レビュアー"
 				if t.Author == "agent" {
@@ -271,6 +284,13 @@ func writeBody(b *bytes.Buffer, body string) {
 		body = "（本文なし）"
 	}
 	b.WriteString(body + "\n\n")
+}
+
+func writeAttachments(b *bytes.Buffer, attachments []Attachment) {
+	for _, a := range attachments {
+		name := strings.NewReplacer("\\", "\\\\", "[", "\\[", "]", "\\]").Replace(a.Name)
+		fmt.Fprintf(b, "![%s](<%s>)\n\n", name, a.Path)
+	}
 }
 
 func oneLine(s string) string {

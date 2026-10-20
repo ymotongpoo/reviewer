@@ -1,6 +1,6 @@
 import { ApiError, NetworkError } from './api'
 import type { EditTarget } from './state'
-import type { Comment, TextRange } from './types'
+import type { Attachment, Comment, TextRange } from './types'
 
 export type NewTarget = Extract<EditTarget, { kind: 'new' }>
 type Target = { commentId?: string; path?: string; scope: string; start?: number; end?: number; range?: TextRange }
@@ -18,11 +18,13 @@ export interface ComposerJournal {
   commentId?: string
   label: string
   body: string
+  attachments?: Attachment[]
   rev: number
   savedAt: number
   outcome?: Exclude<SaveOutcome, 'saved'>
   /** The POST body may differ from newer input when its response is lost. */
   attemptedBody?: string
+  attemptedAttachments?: Attachment[]
 }
 
 export function shouldDropJournal(j: ComposerJournal | undefined, savedRev: number): boolean {
@@ -36,8 +38,10 @@ export function classifySaveError(e: unknown): Exclude<SaveOutcome, 'saved'> {
   return 'unknown'
 }
 
-export function matchesDraft(c: Comment, t: NewTarget, body: string): boolean {
+export function matchesDraft(c: Comment, t: NewTarget, body: string, attachments: Attachment[] = []): boolean {
+  const sameAttachments = JSON.stringify(c.attachments ?? []) === JSON.stringify(attachments)
   return c.status === 'draft' && c.scope === t.scope && c.path === t.path && c.body === body &&
+    sameAttachments &&
     (t.scope !== 'line' || (c.origStart === t.start && c.origEnd === t.end)) &&
     composerKey('', { ...t, range: c.range }) === composerKey('', t)
 }

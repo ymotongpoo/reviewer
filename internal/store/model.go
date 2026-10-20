@@ -61,15 +61,23 @@ type Reply struct {
 	UpdatedAt time.Time `json:"updatedAt"`
 }
 
+// Attachment is an image added to a review comment.
+type Attachment struct {
+	ID   string `json:"id"`
+	Name string `json:"name"`
+	Size int64  `json:"size"`
+}
+
 // Comment is a review comment and its thread.
 type Comment struct {
-	ID     string `json:"id"`
-	Round  int    `json:"round"`
-	Scope  string `json:"scope"`
-	Path   string `json:"path,omitempty"`
-	Label  string `json:"label"`
-	Body   string `json:"body"`
-	Status string `json:"status"`
+	ID          string       `json:"id"`
+	Round       int          `json:"round"`
+	Scope       string       `json:"scope"`
+	Path        string       `json:"path,omitempty"`
+	Label       string       `json:"label"`
+	Body        string       `json:"body"`
+	Attachments []Attachment `json:"attachments,omitempty"`
+	Status      string       `json:"status"`
 	// Anchor is the text the comment was originally written against.
 	Anchor    *anchor.Anchor `json:"anchor,omitempty"`
 	OrigStart int            `json:"origStart,omitempty"`

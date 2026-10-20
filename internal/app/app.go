@@ -488,12 +488,13 @@ func (a *App) Comments() []*store.Comment {
 
 // NewComment is a request to create a comment.
 type NewComment struct {
-	Scope string `json:"scope"`
-	Path  string `json:"path"`
-	Start int    `json:"start"`
-	End   int    `json:"end"`
-	Label string `json:"label"`
-	Body  string `json:"body"`
+	Scope       string             `json:"scope"`
+	Path        string             `json:"path"`
+	Start       int                `json:"start"`
+	End         int                `json:"end"`
+	Label       string             `json:"label"`
+	Body        string             `json:"body"`
+	Attachments []store.Attachment `json:"attachments,omitempty"`
 	// Hash is the content hash the client was looking at. When the file has
 	// changed since, the range is re-anchored onto the current content.
 	Hash string `json:"hash"`
@@ -530,9 +531,13 @@ func (a *App) createComment(req NewComment) (*store.Comment, error) {
 	if !a.validLabel(req.Label) {
 		return nil, badRequest("不明なラベルです: %s", req.Label)
 	}
+	attachments, err := a.validateAttachments(req.Attachments)
+	if err != nil {
+		return nil, err
+	}
 	now := a.now()
 	c := &store.Comment{
-		Scope: req.Scope, Label: req.Label, Body: req.Body,
+		Scope: req.Scope, Label: req.Label, Body: req.Body, Attachments: attachments,
 		Status: store.StatusDraft, Replies: []store.Reply{}, CreatedAt: now, UpdatedAt: now,
 	}
 	switch req.Scope {
@@ -651,9 +656,10 @@ func nonEmpty(s string) []string {
 
 // CommentPatch updates a comment. Nil fields are left unchanged.
 type CommentPatch struct {
-	Label  *string `json:"label"`
-	Body   *string `json:"body"`
-	Status *string `json:"status"`
+	Label       *string             `json:"label"`
+	Body        *string             `json:"body"`
+	Attachments *[]store.Attachment `json:"attachments"`
+	Status      *string             `json:"status"`
 }
 
 // UpdateComment edits a draft or changes the resolution of a comment.
@@ -664,7 +670,7 @@ func (a *App) UpdateComment(id string, p CommentPatch) (*store.Comment, error) {
 	if !ok {
 		return nil, notFound("コメントがありません: %s", id)
 	}
-	if p.Label != nil || p.Body != nil {
+	if p.Label != nil || p.Body != nil || p.Attachments != nil {
 		if c.Status != store.StatusDraft {
 			return nil, conflict("提出済みのコメントは編集できません。返信を追加してください")
 		}
@@ -676,6 +682,13 @@ func (a *App) UpdateComment(id string, p CommentPatch) (*store.Comment, error) {
 		}
 		if p.Body != nil {
 			c.Body = *p.Body
+		}
+		if p.Attachments != nil {
+			attachments, err := a.validateAttachments(*p.Attachments)
+			if err != nil {
+				return nil, err
+			}
+			c.Attachments = attachments
 		}
 	}
 	if p.Status != nil {
