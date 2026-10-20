@@ -1,0 +1,19 @@
+web/e2e/global-setup.ts
+  s_0d0f043939d85b::t_6533ad34a32f06 24-31
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "014ec367df7155793cfb934161bf2c4aa299ff40",
+  "prompts": {},
+  "sessions": {
+    "s_0d0f043939d85b": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a13c72-469b-7002-b68d-1bcad09a83ab",
+        "model": "gpt-6-luna"
+      },
+      "human_author": "Yoshi Yamaguchi <ymotongpoo@gmail.com>"
+    }
+  }
+}
