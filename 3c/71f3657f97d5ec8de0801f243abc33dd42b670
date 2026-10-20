@@ -1,0 +1,67 @@
+internal/app/agent.go
+  s_0d0f043939d85b::t_ae2cecbd8e11a1 161-169,174,263
+internal/app/annotate.go
+  s_0d0f043939d85b::t_eb601ab683dda9 253
+internal/server/dist/assets/c-D1a-_dRW.js
+  s_0d0f043939d85b::t_b95aef197c8dd3 1
+internal/server/dist/assets/cpp-HWl73zsM.js
+  s_0d0f043939d85b::t_d45e516707698c 1
+internal/server/dist/assets/css-BltIBi3f.js
+  s_0d0f043939d85b::t_d1ac7f05ab5e72 1
+internal/server/dist/assets/dist-C6xLkIli.js
+  s_0d0f043939d85b::t_29240d3de1b47c 1-2,47
+internal/server/dist/assets/graphql-C_a2oTlZ.js
+  s_0d0f043939d85b::t_8bc845185086db 1
+internal/server/dist/assets/html-CCM-9h34.js
+  s_0d0f043939d85b::t_9d4f30f8107d6f 1
+internal/server/dist/assets/html-derivative-BDnbKnbB.js
+  s_0d0f043939d85b::t_9f96a34ca8ad6d 1
+internal/server/dist/assets/index-DICvMiZT.js
+  s_0d0f043939d85b::t_2d928d65041973 1-2,84,241,251
+internal/server/dist/assets/java-CkoaO9Zd.js
+  s_0d0f043939d85b::t_e92f0447fe1485 1
+internal/server/dist/assets/jsx-CJAwxPsW.js
+  s_0d0f043939d85b::t_a9cf64267787e5 1
+internal/server/dist/assets/lua-Cw7VfteE.js
+  s_0d0f043939d85b::t_90b3162bde6c5a 1
+internal/server/dist/assets/php-BJMYm1cv.js
+  s_0d0f043939d85b::t_be50ce6540010a 1
+internal/server/dist/assets/rst-DdzivzBR.js
+  s_0d0f043939d85b::t_53b6631c56fe7d 1
+internal/server/dist/assets/ruby-BSfuJwqb.js
+  s_0d0f043939d85b::t_56b5cf80b86159 1
+internal/server/dist/assets/sql-04iEYkZp.js
+  s_0d0f043939d85b::t_b4334389913a05 1
+internal/server/dist/assets/tsx-XI9X6S2f.js
+  s_0d0f043939d85b::t_c16e743f1d2e7d 1
+internal/server/dist/assets/typescript-DTCYRPaV.js
+  s_0d0f043939d85b::t_e448c8864565ba 1
+internal/server/dist/assets/vue-CIWd-JWp.js
+  s_0d0f043939d85b::t_574770992aa5d1 1
+internal/server/dist/assets/xml-D_8rbeE1.js
+  s_0d0f043939d85b::t_95a5b9b7363dce 1
+internal/server/dist/index.html
+  s_0d0f043939d85b::t_0593677377aa1f 8
+internal/server/server.go
+  s_0d0f043939d85b::t_56ec09f02d014f 23,527-533
+web/src/api.ts
+  s_0d0f043939d85b::t_2abaa52bbe88e5 120-121
+web/src/components/Agent.tsx
+  s_0d0f043939d85b::t_4705b921e1b058 180,185-187,189-193,228-232,245
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "3c71f3657f97d5ec8de0801f243abc33dd42b670",
+  "prompts": {},
+  "sessions": {
+    "s_0d0f043939d85b": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a13c72-469b-7002-b68d-1bcad09a83ab",
+        "model": "gpt-6-luna"
+      },
+      "human_author": "Yoshi Yamaguchi <ymotongpoo@gmail.com>"
+    }
+  }
+}
