@@ -19,8 +19,6 @@ export function isolatedEnv(root: string): NodeJS.ProcessEnv {
     ...process.env,
     XDG_CONFIG_HOME: join(root, 'config'), XDG_STATE_HOME: join(root, 'state'),
     XDG_DATA_HOME: join(root, 'data'), XDG_CACHE_HOME: join(root, 'cache'),
-    GOMODCACHE: process.env.GOMODCACHE ?? join(tmpdir(), 'reviewer-e2e-go-mod'),
-    GOCACHE: process.env.GOCACHE ?? join(tmpdir(), 'reviewer-e2e-go-cache'),
     GIT_CONFIG_NOSYSTEM: '1', GIT_CONFIG_GLOBAL: '/dev/null',
     GIT_AUTHOR_NAME: 'E2E', GIT_AUTHOR_EMAIL: 'e2e@example.invalid',
     GIT_COMMITTER_NAME: 'E2E', GIT_COMMITTER_EMAIL: 'e2e@example.invalid',
