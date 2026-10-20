@@ -58,6 +58,7 @@ devbox$ reviewer serve ./docs
 - **種別ラベル**：`must`（必須）、`suggestion`（提案）、`question`（質問）、`nit`（細かい指摘）
 - **修正案**：コメント本文の中に ```` ```suggestion ```` ブロックを書くと、選択範囲をこの内容で置換してほしいという意味になる。UIには、元の文とのdiffをプレビューで見せる
 - コメント本文はMarkdownで書き、プレビューできる
+- コメントには PNG、JPEG、GIF の画像を5枚まで添付できる。画像はファイル選択または本文欄への貼り付けで追加し、1枚10 MiB、1件20 MiBまでとする。添付画像はコメント欄に表示し、提出時には `feedback.md` と `feedback.json` に含める
 - コメントはスレッドになる。エージェントの返答と人間の再コメントを時系列に並べる
 - 下書きは入力のたびに自動保存する
 
@@ -97,6 +98,8 @@ Round N (open) ──提出──> Round N (submitted) ──エージェント�
 - `feedback.md`：エージェントが読む本体
 - `feedback.json`：同じ内容の構造化データ
 - `snapshot/`：提出時点のファイル内容への参照
+
+添付画像は `<data-dir>/attachments/<sha256>.<拡張子>` に保存する。`feedback.md` と `feedback.json` には、添付画像へのフィードバックファイルからの相対パスを記録する。
 
 `feedback.md` の例：
 
@@ -224,6 +227,7 @@ Round N (open) ──提出──> Round N (submitted) ──エージェント�
   config.toml           # プロジェクトごとの設定（任意）
   state.json            # 現在のラウンド、IDの採番
   comments.jsonl        # コメントとスレッドのイベントログ（追記のみ）
+  attachments/          # コメントに添付した PNG、JPEG、GIF 画像（内容ハッシュ名）
   blobs/<sha256>        # スナップショットの本体
   rounds/<N>/
     manifest.json       # 開始・提出の時刻、ファイル→blob の対応

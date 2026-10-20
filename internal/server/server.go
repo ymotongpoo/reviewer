@@ -118,6 +118,8 @@ func (p *Project) Handler() http.Handler {
 		mux.HandleFunc("GET /api/rounds/{n}/diff", p.handleRoundDiff)
 		mux.HandleFunc("GET /api/blob/{hash}", p.handleBlob)
 		mux.HandleFunc("GET /api/comments", p.handleComments)
+		mux.HandleFunc("POST /api/attachments", p.handleUploadAttachment)
+		mux.HandleFunc("GET /api/attachments/{id}", p.handleAttachment)
 		mux.HandleFunc("POST /api/comments", p.handleCreateComment)
 		mux.HandleFunc("PATCH /api/comments/{id}", p.handleUpdateComment)
 		mux.HandleFunc("DELETE /api/comments/{id}", p.handleDeleteComment)
@@ -413,6 +415,49 @@ func (p *Project) handleBlob(w http.ResponseWriter, r *http.Request) {
 
 func (p *Project) handleComments(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, map[string]any{"comments": p.App.Comments()})
+}
+
+func (p *Project) handleUploadAttachment(w http.ResponseWriter, r *http.Request) {
+	const multipartOverhead = 1 << 20
+	limit := int64(app.MaxAttachmentSize + multipartOverhead)
+	r.Body = http.MaxBytesReader(w, r.Body, limit)
+	if err := r.ParseMultipartForm(limit); err != nil {
+		var tooLarge *http.MaxBytesError
+		if errors.As(err, &tooLarge) {
+			writeError(w, &app.Error{Code: http.StatusRequestEntityTooLarge, Msg: "アップロードが大きすぎます"})
+		} else {
+			writeError(w, &app.Error{Code: http.StatusBadRequest, Msg: "画像を読み取れません"})
+		}
+		return
+	}
+	if r.MultipartForm != nil {
+		defer r.MultipartForm.RemoveAll()
+	}
+	file, header, err := r.FormFile("image")
+	if err != nil {
+		writeError(w, &app.Error{Code: http.StatusBadRequest, Msg: "画像ファイルがありません"})
+		return
+	}
+	defer file.Close()
+	data, err := io.ReadAll(io.LimitReader(file, int64(app.MaxAttachmentSize)+1))
+	if err != nil {
+		writeError(w, &app.Error{Code: http.StatusBadRequest, Msg: "画像を読み取れません"})
+		return
+	}
+	attachment, err := p.App.UploadAttachment(header.Filename, data)
+	respond(w, attachment, err)
+}
+
+func (p *Project) handleAttachment(w http.ResponseWriter, r *http.Request) {
+	b, mediaType, err := p.App.Attachment(r.PathValue("id"))
+	if err != nil {
+		writeError(w, err)
+		return
+	}
+	w.Header().Set("Content-Type", mediaType)
+	w.Header().Set("Cache-Control", "private, max-age=31536000, immutable")
+	w.Header().Set("Content-Disposition", "inline")
+	w.Write(b)
 }
 
 func (p *Project) handleCreateComment(w http.ResponseWriter, r *http.Request) {

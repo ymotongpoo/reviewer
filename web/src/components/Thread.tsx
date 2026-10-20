@@ -7,6 +7,7 @@ import { anchorHelp, anchorText, commentLines, statusText } from '../labels'
 import { fileHref } from '../router'
 import type { Comment, Reply } from '../types'
 import { Composer } from './Composer'
+import { Attachments } from './Attachments'
 
 interface Props {
   comment: Comment
@@ -74,6 +75,7 @@ export function Thread({ comment: c, showLocation, historic }: Props) {
           ) : (
             <div class="md" dangerouslySetInnerHTML={{ __html: renderMarkdown(c.body || '（本文なし）', original) }} />
           )}
+          {!isEditing && <Attachments items={c.attachments ?? []} />}
           {c.replies.map((r) => (
             <ReplyView key={r.id} comment={c} reply={r} />
           ))}

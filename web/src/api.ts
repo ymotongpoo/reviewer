@@ -10,6 +10,7 @@ import type {
   Annotation,
   AnnotationRequest,
   AnnotationRequestView,
+  Attachment,
   Comment,
   FileView,
   GitCommitResult,
@@ -82,6 +83,23 @@ async function request<T>(method: string, url: string, body?: unknown): Promise<
 
 const q = encodeURIComponent
 
+async function uploadAttachment(file: File): Promise<Attachment> {
+  const form = new FormData()
+  form.append('image', file, file.name)
+  const res = await fetch(`${projectBase}/api/attachments`, {
+    method: 'POST',
+    headers: { 'X-Reviewer': '1' },
+    body: form,
+    credentials: 'same-origin',
+  }).catch((e) => { throw new NetworkError((e as Error).message) })
+  if (!res.ok) {
+    let msg = res.statusText
+    try { msg = (await res.json()).error ?? msg } catch { /* not JSON */ }
+    throw new ApiError(msg, res.status)
+  }
+  return res.json() as Promise<Attachment>
+}
+
 /** Server-wide endpoints that are not scoped to a project. */
 const serverPaths = ['/api/server', '/api/projects', '/api/fs']
 
@@ -97,6 +115,8 @@ export const api = {
   roundDiff: (round: number, path: string, phase: 'review' | 'agent' = 'agent') =>
     request<RoundDiff>('GET', `/api/rounds/${round}/diff?path=${q(path)}&phase=${phase}`),
   comments: () => request<{ comments: Comment[] }>('GET', '/api/comments').then((r) => r.comments),
+  uploadAttachment,
+  attachmentUrl: (id: string) => `${projectBase}/api/attachments/${q(id)}`,
   createComment: (c: {
     scope: string
     path?: string
@@ -104,10 +124,11 @@ export const api = {
     end?: number
     label: string
     body: string
+    attachments?: Attachment[]
     hash?: string
     range?: TextRange
   }) => request<Comment>('POST', '/api/comments', c),
-  updateComment: (id: string, patch: { label?: string; body?: string; status?: string }) =>
+  updateComment: (id: string, patch: { label?: string; body?: string; attachments?: Attachment[]; status?: string }) =>
     request<Comment>('PATCH', `/api/comments/${q(id)}`, patch),
   deleteComment: (id: string) => request<{ ok: boolean }>('DELETE', `/api/comments/${q(id)}`),
   addReply: (id: string, body: string) => request<Comment>('POST', `/api/comments/${q(id)}/replies`, { body }),
