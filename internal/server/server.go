@@ -20,6 +20,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/ymotongpoo/reviewer/internal/agent"
 	"github.com/ymotongpoo/reviewer/internal/app"
 	"github.com/ymotongpoo/reviewer/internal/config"
 	"github.com/ymotongpoo/reviewer/internal/store"
@@ -523,7 +524,13 @@ func (p *Project) handleCreateAgentSession(w http.ResponseWriter, r *http.Reques
 }
 
 func (p *Project) handleAgentSessions(w http.ResponseWriter, r *http.Request) {
-	ss, err := p.App.AgentSessions(r.Context())
+	var ss []agent.Session
+	var err error
+	if r.URL.Query().Get("all") == "1" {
+		ss, err = p.App.AgentSessionsAll(r.Context())
+	} else {
+		ss, err = p.App.AgentSessions(r.Context())
+	}
 	respond(w, map[string]any{"sessions": ss}, err)
 }
 

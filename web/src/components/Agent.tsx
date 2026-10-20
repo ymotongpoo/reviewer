@@ -177,15 +177,20 @@ export function SessionPicker({
   const [error, setError] = useState<string | null>(null)
   const [filter, setFilter] = useState('')
   const [creating, setCreating] = useState(false)
+  const [allProjects, setAllProjects] = useState(false)
   const current = selected ?? agentInfo.value?.binding?.sessionId
   const canCreate = !onSelect && !!agentInfo.value?.canCreate
 
   useEffect(() => {
+    let active = true
+    setSessions(null)
+    setError(null)
     api
-      .agentSessions()
-      .then(setSessions)
-      .catch((e) => setError((e as Error).message))
-  }, [])
+      .agentSessions(allProjects)
+      .then((next) => { if (active) setSessions(next) })
+      .catch((e) => { if (active) setError((e as Error).message) })
+    return () => { active = false }
+  }, [allProjects])
 
   async function bind(id: string) {
     try {
@@ -220,6 +225,11 @@ export function SessionPicker({
             `提出したフィードバックを、このセッションの会話の続きとして ${agentInfo.value?.name} に送ります。文書を書いたときのセッションを選んでください。`}
         </p>
         <input type="search" class="search" placeholder="タイトルで絞り込む" value={filter} onInput={(e) => setFilter(e.currentTarget.value)} />
+        {agentInfo.value?.kind === 't3' && (
+          <label class="toggle">
+            <input type="checkbox" checked={allProjects} onChange={(e) => setAllProjects(e.currentTarget.checked)} /> 他のプロジェクトも含める
+          </label>
+        )}
         {error && <div class="banner error">{error}</div>}
         {!sessions && !error && <div class="empty small">読み込み中…</div>}
         <div class="session-list">
@@ -232,7 +242,7 @@ export function SessionPicker({
             </button>
           ))}
           {sessions && shown.length === 0 && <div class="empty small">
-            {filter ? '一致するセッションがありません' : 'このディレクトリで使えるセッションがありません'}
+            {filter ? '一致するセッションがありません' : allProjects ? '利用できるセッションがありません' : 'このディレクトリで使えるセッションがありません'}
           </div>}
         </div>
         {canCreate && sessions && (creating || (sessions.length === 0 && !error)
