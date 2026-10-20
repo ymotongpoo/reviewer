@@ -21,7 +21,14 @@ export default async function setup() {
   await mkdir(join(e2eRoot, 'bin'), { recursive: true })
   const env = isolatedEnv(e2eRoot)
   if (process.env.E2E_SKIP_BUILD !== '1') execFileSync('npm', ['run', 'build'], { cwd: join(repoRoot, 'web'), env, stdio: 'inherit' })
-  execFileSync('go', ['build', '-o', join(e2eRoot, 'bin/reviewer'), './cmd/reviewer'], { cwd: repoRoot, env, stdio: 'inherit' })
+  // Resolve the caller's Go caches before applying the isolated XDG_CACHE_HOME,
+  // which would otherwise put Go's default build cache inside the temporary root.
+  const goCaches = JSON.parse(execFileSync('go', ['env', '-json', 'GOCACHE', 'GOMODCACHE'], {
+    cwd: repoRoot, encoding: 'utf8',
+  })) as { GOCACHE: string; GOMODCACHE: string }
+  execFileSync('go', ['build', '-o', join(e2eRoot, 'bin/reviewer'), './cmd/reviewer'], {
+    cwd: repoRoot, env: { ...env, ...goCaches }, stdio: 'inherit',
+  })
   const port = Number(process.env.E2E_PORT ?? 17777)
   if (!Number.isInteger(port) || port < 1 || port > 65535) throw new Error('Invalid E2E_PORT')
   const server = await spawnServer({ root: e2eRoot, port, token: 'e2e' })
