@@ -117,7 +117,8 @@ export const api = {
   submit: (sendToAgent = false) => request<SubmitResult>('POST', '/api/rounds/submit', { sendToAgent }),
   openRound: () => request<{ ok: boolean }>('POST', '/api/rounds/open'),
   agent: () => request<AgentInfo>('GET', '/api/agent'),
-  agentSessions: () => request<{ sessions: AgentSession[] }>('GET', '/api/agent/sessions').then((r) => r.sessions),
+  agentSessions: (allProjects = false) =>
+    request<{ sessions: AgentSession[] }>('GET', `/api/agent/sessions${allProjects ? '?all=1' : ''}`).then((r) => r.sessions),
   bindAgent: (sessionId: string) =>
     request<{ binding: AgentBinding | null }>('PUT', '/api/agent/binding', { sessionId }).then((r) => r.binding),
   agentModels: () => request<AgentModels>('GET', '/api/agent/models'),

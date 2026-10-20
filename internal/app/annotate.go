@@ -250,7 +250,7 @@ func (a *App) annotationSession(ctx context.Context, ag agent.Agent, target, exp
 		if explicit == "" {
 			return "", badRequest("送信先のセッションを指定してください")
 		}
-		sessions, err := a.AgentSessions(ctx)
+		sessions, err := a.AgentSessionsAll(ctx)
 		if err != nil {
 			return "", err
 		}

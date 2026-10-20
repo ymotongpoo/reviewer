@@ -158,11 +158,20 @@ func (a *App) agentOrErr() (agent.Agent, error) {
 
 // AgentSessions lists sessions that feedback can be sent to.
 func (a *App) AgentSessions(ctx context.Context) ([]agent.Session, error) {
+	return a.agentSessions(ctx, a.Proj.Root)
+}
+
+// AgentSessionsAll lists sessions from every project of the connected agent.
+func (a *App) AgentSessionsAll(ctx context.Context) ([]agent.Session, error) {
+	return a.agentSessions(ctx, "")
+}
+
+func (a *App) agentSessions(ctx context.Context, dir string) ([]agent.Session, error) {
 	ag, err := a.agentOrErr()
 	if err != nil {
 		return nil, err
 	}
-	ss, err := ag.Sessions(ctx, a.Proj.Root)
+	ss, err := ag.Sessions(ctx, dir)
 	if err != nil {
 		return nil, &Error{Code: http.StatusBadGateway, Msg: err.Error()}
 	}
@@ -251,7 +260,7 @@ func (a *App) BindAgent(ctx context.Context, sessionID string) (*store.AgentBind
 		a.notify(Event{Type: "agent"})
 		return nil, err
 	}
-	ss, err := a.AgentSessions(ctx)
+	ss, err := a.AgentSessionsAll(ctx)
 	if err != nil {
 		return nil, err
 	}
