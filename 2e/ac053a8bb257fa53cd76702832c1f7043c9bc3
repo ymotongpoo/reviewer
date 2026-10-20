@@ -1,0 +1,105 @@
+internal/feedback/feedback.go
+  s_0d0f043939d85b::t_e0906236c0f547 28-33,36-41,126-128,148,166,182,289-294
+  s_0d0f043939d85b::t_71354f2cef8304 295
+web/src/drafts.ts
+  s_0d0f043939d85b::t_56117970d2f4d2 3,21,27,41-42,44
+internal/store/model.go
+  s_0d0f043939d85b::t_0195a2ab02abdc 64-70,73-79
+  s_0d0f043939d85b::t_5d5ee08ceb1ab0 80
+internal/app/attachments.go
+  s_0d0f043939d85b::t_559e8b7e4296ed 1-105
+web/src/components/Attachments.tsx
+  s_0d0f043939d85b::t_a30d1fa555fedb 1-29
+internal/store/attachment.go
+  s_0d0f043939d85b::t_7fb478bce84227 1-56,58
+  s_0d0f043939d85b::t_fcfda7ff4bb69f 57
+web/src/components/Composer.tsx
+  s_0d0f043939d85b::t_39e107840bf42f 7-8,26,32,50,53,56,123,131,151,154,158,163-164,173
+  s_0d0f043939d85b::t_2d9f898b9fbb23 81-82,224,242-245,263,296-297,299,302,330-386
+  s_0d0f043939d85b::t_3dc84a70cc3a1b 450-451,453,463,473-492,498,507,510
+  s_0d0f043939d85b::t_8db37410c51bec 387
+web/e2e/desktop/attachments.e2e.ts
+  s_0d0f043939d85b::t_763fff23d33d5b 1-42
+internal/server/server.go
+  s_0d0f043939d85b::t_8a3761cc24b063 120-121,419-460
+  s_0d0f043939d85b::t_48076bb1b67478 461
+web/src/components/Thread.tsx
+  s_0d0f043939d85b::t_5ca7d5b9904cb5 10,78
+internal/app/app.go
+  s_0d0f043939d85b::t_27016c03cb4ac7 497,534-537,540,659-662,673,686-691
+  s_0d0f043939d85b::t_8e825beaf35c72 491-496,692
+internal/server/attachment_test.go
+  s_0d0f043939d85b::t_e5ec1795e9fcb8 67-74
+  s_0d0f043939d85b::t_7145709bc8311e 1-4,6-8,10-12,14-20,22-66,75-86
+  s_0d0f043939d85b::t_3b54d3c1d2c7d2 5,9,13,21
+web/src/types.ts
+  s_0d0f043939d85b::t_b26bf59bdd86b1 50-55,63
+internal/app/attachments_test.go
+  s_0d0f043939d85b::t_f21bb88e5d1a33 73,78,83-85
+  s_0d0f043939d85b::t_2827076276d28c 27
+  s_0d0f043939d85b::t_e855867a87fe0c 1-26,28-72,74-77,79-82,86-116
+web/src/api.ts
+  s_0d0f043939d85b::t_77b98f985e3ca6 13,86-102,118-119,127,131
+web/src/style.css
+  s_0d0f043939d85b::t_f480c281732cab 934-983
+internal/app/rounds.go
+  s_0d0f043939d85b::t_4b611c35740071 135-144
+internal/server/dist/assets/c-Caln1_SD.js
+  s_0d0f043939d85b::t_8b3fa1a1847028 1
+internal/server/dist/assets/cpp-C3fsP_7O.js
+  s_0d0f043939d85b::t_5db0b1a76d8f31 1
+internal/server/dist/assets/css-DrBdFKAb.js
+  s_0d0f043939d85b::t_f63fc762aabd97 1
+internal/server/dist/assets/dist-ejSn3N87.js
+  s_0d0f043939d85b::t_4ca0507a77e4b5 1-2,47
+internal/server/dist/assets/graphql-CNNLZ-J-.js
+  s_0d0f043939d85b::t_4d354a907b264f 1
+internal/server/dist/assets/html-BVQ0kqxY.js
+  s_0d0f043939d85b::t_c0a9f86df34e16 1
+internal/server/dist/assets/html-derivative-Ca26z2D6.js
+  s_0d0f043939d85b::t_df130392236c78 1
+internal/server/dist/assets/index-5NfD26PN.js
+  s_0d0f043939d85b::t_f9fb8f0c6a298f 1-5,7-9,24,30-33,35-36,49-51,67-70,74-78,80-84,86-92,100-101,103,120-121,123,125,129,132-133,146,148,238,241-243,246-256
+internal/server/dist/assets/index-B7Rgfvdc.css
+  s_0d0f043939d85b::t_029b2e4cc1c76f 1
+internal/server/dist/assets/java-COj0qZgJ.js
+  s_0d0f043939d85b::t_d91939b78ae516 1
+internal/server/dist/assets/jsx-BfLX-TNg.js
+  s_0d0f043939d85b::t_0fdb6952ceb6ac 1
+internal/server/dist/assets/lua-CqbiwbS6.js
+  s_0d0f043939d85b::t_b5048700e38325 1
+internal/server/dist/assets/php-CAPrU8qC.js
+  s_0d0f043939d85b::t_0812dfd174f9d8 1
+internal/server/dist/assets/rst-BL3_pAXP.js
+  s_0d0f043939d85b::t_78ba94007ef142 1
+internal/server/dist/assets/ruby-CO406USx.js
+  s_0d0f043939d85b::t_aeaf751ef7fd8b 1
+internal/server/dist/assets/sql-cnTkEPO2.js
+  s_0d0f043939d85b::t_bbec177b7839e0 1
+internal/server/dist/assets/tsx-bjN1chCp.js
+  s_0d0f043939d85b::t_85dbd8d06f9ad3 1
+internal/server/dist/assets/typescript-CeqJM0N-.js
+  s_0d0f043939d85b::t_0b8aea7e5c21cf 1
+internal/server/dist/assets/vue-BvWRq6oX.js
+  s_0d0f043939d85b::t_7b81b6959e968d 1
+internal/server/dist/assets/xml-BuO_48jx.js
+  s_0d0f043939d85b::t_a0966b52ecf0a0 1
+internal/server/dist/index.html
+  s_0d0f043939d85b::t_aa4f286d803dc7 8-9
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "2eac053a8bb257fa53cd76702832c1f7043c9bc3",
+  "prompts": {},
+  "sessions": {
+    "s_0d0f043939d85b": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a13c72-469b-7002-b68d-1bcad09a83ab",
+        "model": "gpt-6-luna"
+      },
+      "human_author": "Yoshi Yamaguchi <ymotongpoo@gmail.com>"
+    }
+  }
+}
