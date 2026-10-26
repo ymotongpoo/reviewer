@@ -2529,6 +2529,26 @@ table.frontmatter td {
   gap: 8px;
   padding: 6px 4px;
 }
+.session-menu > .switcher-foot {
+  flex-direction: column;
+  align-items: flex-start;
+}
+.session-form .field select {
+  width: 100%;
+  min-width: 0;
+  max-width: 100%;
+}
+.session-branch-setting {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 6px;
+  min-width: 0;
+}
+.session-branch-name {
+  display: block;
+  overflow-wrap: anywhere;
+}
 .session-form .modal-actions {
   margin-top: 0;
 }

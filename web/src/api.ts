@@ -106,8 +106,8 @@ const serverPaths = ['/api/server', '/api/projects', '/api/fs']
 export const api = {
   project: () => request<Info>('GET', '/api/project'),
   sessions: () => request<{ sessions: SessionSummary[] }>('GET', '/api/sessions').then((r) => r.sessions),
-  createSession: (name: string) => request<{ session: ReviewSession; url: string }>('POST', '/api/sessions', { name }),
-  updateSession: (patch: { name?: string; archived?: boolean }) => request<ReviewSession>('PATCH', '/api/session', patch),
+  createSession: (name: string, branch?: string) => request<{ session: ReviewSession; url: string }>('POST', '/api/sessions', { name, branch }),
+  updateSession: (patch: { name?: string; archived?: boolean; branch?: string }) => request<ReviewSession>('PATCH', '/api/session', patch),
   tree: () => request<{ files: TreeFile[] }>('GET', '/api/tree').then((r) => r.files),
   file: (path: string) => request<FileView>('GET', `/api/file?path=${q(path)}`),
   roundChanges: (round: number, phase: 'review' | 'agent' = 'agent') =>

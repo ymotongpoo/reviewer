@@ -110,6 +110,7 @@ export interface ReviewSession {
   name: string
   createdAt: string
   archived?: boolean
+  branch?: string
 }
 
 export interface SessionSummary {
@@ -118,6 +119,7 @@ export interface SessionSummary {
   url: string
   createdAt: string
   archived?: boolean
+  branch?: string
   open: boolean
   initialized: boolean
   round?: number

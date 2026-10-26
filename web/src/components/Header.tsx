@@ -2,7 +2,7 @@ import { Portal } from './Portal'
 import { useEffect, useState } from 'preact/hooks'
 import { api, projectId, sessionId } from '../api'
 import { copyText } from '../clipboard'
-import { agentInfo, comments, dirtyReplies, draftCount, flushComposers, refreshComments, dismissResponseBanner, info, refreshAll, refreshInfo, refreshSessions, responseBanner, sessions, toast } from '../state'
+import { agentInfo, comments, dirtyReplies, draftCount, flushComposers, refreshComments, dismissResponseBanner, gitStatus, info, refreshAll, refreshGit, refreshInfo, refreshSessions, responseBanner, sessions, toast } from '../state'
 import { connState } from '../connection'
 import { AgentChip } from './Agent'
 import { AnnotateButton } from './Annotate'
@@ -10,7 +10,7 @@ import { GitButton } from './Git'
 import { isCompact, isNarrow } from '../media'
 import { closeTransientUI, drawerOpen, headerMenuOpen } from '../ui'
 import { SheetBackdrop, useDismiss } from './Sheet'
-import type { ProjectSummary, SessionSummary, SubmitResult } from '../types'
+import type { GitStatus, ProjectSummary, SessionSummary, SubmitResult } from '../types'
 
 export function CopyPrompt({ prompt, label = '指示文をコピー' }: { prompt: string; label?: string }) {
   const [done, setDone] = useState(false)
@@ -107,34 +107,72 @@ function sessionStatus(s: SessionSummary) {
  */
 function SessionMenu() {
   const current = info.value!.session
-  const [mode, setMode] = useState<'list' | 'create' | 'rename'>('list')
+  const [mode, setMode] = useState<'list' | 'create' | 'rename' | 'branch'>('list')
   const [name, setName] = useState('')
+  const [branch, setBranch] = useState('')
+  const [git, setGit] = useState<GitStatus | null>(null)
+  const [loadingBranches, setLoadingBranches] = useState(false)
+  const [formError, setFormError] = useState<string | null>(null)
   const [showArchived, setShowArchived] = useState(false)
   const [busy, setBusy] = useState(false)
-  useEffect(() => { void refreshSessions().catch(() => {}) }, [])
+  useEffect(() => {
+    void refreshSessions().catch(() => {})
+    if (info.value?.git) void refreshGit().catch(() => {})
+  }, [])
+  useEffect(() => {
+    setFormError(null)
+    setLoadingBranches(false)
+    if ((mode !== 'create' && mode !== 'branch') || !info.value?.git) return
+    let active = true
+    setLoadingBranches(true)
+    setGit(null)
+    setBranch('')
+    api.gitStatus().then((next) => {
+      if (!active) return
+      setGit(next)
+      setBranch(mode === 'branch' ? current.branch ?? '' : next.branches.includes(next.branch) ? next.branch : '')
+    }).catch((e) => {
+      if (active) setFormError(`ローカルブランチを取得できませんでした: ${(e as Error).message}`)
+    }).finally(() => { if (active) setLoadingBranches(false) })
+    return () => { active = false }
+  }, [mode])
   const all = sessions.value
   const visible = all.filter((s) => !s.archived || s.id === sessionId)
   const archived = all.filter((s) => s.archived && s.id !== sessionId)
 
+  async function activateBranch(selected: string) {
+    if (!selected) return
+    const active = await api.gitStatus()
+    if (active.branch !== selected) await api.gitSwitch(selected, '', active.head ?? '')
+    await refreshGit()
+  }
+
   async function create() {
     setBusy(true)
+    setFormError(null)
     try {
-      const r = await api.createSession(name)
+      await activateBranch(branch)
+      const r = await api.createSession(name, branch || undefined)
       location.href = r.url
     } catch (e) {
+      setFormError((e as Error).message)
       toast((e as Error).message, 'error')
       setBusy(false)
     }
   }
-  async function update(patch: { name?: string; archived?: boolean }) {
+  async function update(patch: { name?: string; archived?: boolean; branch?: string }) {
     setBusy(true)
+    setFormError(null)
     try {
+      if (patch.branch !== undefined) await activateBranch(patch.branch)
       await api.updateSession(patch)
       await Promise.all([refreshInfo(), refreshSessions()])
       setMode('list')
       if (patch.archived) toast(`「${current.name}」をアーカイブしました`, 'success')
       if (patch.archived === false) toast(`「${current.name}」を元に戻しました`, 'success')
+      if (patch.branch !== undefined) toast(patch.branch ? `ローカルブランチを「${patch.branch}」に設定しました` : 'ローカルブランチの設定を解除しました', 'success')
     } catch (e) {
+      setFormError((e as Error).message)
       toast((e as Error).message, 'error')
     } finally {
       setBusy(false)
@@ -145,14 +183,35 @@ function SessionMenu() {
     <form class="session-form" onSubmit={(e) => {
       e.preventDefault()
       if (mode === 'create') void create()
+      else if (mode === 'branch') void update({ branch })
       else void update({ name })
     }}>
-      <label class="field">
-        <span>{mode === 'create' ? '新しいセッションの名前' : 'セッションの名前'}</span>
-        <input type="text" value={name} autoFocus maxLength={80}
-          placeholder="例: tinygo-otel-esp32 の第3章"
-          onInput={(e) => setName(e.currentTarget.value)} />
-      </label>
+      {formError && <div class="banner error" role="alert">{formError}</div>}
+      {mode !== 'branch' && (
+        <label class="field">
+          <span>{mode === 'create' ? '新しいセッションの名前' : 'セッションの名前'}</span>
+          <input type="text" value={name} autoFocus maxLength={80}
+            placeholder="例: tinygo-otel-esp32 の第3章"
+            onInput={(e) => setName(e.currentTarget.value)} />
+        </label>
+      )}
+      {(mode === 'create' || mode === 'branch') && info.value?.git && (
+        <>
+          <label class="field">
+            <span>このセッションのローカルブランチ</span>
+            <select value={branch} disabled={busy || loadingBranches || !git}
+              onChange={(e) => setBranch(e.currentTarget.value)}>
+              <option value="">未設定（現在の作業ブランチを使用）</option>
+              {branch && git && !git.branches.includes(branch) && <option value={branch} disabled>{branch}（見つかりません）</option>}
+              {git?.branches.map((b) => <option value={b}>{b}{b === git.branch ? '（現在）' : ''}</option>)}
+            </select>
+          </label>
+          {loadingBranches ? <p class="muted small">ローカルブランチを読み込み中…</p> : git && (
+            <p class="muted small">現在の作業ブランチ: <code>{git.branch || 'detached HEAD'}</code></p>
+          )}
+          <p class="muted small">選んだブランチをセッションに保存して切り替えます。ファイルと作業ブランチは同じディレクトリの全セッションで共有します。</p>
+        </>
+      )}
       {mode === 'create' && (
         <p class="muted small">
           セッションごとにラウンド、コメント、AI指摘、エージェントの送信先を別々に持ちます。ファイルとプリセットは共有します。
@@ -160,8 +219,8 @@ function SessionMenu() {
       )}
       <div class="modal-actions">
         <button type="button" class="btn small" onClick={() => setMode('list')}>キャンセル</button>
-        <button type="submit" class="btn small primary" disabled={busy || !name.trim()}>
-          {mode === 'create' ? '作成して開く' : '保存'}
+        <button type="submit" class="btn small primary" disabled={busy || loadingBranches || (mode !== 'branch' && !name.trim()) || (mode === 'branch' && !git)}>
+          {mode === 'create' ? '作成して開く' : mode === 'branch' && branch ? '保存して切り替える' : '保存'}
         </button>
       </div>
     </form>
@@ -176,6 +235,7 @@ function SessionMenu() {
           </span>
           <span class="muted small">
             {sessionStatus(s)}
+            {s.branch && <span class="session-branch-name">⎇ {s.branch}</span>}
             {s.agent && ` · 🤖 ${s.agent.title}`}
           </span>
         </a>
@@ -192,8 +252,17 @@ function SessionMenu() {
         </a>
       ))}
       <div class="switcher-foot">
-        <button class="link" onClick={() => { setName(''); setMode('create') }}>＋ 新しいセッション</button>
-        <button class="link" onClick={() => { setName(current.name); setMode('rename') }}>名前を変更</button>
+        {info.value?.git && <div class="session-branch-setting">
+          <span class="muted small">このセッションのローカルブランチ</span>
+          <span class="session-branch-name">{current.branch ? `⎇ ${current.branch}` : '未設定'}</span>
+          {current.branch && gitStatus.value && current.branch !== gitStatus.value.branch && <>
+            <span class="muted small">現在の作業ブランチ: {gitStatus.value.branch || 'detached HEAD'}</span>
+            <button class="btn small" disabled={busy} onClick={() => void update({ branch: current.branch })}>設定したブランチに切り替える</button>
+          </>}
+          <button class="link" disabled={busy} onClick={() => setMode('branch')}>ローカルブランチを設定・変更</button>
+        </div>}
+        <button class="link" disabled={busy} onClick={() => { setName(''); setMode('create') }}>＋ 新しいセッション</button>
+        <button class="link" disabled={busy} onClick={() => { setName(current.name); setMode('rename') }}>名前を変更</button>
         {current.id !== 'main' && (
           current.archived
             ? <button class="link" disabled={busy} onClick={() => void update({ archived: false })}>元に戻す</button>
