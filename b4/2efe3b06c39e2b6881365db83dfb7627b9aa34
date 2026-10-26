@@ -1,0 +1,94 @@
+internal/server/dist/assets/tsx-BsHmc8mU.js
+  s_aa4e6c3231925d::t_6e7ae34d894925 1
+internal/server/dist/assets/c-C0jE_Alh.js
+  s_aa4e6c3231925d::t_6e7ae34d894925 1
+internal/server/dist/assets/lua-Di3tRggn.js
+  s_aa4e6c3231925d::t_6e7ae34d894925 1
+internal/gitops/run.go
+  s_aa4e6c3231925d::t_75595e8b5f7909 2
+internal/server/dist/assets/sql-Ds-7CNeo.js
+  s_aa4e6c3231925d::t_6e7ae34d894925 1
+web/e2e/mobile/acceptance.e2e.ts
+  s_aa4e6c3231925d::t_c3987a2030a3e1 45
+internal/server/dist/assets/ruby-mNzA-FdG.js
+  s_aa4e6c3231925d::t_6e7ae34d894925 1
+internal/server/dist/assets/vue-DOkApDzi.js
+  s_aa4e6c3231925d::t_6e7ae34d894925 1
+internal/server/dist/index.html
+  s_aa4e6c3231925d::t_6e7ae34d894925 8
+web/e2e/support/git.ts
+  s_aa4e6c3231925d::t_c3987a2030a3e1 9
+internal/server/dist/assets/jsx-KeYMJzDH.js
+  s_aa4e6c3231925d::t_6e7ae34d894925 1
+internal/server/dist/assets/xml-CC1_VSV4.js
+  s_aa4e6c3231925d::t_6e7ae34d894925 1
+internal/server/dist/assets/html-derivative-B5rPGvG9.js
+  s_aa4e6c3231925d::t_6e7ae34d894925 1
+internal/gitops/gitops_test.go
+  s_aa4e6c3231925d::t_a5d32f7a12c4f0 128-219
+web/e2e/mobile/shell.e2e.ts
+  s_aa4e6c3231925d::t_c3987a2030a3e1 9
+web/src/types.ts
+  s_aa4e6c3231925d::t_c3987a2030a3e1 486
+internal/server/dist/assets/graphql-BuTtQD6O.js
+  s_aa4e6c3231925d::t_6e7ae34d894925 1
+internal/app/git.go
+  s_aa4e6c3231925d::t_75595e8b5f7909 39,176,203-207,283-346
+  s_aa4e6c3231925d::t_b711eb87903b97 347
+internal/server/dist/assets/rst-Dj18_pe0.js
+  s_aa4e6c3231925d::t_6e7ae34d894925 1
+internal/server/session_test.go
+  s_aa4e6c3231925d::t_33389701474f9d 6,11-12,16-20,27-48,55-59,70-73,78-79,107-116,118-121
+  s_aa4e6c3231925d::t_a5d32f7a12c4f0 15,50-54,60,68-69,74-77,80-102,104-106,117
+  s_aa4e6c3231925d::t_91efdc8922ef4b 21-26,49,61-67,103
+  s_aa4e6c3231925d::t_2fd71965abbf60 122
+web/e2e/desktop/git.e2e.ts
+  s_aa4e6c3231925d::t_6f5e02b5455696 18,20,37-72
+internal/app/git_test.go
+  s_aa4e6c3231925d::t_a5d32f7a12c4f0 450-482
+internal/server/dist/assets/dist-zFlgph4B.js
+  s_aa4e6c3231925d::t_6e7ae34d894925 1-63
+internal/server/dist/assets/html-B46rlm74.js
+  s_aa4e6c3231925d::t_6e7ae34d894925 1
+internal/server/dist/assets/css-BXnGrHbz.js
+  s_aa4e6c3231925d::t_6e7ae34d894925 1
+web/e2e/mobile/git.e2e.ts
+  s_aa4e6c3231925d::t_6f5e02b5455696 14
+  s_aa4e6c3231925d::t_91efdc8922ef4b 18-23
+  s_aa4e6c3231925d::t_88d395773ea3e7 24
+internal/server/dist/assets/php-DPyHTTLK.js
+  s_aa4e6c3231925d::t_6e7ae34d894925 1
+web/src/components/Git.tsx
+  s_aa4e6c3231925d::t_c3987a2030a3e1 76,139-160,198,231,306,322,330,332,341,360-361,435,479,505-545,553,564-565
+web/src/api.ts
+  s_aa4e6c3231925d::t_c3987a2030a3e1 185-186
+internal/server/dist/assets/cpp-B6m0h9Vw.js
+  s_aa4e6c3231925d::t_6e7ae34d894925 1
+internal/server/dist/assets/typescript-C_95IwOl.js
+  s_aa4e6c3231925d::t_6e7ae34d894925 1
+internal/server/dist/assets/java-D9Ut_cHm.js
+  s_aa4e6c3231925d::t_6e7ae34d894925 1
+internal/server/dist/assets/index-Bs4Y-VfE.js
+  s_aa4e6c3231925d::t_6e7ae34d894925 1-256
+internal/gitops/repo.go
+  s_aa4e6c3231925d::t_75595e8b5f7909 338-374
+internal/server/server.go
+  s_aa4e6c3231925d::t_75595e8b5f7909 156,760-776
+  s_aa4e6c3231925d::t_7c84fcb9f1d333 777-779
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "b42efe3b06c39e2b6881365db83dfb7627b9aa34",
+  "prompts": {},
+  "sessions": {
+    "s_aa4e6c3231925d": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a1771c-5c27-7be3-8671-54a6abd12e46",
+        "model": "gpt-6.1-sol"
+      },
+      "human_author": "Yoshi Yamaguchi <ymotongpoo@gmail.com>"
+    }
+  }
+}
