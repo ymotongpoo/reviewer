@@ -335,6 +335,43 @@ func (r *Repo) CheckBranchName(ctx context.Context, name string) error {
 	return nil
 }
 
+// Branches lists local branch names. Remote-tracking branches are listed by
+// Remotes; neither operation fetches or changes the repository.
+func (r *Repo) Branches(ctx context.Context) ([]string, error) {
+	out, err := r.Run(ctx, ReadTimeout, nil, "for-each-ref", "--format=%(refname:strip=2)", "refs/heads/")
+	if err != nil {
+		return nil, err
+	}
+	return strings.Fields(string(out)), nil
+}
+
+// Switch checks out an existing local branch, or creates a tracking branch
+// from a remote-tracking ref when remote is set. Git protects uncommitted and
+// ignored files; no merge, reset, fetch or comparison with main is involved.
+func (r *Repo) Switch(ctx context.Context, branch, remote string) error {
+	if err := r.CheckBranchName(ctx, branch); err != nil {
+		return err
+	}
+	args := []string{"switch", "--no-guess", "--no-recurse-submodules", "--no-overwrite-ignore"}
+	ref := "refs/heads/" + branch
+	if remote != "" {
+		if !validName(remote) {
+			return fmt.Errorf("invalid remote name: %q", remote)
+		}
+		ref = "refs/remotes/" + remote + "/" + branch
+		args = append(args, "--track", "--create", branch)
+	}
+	if _, err := r.Run(ctx, ReadTimeout, nil, "show-ref", "--verify", "--quiet", ref); err != nil {
+		return err
+	}
+	start := branch
+	if remote != "" {
+		start = ref
+	}
+	_, err := r.Run(ctx, CommitTimeout, nil, append(args, "--", start)...)
+	return err
+}
+
 // Divergence counts the commits HEAD is ahead of and behind a
 // remote-tracking branch. ok is false when the tracking ref does not exist.
 func (r *Repo) Divergence(ctx context.Context, remote, branch string) (ahead, behind int, ok bool) {

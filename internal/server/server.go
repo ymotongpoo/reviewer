@@ -153,6 +153,7 @@ func (p *Project) Handler() http.Handler {
 		mux.HandleFunc("PUT /api/git/settings", p.handleGitSettings)
 		mux.HandleFunc("POST /api/git/commit", p.handleGitCommit)
 		mux.HandleFunc("POST /api/git/push", p.handleGitPush)
+		mux.HandleFunc("POST /api/git/switch", p.handleGitSwitch)
 		mux.HandleFunc("GET /api/events", p.handleEvents)
 		mux.HandleFunc("/api/", func(w http.ResponseWriter, r *http.Request) {
 			writeError(w, &app.Error{Code: http.StatusNotFound, Msg: "not found"})
@@ -753,6 +754,26 @@ func (p *Project) handleGitPush(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	res, err := p.App.GitPush(context.WithoutCancel(r.Context()), req)
+	respond(w, res, err)
+}
+
+func (p *Project) handleGitSwitch(w http.ResponseWriter, r *http.Request) {
+	var req app.GitSwitchInput
+	if err := decode(r, &req); err != nil {
+		writeError(w, err)
+		return
+	}
+	if p.dir.busy() {
+		writeError(w, &app.Error{Code: http.StatusConflict, Msg: "このディレクトリでエージェントが実行中です。終了後にブランチを切り替えてください"})
+		return
+	}
+	res, err := p.App.GitSwitch(context.WithoutCancel(r.Context()), req)
+	if err == nil {
+		p.dir.broadcast(app.Event{Type: "git"})
+		// Also refresh open files when the branches have identical contents,
+		// since a switch need not produce a file watcher event.
+		p.dir.broadcast(app.Event{Type: "files"})
+	}
 	respond(w, res, err)
 }
 

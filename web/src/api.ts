@@ -182,6 +182,8 @@ export const api = {
   gitCommit: (message: string, fingerprint: string) =>
     request<GitCommitResult>('POST', '/api/git/commit', { message, fingerprint }),
   gitPush: (remote: string, branch: string) => request<GitPushResult>('POST', '/api/git/push', { remote, branch }),
+  gitSwitch: (branch: string, remote: string, head: string) =>
+    request<{ branch: string }>('POST', '/api/git/switch', { branch, remote, head }),
   saveFile: (path: string, content: string, hash: string) =>
     request<{ ok: boolean; hash: string }>('PUT', '/api/file', { path, content, hash }),
 

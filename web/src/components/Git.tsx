@@ -73,7 +73,7 @@ function GitDialog({ onClose }: { onClose: () => void }) {
   const [message, setMessage] = useState('')
   const [edited, setEdited] = useState(false)
   const [step, setStep] = useState<Step>({ kind: 'edit' })
-  const [busy, setBusy] = useState<'' | 'load' | 'commit' | 'push' | 'save'>('load')
+  const [busy, setBusy] = useState<'' | 'load' | 'commit' | 'push' | 'save' | 'switch'>('load')
 
   async function load(remote = pick.remote, branch = pick.branch): Promise<GitStatus | null> {
     setBusy((b) => b || 'load')
@@ -136,6 +136,28 @@ function GitDialog({ onClose }: { onClose: () => void }) {
     }
   }
 
+  async function switchBranch(branch: string, remote: string) {
+    if (!st) return
+    if (edited && message.trim() !== generated.trim() && !confirm('編集したコミットメッセージを破棄してブランチを切り替えますか？')) return
+    setBusy('switch')
+    setError(null)
+    try {
+      const result = await api.gitSwitch(branch, remote, st.head ?? '')
+      setEdited(false)
+      // Follow the checked-out branch rather than the previously selected
+      // one-off push destination. Saved project defaults stay unchanged.
+      setPick({ remote, branch: result.branch })
+      await load(remote, result.branch)
+      await refreshGit()
+      toast(`作業ブランチを「${result.branch}」に切り替えました`, 'success')
+    } catch (e) {
+      setError((e as Error).message)
+      if (e instanceof ApiError && e.status === 409) await load()
+    } finally {
+      setBusy('')
+    }
+  }
+
   async function commit(s: Extract<Step, { kind: 'confirmCommit' }>) {
     setBusy('commit')
     setError(null)
@@ -173,7 +195,7 @@ function GitDialog({ onClose }: { onClose: () => void }) {
     }
   }
 
-  const working = busy === 'commit' || busy === 'push'
+  const working = busy === 'commit' || busy === 'push' || busy === 'switch'
   return (
     <Portal onClose={() => { if (!working) onClose() }}>
     <div class="modal-backdrop" onClick={(e) => e.target === e.currentTarget && !working && onClose()}>
@@ -206,6 +228,7 @@ function GitDialog({ onClose }: { onClose: () => void }) {
               setMessage(generated)
             }}
             onTarget={chooseTarget}
+            onSwitch={switchBranch}
             onSaveDefaults={saveDefaults}
             onCommit={(thenPush) => {
               setError(null)
@@ -280,6 +303,7 @@ function EditStep({
   onMessage,
   onRegenerate,
   onTarget,
+  onSwitch,
   onSaveDefaults,
   onCommit,
   onPush,
@@ -295,6 +319,7 @@ function EditStep({
   onMessage: (m: string) => void
   onRegenerate: () => void
   onTarget: (remote: string, branch: string) => void
+  onSwitch: (branch: string, remote: string) => void
   onSaveDefaults: (remote: string, branch: string) => void
   onCommit: (thenPush: boolean) => void
   onPush: () => void
@@ -302,9 +327,9 @@ function EditStep({
 }) {
   const problem = messageProblem(message)
   const subject = message.trim().split('\n')[0] ?? ''
-  const canCommit = st.repo && st.changes.length > 0 && st.commitBlockers.length === 0 && !problem
+  const canCommit = !busy && st.repo && st.changes.length > 0 && st.commitBlockers.length === 0 && !problem
   const t = st.target
-  const canPush = st.pushBlockers.length === 0 && (t.ahead > 0 || !t.tracked)
+  const canPush = !busy && st.pushBlockers.length === 0 && (t.ahead > 0 || !t.tracked)
   const s = st.settings
 
   return (
@@ -313,7 +338,7 @@ function EditStep({
         <h2 id="git-title">Git</h2>
         {st.repo && (
           <span class="muted small">
-            ブランチ <code>{st.branch || 'detached HEAD'}</code>
+            作業ブランチ <code>{st.branch || 'detached HEAD'}</code>
             {st.head && (
               <>
                 {' '}
@@ -331,6 +356,8 @@ function EditStep({
           リポジトリ <code>{st.toplevel}</code> のうち <code>{st.prefix}</code> の変更だけを扱います。データディレクトリとプロジェクトの外の変更はコミットしません。
         </p>
       )}
+
+      {st.repo && <BranchSwitcher st={st} busy={busy} onSwitch={onSwitch} />}
 
       <section class="git-section">
         <h3>
@@ -405,7 +432,7 @@ function EditStep({
       <section class="git-section">
         <h3>push 先</h3>
         {st.remotes.length > 0 ? (
-          <TargetPicker st={st} onTarget={onTarget} />
+          <TargetPicker st={st} onTarget={onTarget} disabled={busy === 'switch'} />
         ) : (
           <p class="muted small">remote がありません。</p>
         )}
@@ -449,7 +476,7 @@ function EditStep({
       </section>
 
       <div class="modal-actions">
-        <button class="btn" onClick={onClose}>
+        <button class="btn" onClick={onClose} disabled={busy === 'switch'}>
           閉じる
         </button>
         <span class="spacer" />
@@ -475,7 +502,47 @@ function pushTitle(st: GitStatus, canPush: boolean) {
   return `HEAD を ${st.target.remote}/${st.target.branch} に push します`
 }
 
-function TargetPicker({ st, onTarget }: { st: GitStatus; onTarget: (remote: string, branch: string) => void }) {
+function BranchSwitcher({ st, busy, onSwitch }: {
+  st: GitStatus
+  busy: string
+  onSwitch: (branch: string, remote: string) => void
+}) {
+  const [selected, setSelected] = useState({ branch: st.branch, remote: '' })
+  useEffect(() => { setSelected({ branch: st.branch, remote: '' }) }, [st.branch])
+  const locals = [...new Set([st.branch, ...(st.branches ?? [])].filter(Boolean))]
+  const key = (remote: string, branch: string) => JSON.stringify({ branch, remote })
+  return (
+    <details class="git-section">
+      <summary>作業ブランチを切り替える</summary>
+      <div class="git-target">
+        <label class="field">
+          切り替え先のブランチ
+          <select value={key(selected.remote, selected.branch)} disabled={!!busy}
+            onChange={(e) => setSelected(JSON.parse(e.currentTarget.value))}>
+            {!st.branch && <option value={key('', '')}>選んでください</option>}
+            <optgroup label="ローカル">
+              {locals.map((b) => <option value={key('', b)}>{b}{b === st.branch ? '（現在）' : ''}</option>)}
+            </optgroup>
+            {st.remotes.map((r) => {
+              const branches = r.branches.filter((b) => !locals.includes(b))
+              return branches.length > 0 && <optgroup label={`${r.name}（取得済み）`}>
+                {branches.map((b) => <option value={key(r.name, b)}>{r.name}/{b}</option>)}
+              </optgroup>
+            })}
+          </select>
+        </label>
+        <button class="btn small" disabled={!!busy || !!st.operation || !selected.branch || (selected.branch === st.branch && !selected.remote)}
+          onClick={() => onSwitch(selected.branch, selected.remote)}>
+          {busy === 'switch' ? '切り替え中…' : '切り替える'}
+        </button>
+      </div>
+      <p class="muted small">ファイルと作業ブランチは、このディレクトリのすべてのレビューセッションで共有しています。</p>
+      {st.operation && <p class="muted small danger-text">{st.operation} の途中は切り替えられません。</p>}
+    </details>
+  )
+}
+
+function TargetPicker({ st, onTarget, disabled }: { st: GitStatus; onTarget: (remote: string, branch: string) => void; disabled?: boolean }) {
   const t = st.target
   const remote = st.remotes.find((r) => r.name === t.remote)
   const branches = [...new Set([st.branch, ...(remote?.branches ?? [])].filter(Boolean))]
@@ -483,7 +550,7 @@ function TargetPicker({ st, onTarget }: { st: GitStatus; onTarget: (remote: stri
     <div class="git-target">
       <label class="field">
         remote
-        <select value={t.remote} onChange={(e) => onTarget(e.currentTarget.value, '')}>
+        <select value={t.remote} disabled={disabled} onChange={(e) => onTarget(e.currentTarget.value, '')}>
           {st.remotes.map((r) => (
             <option value={r.name}>
               {r.name}
@@ -494,8 +561,8 @@ function TargetPicker({ st, onTarget }: { st: GitStatus; onTarget: (remote: stri
         </select>
       </label>
       <label class="field">
-        ブランチ
-        <select value={t.branch} onChange={(e) => onTarget(t.remote, e.currentTarget.value)}>
+        push 先のブランチ
+        <select value={t.branch} disabled={disabled} onChange={(e) => onTarget(t.remote, e.currentTarget.value)}>
           {!t.branch && <option value="">選んでください</option>}
           {branches.map((b) => (
             <option value={b}>

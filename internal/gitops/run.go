@@ -1,5 +1,5 @@
 // Package gitops runs the few Git operations reviewer offers from the web
-// UI: inspecting the working tree, committing it, and a plain push. Commands
+// UI: inspecting and switching branches, committing, and a plain push. Commands
 // are executed directly (no shell) with fixed argument lists, a timeout, a
 // bounded stderr and an environment that keeps Git from prompting, so that
 // only an existing SSH agent or credential helper can authenticate.

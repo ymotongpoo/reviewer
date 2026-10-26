@@ -6,6 +6,7 @@ import type { GitStatus } from '../../src/types'
 export function manyChanges(n: number, hidden = 0): GitStatus {
   return {
     repo: true, branch: 'main', unborn: false, head: '0123456789abcdef0123456789abcdef01234567',
+    branches: ['main'],
     upstream: { remote: 'origin', branch: 'main' },
     changes: Array.from({ length: n }, (_, i) => ({ path: `review/evidence/${String(i).padStart(3, '0')}-load-validity.md`, kind: 'added' as const, staged: false, untracked: true })),
     hidden, otherStaged: ['other/staged.md'],

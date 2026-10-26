@@ -11,9 +11,16 @@ test('Git dialog scrolls a long file list within the screen', async ({ page, set
   await page.screenshot({ path: info.outputPath('git.png') })
   await expectReachable(dialog.getByRole('button', { name: '閉じる' }))
   await expectReachable(dialog.getByRole('button', { name: 'コミット…' }))
-  const select = dialog.getByRole('combobox', { name: 'ブランチ' })
+  const select = dialog.getByRole('combobox', { name: 'push 先のブランチ', exact: true })
   await select.scrollIntoViewIfNeeded()
   await expectReachable(select)
+
+  await dialog.getByText('作業ブランチを切り替える', { exact: true }).tap()
+  const branch = dialog.getByRole('combobox', { name: '切り替え先のブランチ', exact: true })
+  await branch.scrollIntoViewIfNeeded()
+  await expectReachable(branch)
+  await expectReachable(dialog.getByRole('button', { name: '切り替える', exact: true }))
+  await dialog.getByText('作業ブランチを切り替える', { exact: true }).tap()
 
   await dialog.getByRole('button', { name: 'コミット…' }).tap()
   const confirm = page.getByRole('dialog', { name: 'コミットの確認', exact: true })

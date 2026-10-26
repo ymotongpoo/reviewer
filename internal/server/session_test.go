@@ -3,11 +3,122 @@ package server
 import (
 	"encoding/json"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"strings"
 	"testing"
 	"time"
+
+	"github.com/ymotongpoo/reviewer/internal/app"
 )
+
+func TestSwitchReviewSessionToBranchBehindMain(t *testing.T) {
+	if _, err := exec.LookPath("git"); err != nil {
+		t.Skip("git is not installed")
+	}
+	t.Setenv("GIT_CONFIG_NOSYSTEM", "1")
+	t.Setenv("GIT_CONFIG_GLOBAL", os.DevNull)
+	for _, tc := range []struct {
+		name       string
+		diverged   bool
+		remoteOnly bool
+	}{{name: "behind"}, {name: "diverged", diverged: true}, {name: "remote-behind", remoteOnly: true}} {
+		t.Run(tc.name, func(t *testing.T) {
+			e := newEnv(t)
+			dir := filepath.Join(e.root, "a")
+			git := func(args ...string) string {
+				t.Helper()
+				cmd := exec.Command("git", args...)
+				cmd.Dir = dir
+				out, err := cmd.CombinedOutput()
+				if err != nil {
+					t.Fatalf("git %v: %v %s", args, err, out)
+				}
+				return strings.TrimSpace(string(out))
+			}
+			git("init", "-q", "-b", "main")
+			git("config", "user.name", "Tester")
+			git("config", "user.email", "tester@example.invalid")
+			git("config", "commit.gpgsign", "false")
+			git("add", "a.md")
+			git("commit", "-q", "-m", "initial")
+			git("branch", "review/pr")
+			git("commit", "-q", "--allow-empty", "-m", "main advanced")
+			mainHead := git("rev-parse", "main")
+			git("switch", "-q", "review/pr")
+			if tc.diverged {
+				if err := os.WriteFile(filepath.Join(dir, "a.md"), []byte("# PR content\n"), 0o644); err != nil {
+					t.Fatal(err)
+				}
+				git("add", "a.md")
+				git("commit", "-q", "-m", "PR work")
+			}
+			head := git("rev-parse", "HEAD")
+			if got := git("rev-list", "--count", "HEAD..main"); got != "1" {
+				t.Fatalf("commits behind main = %q", got)
+			}
+			git("switch", "-q", "main")
+			remote := ""
+			if tc.remoteOnly {
+				remote = "origin"
+				git("remote", "add", remote, dir)
+				git("update-ref", "refs/remotes/origin/review/pr", head)
+				git("branch", "-D", "review/pr")
+			}
+			id := e.open(t, dir)
+			base := e.ts.URL + "/p/" + id
+			res, body := do(t, "POST", base+"/api/sessions", `{"name":"PR review"}`, bearer)
+			if res.StatusCode != 200 {
+				t.Fatalf("create: %d %s", res.StatusCode, body)
+			}
+			var created struct {
+				URL     string
+				Session struct{ ID string }
+			}
+			if err := json.Unmarshal([]byte(body), &created); err != nil || created.URL == "" {
+				t.Fatalf("created = %s: %v", body, err)
+			}
+			// Both review sessions share the checked-out branch, and both get
+			// notified even when the branches have identical file contents.
+			for _, sid := range []string{"main", created.Session.ID} {
+				p, err := e.reg.GetSession(id, sid)
+				if err != nil {
+					t.Fatal(err)
+				}
+				ch := p.Hub.Subscribe()
+				defer p.Hub.Unsubscribe(ch)
+				defer func() {
+					for _, typ := range []string{"git", "files"} {
+						select {
+						case ev := <-ch:
+							if ev.Type != typ {
+								t.Errorf("event = %s, want %s", ev.Type, typ)
+							}
+						default:
+							t.Errorf("missing %s event", typ)
+						}
+					}
+				}()
+			}
+			input, _ := json.Marshal(app.GitSwitchInput{Branch: "review/pr", Remote: remote, Head: mainHead})
+			res, body = do(t, "POST", e.ts.URL+created.URL+"api/git/switch", string(input), bearer)
+			if res.StatusCode != 200 {
+				t.Fatalf("switch: %d %s", res.StatusCode, body)
+			}
+			res, body = do(t, "GET", e.ts.URL+created.URL+"api/git", "", bearer)
+			var status app.GitStatus
+			if err := json.Unmarshal([]byte(body), &status); res.StatusCode != 200 || err != nil {
+				t.Fatalf("status: %d %s: %v", res.StatusCode, body, err)
+			}
+			if status.Branch != "review/pr" || status.Head != head {
+				t.Fatalf("session branch = %q, HEAD = %q", status.Branch, status.Head)
+			}
+			if git("rev-parse", "HEAD") != head || git("rev-parse", "main") != mainHead {
+				t.Fatal("switching a review session changed Git history")
+			}
+		})
+	}
+}
 
 func TestSessions(t *testing.T) {
 	e := newEnv(t)

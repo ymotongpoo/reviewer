@@ -447,6 +447,39 @@ func TestGitSettingsMergeConfig(t *testing.T) {
 	}
 }
 
+func TestGitSwitchRejectsInvalidAndStaleRequests(t *testing.T) {
+	a, top, _ := gitSetup(t)
+	ctx := context.Background()
+	runGit(t, top, "branch", "pr")
+	status, err := a.GitStatus(ctx, "", "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !slices.Equal(status.Branches, []string{"main", "pr"}) {
+		t.Fatalf("branches = %v", status.Branches)
+	}
+	for _, tc := range []struct {
+		branch, remote, head string
+		code                 int
+	}{
+		{"--force", "", status.Head, http.StatusBadRequest},
+		{"@{-1}", "", status.Head, http.StatusBadRequest},
+		{"missing", "", status.Head, http.StatusBadRequest},
+		{"pr", "missing", status.Head, http.StatusBadRequest},
+		{"missing", "origin", status.Head, http.StatusBadRequest},
+		{"pr", "", "stale", http.StatusConflict},
+		{"pr", "", "", http.StatusConflict},
+	} {
+		_, err := a.GitSwitch(ctx, GitSwitchInput{Branch: tc.branch, Remote: tc.remote, Head: tc.head})
+		if errCode(err) != tc.code {
+			t.Errorf("switch %+v: %v", tc, err)
+		}
+		if got := runGit(t, top, "branch", "--show-current"); got != "main\n" {
+			t.Fatalf("invalid request changed branch to %q", got)
+		}
+	}
+}
+
 func TestSaveFileChecksHashAndReanchors(t *testing.T) {
 	a, top, _ := gitSetup(t)
 	write(t, top, "docs/ch1.md", "# ch1\nline\n")

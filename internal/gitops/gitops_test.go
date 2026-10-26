@@ -125,6 +125,98 @@ func TestStatusAndCommitKeepOutsideChanges(t *testing.T) {
 	}
 }
 
+func TestSwitchLocalAndRemoteBranchesBehindMain(t *testing.T) {
+	top, project, bare := fixture(t)
+	ctx := context.Background()
+	git(t, top, "branch", "pr")
+	git(t, top, "push", "-q", "origin", "pr")
+	prHead := git(t, top, "rev-parse", "pr")
+	git(t, top, "branch", "-D", "pr")
+	writeFile(t, filepath.Join(project, "ch1.md"), "# main advanced\n")
+	git(t, top, "add", "docs/ch1.md")
+	git(t, top, "commit", "-q", "-m", "main work")
+	mainHead := git(t, top, "rev-parse", "main")
+	// An unrelated local edit must survive the switch.
+	writeFile(t, filepath.Join(top, "other/x.txt"), "local work\n")
+	r, err := Open(ctx, project, ".reviewer")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := r.Switch(ctx, "pr", "origin"); err != nil {
+		t.Fatal(err)
+	}
+	if got := git(t, top, "rev-parse", "HEAD"); got != prHead {
+		t.Fatalf("remote branch HEAD = %q, want %q", got, prHead)
+	}
+	if got := git(t, top, "rev-parse", "--abbrev-ref", "@{upstream}"); got != "origin/pr\n" {
+		t.Fatalf("upstream = %q", got)
+	}
+	// Now the local PR branch has its own commit and is also behind main.
+	writeFile(t, filepath.Join(project, "ch1.md"), "# PR work\n")
+	git(t, top, "add", "docs/ch1.md")
+	git(t, top, "commit", "-q", "-m", "PR work")
+	prHead = git(t, top, "rev-parse", "HEAD")
+	if err := r.Switch(ctx, "main", ""); err != nil {
+		t.Fatal(err)
+	}
+	if err := r.Switch(ctx, "pr", ""); err != nil {
+		t.Fatal(err)
+	}
+	if git(t, top, "rev-parse", "HEAD") != prHead || git(t, top, "rev-parse", "main") != mainHead {
+		t.Fatal("switch changed branch history")
+	}
+	if got := git(t, top, "rev-list", "--left-right", "--count", "pr...main"); got != "1\t1\n" {
+		t.Fatalf("divergence = %q", got)
+	}
+	if got, _ := os.ReadFile(filepath.Join(top, "other/x.txt")); string(got) != "local work\n" {
+		t.Fatalf("unrelated edit = %q", got)
+	}
+	if got := git(t, bare, "rev-parse", "pr"); got == prHead {
+		t.Fatal("switch unexpectedly pushed the PR work")
+	}
+}
+
+func TestSwitchProtectsLocalFiles(t *testing.T) {
+	for _, kind := range []string{"tracked", "staged", "untracked", "ignored"} {
+		t.Run(kind, func(t *testing.T) {
+			top, project, _ := fixture(t)
+			path := "docs/ch1.md"
+			if kind == "untracked" || kind == "ignored" {
+				path = "docs/new.md"
+			}
+			git(t, top, "switch", "-q", "-c", "pr")
+			writeFile(t, filepath.Join(top, path), "PR version\n")
+			git(t, top, "add", path)
+			git(t, top, "commit", "-q", "-m", "PR change")
+			git(t, top, "switch", "-q", "main")
+			if kind == "ignored" {
+				writeFile(t, filepath.Join(top, ".git/info/exclude"), path+"\n")
+			}
+			writeFile(t, filepath.Join(top, path), "local version\n")
+			if kind == "staged" {
+				git(t, top, "add", path)
+			}
+			before := git(t, top, "status", "--porcelain", "--ignored")
+			r, err := Open(context.Background(), project, ".reviewer")
+			if err != nil {
+				t.Fatal(err)
+			}
+			if err := r.Switch(context.Background(), "pr", ""); err == nil {
+				t.Fatal("switch overwrote local work")
+			}
+			if got := git(t, top, "branch", "--show-current"); got != "main\n" {
+				t.Fatalf("branch = %q", got)
+			}
+			if got := git(t, top, "status", "--porcelain", "--ignored"); got != before {
+				t.Fatalf("work tree changed: %q, want %q", got, before)
+			}
+			if got, _ := os.ReadFile(filepath.Join(top, path)); string(got) != "local version\n" {
+				t.Fatalf("local content = %q", got)
+			}
+		})
+	}
+}
+
 func TestStatusReportsStagedAndOperations(t *testing.T) {
 	top, project, _ := fixture(t)
 	ctx := context.Background()

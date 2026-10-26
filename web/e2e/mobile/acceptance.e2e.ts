@@ -42,6 +42,7 @@ async function aboveKeyboard(button: Locator) {
 // Match the real response shape without creating a Git repository or invoking an agent.
 const git: GitStatus = {
   repo: true, branch: 'fixture', unborn: false, upstream: {}, changes: [], hidden: 0, otherStaged: [],
+  branches: ['fixture'],
   fingerprint: 'fixture', messages: {}, settings: { language: 'ja', remote: '', branch: '' }, remotes: [],
   target: { remote: '', branch: '', tracked: false, ahead: 0, behind: 0 },
   commitBlockers: [], pushBlockers: ['remote がありません'], env: { sshAgent: false, credentialHelper: false },

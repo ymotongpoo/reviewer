@@ -483,6 +483,7 @@ export interface GitStatus {
   messages: Partial<Record<GitLanguage, string>>
   settings: GitSettings
   remotes: GitRemote[]
+  branches: string[]
   target: GitTarget
   commitBlockers: string[]
   pushBlockers: string[]

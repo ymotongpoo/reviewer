@@ -36,6 +36,7 @@ type GitStatus struct {
 	// Settings are the saved project defaults (language and push target).
 	Settings config.GitConfig `json:"settings"`
 	Remotes  []gitops.Remote  `json:"remotes"`
+	Branches []string         `json:"branches"`
 	Target   GitTarget        `json:"target"`
 	// Hidden counts the uncommitted changes of the project that the session
 	// did not make; they are neither listed nor committed.
@@ -172,7 +173,7 @@ func (a *App) GitStatus(ctx context.Context, remote, branch string) (*GitStatus,
 	a.ws.gitMu.Lock()
 	defer a.ws.gitMu.Unlock()
 	out := &GitStatus{
-		Messages: map[string]string{}, Settings: a.GitSettings(), Remotes: []gitops.Remote{},
+		Messages: map[string]string{}, Settings: a.GitSettings(), Remotes: []gitops.Remote{}, Branches: []string{},
 		OtherStaged: []string{}, CommitBlockers: []string{}, PushBlockers: []string{},
 		Env: gitops.Env{SSHAgent: sshAgent()},
 	}
@@ -199,6 +200,11 @@ func (a *App) GitStatus(ctx context.Context, remote, branch string) (*GitStatus,
 	st.Changes = a.sessionChanges(st.Changes)
 	st.Fingerprint = repo.Fingerprint(st.Head, st.Changes)
 	out.State, out.Hidden, out.OtherStaged = st, all-len(st.Changes), otherStaged(repo, st, st.Changes)
+	if branches, err := repo.Branches(ctx); err == nil {
+		out.Branches = branches
+	} else {
+		return nil, gitError("ブランチの一覧を読めませんでした", err)
+	}
 	out.Env.CredentialHelper = repo.CredentialHelper(ctx)
 	if ident, err := repo.Identity(ctx); err == nil {
 		out.Identity = ident
@@ -272,6 +278,71 @@ func pushBlockers(st *gitops.State, remotes []gitops.Remote, t GitTarget) []stri
 // gitError wraps a git failure; the message is already masked.
 func gitError(msg string, err error) error {
 	return &Error{Code: http.StatusInternalServerError, Msg: msg + ": " + gitops.Mask(err.Error())}
+}
+
+// GitSwitchInput selects a local branch, or a remote-tracking branch from
+// which to create a local branch. Head detects a stale dialog.
+type GitSwitchInput struct {
+	Branch string `json:"branch"`
+	Remote string `json:"remote,omitempty"`
+	Head   string `json:"head"`
+}
+
+type GitSwitchResult struct {
+	Branch string `json:"branch"`
+}
+
+// GitSwitch changes the shared working branch, regardless of its divergence
+// from main or any remote branch. A failed switch leaves Git's protections
+// for local edits in place.
+func (a *App) GitSwitch(ctx context.Context, in GitSwitchInput) (*GitSwitchResult, error) {
+	a.ws.gitMu.Lock()
+	defer a.ws.gitMu.Unlock()
+	repo, err := a.openRepo(ctx)
+	if errors.Is(err, gitops.ErrNotRepo) {
+		return nil, conflict("このディレクトリは Git のリポジトリの中にありません")
+	}
+	if err != nil {
+		return nil, gitError("Git を実行できませんでした", err)
+	}
+	if err := repo.CheckBranchName(ctx, in.Branch); err != nil {
+		return nil, badRequest("ブランチ名が不正です: %s", in.Branch)
+	}
+	st, err := repo.Status(ctx)
+	if err != nil {
+		return nil, gitError("Git の状態を読めませんでした", err)
+	}
+	if in.Head != st.Head {
+		return nil, conflict("確認したあとに HEAD が変わりました。ブランチを確認し直してください")
+	}
+	if st.Operation != "" {
+		return nil, conflict("%s の途中です。ターミナルで完了するか中止してから切り替えてください", st.Operation)
+	}
+	branches, err := repo.Branches(ctx)
+	if err != nil {
+		return nil, gitError("ブランチの一覧を読めませんでした", err)
+	}
+	if in.Remote == "" {
+		if !slices.Contains(branches, in.Branch) {
+			return nil, badRequest("ローカルのブランチがありません: %s", in.Branch)
+		}
+	} else {
+		remotes, err := repo.Remotes(ctx)
+		if err != nil {
+			return nil, gitError("remote の一覧を読めませんでした", err)
+		}
+		rm := remoteNamed(remotes, in.Remote)
+		if rm == nil || !slices.Contains(rm.Branches, in.Branch) {
+			return nil, badRequest("取得済みのリモートブランチがありません: %s/%s", in.Remote, in.Branch)
+		}
+		if slices.Contains(branches, in.Branch) {
+			return nil, conflict("同名のローカルブランチがあります。ローカルの %s を選んでください", in.Branch)
+		}
+	}
+	if err := repo.Switch(ctx, in.Branch, in.Remote); err != nil {
+		return nil, conflict("ブランチを切り替えられませんでした: %s", gitops.Mask(err.Error()))
+	}
+	return &GitSwitchResult{Branch: in.Branch}, nil
 }
 
 // SaveGitSettings stores the project defaults. remote must be a configured
