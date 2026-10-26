@@ -1,0 +1,34 @@
+internal/server/session_test.go
+  s_aa4e6c3231925d::t_58a099ef29fd69 225-327
+internal/store/session.go
+  s_aa4e6c3231925d::t_0a30b2036f00ff 36-38,131,152
+internal/app/app.go
+  s_aa4e6c3231925d::t_1b79b2d80995ac 189-190
+  s_aa4e6c3231925d::t_0a30b2036f00ff 6,153-159,191-198,201-203
+internal/app/git_test.go
+  s_aa4e6c3231925d::t_0a30b2036f00ff 265
+internal/store/session_test.go
+  s_aa4e6c3231925d::t_0a30b2036f00ff 20,24,31,51
+internal/app/git.go
+  s_aa4e6c3231925d::t_0a30b2036f00ff 61-87
+internal/server/server.go
+  s_aa4e6c3231925d::t_0a30b2036f00ff 301-302,308,320,330
+internal/server/projects.go
+  s_aa4e6c3231925d::t_0a30b2036f00ff 353,358,424,520
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "c9706d6c6f6bd64dbe72c895a78dfc5e017dd609",
+  "prompts": {},
+  "sessions": {
+    "s_aa4e6c3231925d": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a1771c-5c27-7be3-8671-54a6abd12e46",
+        "model": "gpt-6.1-sol"
+      },
+      "human_author": "Yoshi Yamaguchi <ymotongpoo@gmail.com>"
+    }
+  }
+}
