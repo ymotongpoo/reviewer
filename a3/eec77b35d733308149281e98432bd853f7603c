@@ -1,0 +1,74 @@
+web/src/api.ts
+  s_aa4e6c3231925d::t_0a30b2036f00ff 109-110
+internal/server/dist/assets/lua-BkhnvKw9.js
+  s_aa4e6c3231925d::t_566bebc7ce9840 1
+internal/server/dist/assets/css-DQ1G2PZT.js
+  s_aa4e6c3231925d::t_566bebc7ce9840 1
+internal/server/dist/assets/ruby-BHsJX1xC.js
+  s_aa4e6c3231925d::t_566bebc7ce9840 1
+web/src/components/Header.tsx
+  s_aa4e6c3231925d::t_d9d18e84604b32 5,13,110,112-115,118-123,125-138,143-149,152,154-155,158,163,165,167,173,175,186,189-190,197-214,222-223,238,255-265
+  s_aa4e6c3231925d::t_58a099ef29fd69 124
+  s_aa4e6c3231925d::t_1b79b2d80995ac 191-196
+internal/server/dist/assets/sql-Cf7vQDD6.js
+  s_aa4e6c3231925d::t_566bebc7ce9840 1
+internal/server/dist/assets/typescript-DpXcg-Pa.js
+  s_aa4e6c3231925d::t_566bebc7ce9840 1
+internal/server/dist/assets/c-BKgGrJoW.js
+  s_aa4e6c3231925d::t_566bebc7ce9840 1
+internal/server/dist/assets/xml-CG8KUCi_.js
+  s_aa4e6c3231925d::t_566bebc7ce9840 1
+web/src/types.ts
+  s_aa4e6c3231925d::t_0a30b2036f00ff 113,122
+web/src/style.css
+  s_aa4e6c3231925d::t_d9d18e84604b32 2541-2551
+  s_aa4e6c3231925d::t_755eaae957a4ab 2536-2540
+  s_aa4e6c3231925d::t_1b79b2d80995ac 2532-2535
+internal/server/dist/assets/vue-D843r4OQ.js
+  s_aa4e6c3231925d::t_566bebc7ce9840 1
+internal/server/dist/assets/rst-vZBKIWqR.js
+  s_aa4e6c3231925d::t_566bebc7ce9840 1
+internal/server/dist/assets/jsx-iDiwp6fv.js
+  s_aa4e6c3231925d::t_566bebc7ce9840 1
+internal/server/dist/assets/php-DG9gG6Ol.js
+  s_aa4e6c3231925d::t_566bebc7ce9840 1
+internal/server/dist/assets/dist-Cyl06WyK.js
+  s_aa4e6c3231925d::t_566bebc7ce9840 1-63
+internal/server/dist/assets/tsx-DFy4sMJJ.js
+  s_aa4e6c3231925d::t_566bebc7ce9840 1
+internal/server/dist/assets/html-derivative-xg5I9Y2T.js
+  s_aa4e6c3231925d::t_566bebc7ce9840 1
+internal/server/dist/assets/graphql-CLJCxaDF.js
+  s_aa4e6c3231925d::t_566bebc7ce9840 1
+internal/server/dist/assets/java-CMMKgqru.js
+  s_aa4e6c3231925d::t_566bebc7ce9840 1
+internal/server/dist/assets/index-cjlqSuer.css
+  s_aa4e6c3231925d::t_566bebc7ce9840 1
+internal/server/dist/assets/html-Dpn1A8GF.js
+  s_aa4e6c3231925d::t_566bebc7ce9840 1
+internal/server/dist/index.html
+  s_aa4e6c3231925d::t_566bebc7ce9840 8-9
+internal/server/dist/assets/index-NMzQbMRy.js
+  s_aa4e6c3231925d::t_566bebc7ce9840 1-256
+internal/server/dist/assets/cpp-HXL56q4k.js
+  s_aa4e6c3231925d::t_566bebc7ce9840 1
+web/e2e/desktop/session-branch.e2e.ts
+  s_aa4e6c3231925d::t_755eaae957a4ab 7,22,43
+  s_aa4e6c3231925d::t_58a099ef29fd69 1-6,8-21,23-42,44-106
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "a3eec77b35d733308149281e98432bd853f7603c",
+  "prompts": {},
+  "sessions": {
+    "s_aa4e6c3231925d": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a1771c-5c27-7be3-8671-54a6abd12e46",
+        "model": "gpt-6.1-sol"
+      },
+      "human_author": "Yoshi Yamaguchi <ymotongpoo@gmail.com>"
+    }
+  }
+}
