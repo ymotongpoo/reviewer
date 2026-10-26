@@ -1,0 +1,26 @@
+internal/agent/t3/client_test.go
+  s_aa4e6c3231925d::t_8014f60bd2965a 130-131,283
+  s_aa4e6c3231925d::t_bbbed5be8f4cf3 12,292-315
+  s_aa4e6c3231925d::t_f5058f106de3df 316-318
+web/e2e/desktop/annotate.e2e.ts
+  s_aa4e6c3231925d::t_bbbed5be8f4cf3 1-52
+internal/agent/t3/client.go
+  s_aa4e6c3231925d::t_8014f60bd2965a 285-286,299,305,309-325,327-328,331-332
+  s_aa4e6c3231925d::t_08f95c510ca2b2 283-284,287-288
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "50d7ff172563e5f1bc0ac0c25604337c0bb4c139",
+  "prompts": {},
+  "sessions": {
+    "s_aa4e6c3231925d": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a1771c-5c27-7be3-8671-54a6abd12e46",
+        "model": "gpt-6.1-sol"
+      },
+      "human_author": "Yoshi Yamaguchi <ymotongpoo@gmail.com>"
+    }
+  }
+}
