@@ -9,6 +9,7 @@ import (
 	"net/http/httptest"
 	"os"
 	"path/filepath"
+	"reflect"
 	"strings"
 	"sync"
 	"testing"
@@ -126,9 +127,8 @@ func (f *fake) tool(name string, args map[string]any) (any, string) {
 	case "orchestrator_capabilities":
 		return map[string]any{"providers": []map[string]any{
 			{"providerInstanceId": "codex", "displayName": "Codex", "models": []map[string]any{{"id": "gpt-x", "label": "GPT-X", "options": []map[string]any{
-				{"id": "reasoningEffort", "label": "Reasoning", "type": "select", "currentValue": "medium", "options": []map[string]any{
-					{"id": "low", "label": "Low"}, {"id": "medium", "label": "Medium", "isDefault": true}, {"id": "xhigh", "label": "Extra High"}}},
-				{"id": "serviceTier", "label": "Service Tier", "type": "select", "options": []map[string]any{{"id": "default", "isDefault": true}}},
+				{"id": "reasoningEffort", "values": []string{"low", "medium", "high", "xhigh", "max", "ultra"}, "default": "medium"},
+				{"id": "serviceTier", "values": []string{"default", "priority"}, "default": "default"},
 			}}}},
 			{"providerInstanceId": "cursor", "displayName": "Cursor", "models": []any{}},
 			{"providerInstanceId": "claudeAgent", "displayName": "Claude", "models": []map[string]any{{"id": "m-new", "label": "M New", "options": []map[string]any{
@@ -280,12 +280,39 @@ func TestModels(t *testing.T) {
 	for _, m := range models {
 		rs = append(rs, reasoning(m))
 	}
-	if want := "reasoningEffort[low:Low medium:Medium xhigh:Extra High]=medium,effort[high:high max:Max]=high,-"; strings.Join(rs, ",") != want {
+	if want := "reasoningEffort[low:low medium:medium high:high xhigh:xhigh max:max ultra:ultra]=medium,effort[high:high max:Max]=high,-"; strings.Join(rs, ",") != want {
 		t.Errorf("reasoning = %v", rs)
 	}
 	// Outside every project, related projects still tell the recent model.
 	if _, recent, _ := client(ts, "tok").Models(context.Background(), "/r"); recent == nil || recent.Model != "m-new" {
 		t.Errorf("recent outside projects = %v", recent)
+	}
+}
+
+func TestReasoningOption(t *testing.T) {
+	for _, tc := range []struct {
+		name, catalog string
+		want          *agent.ModelOption
+	}{
+		{"compact Claude", `[{"id":"fastMode","values":[false,true]},{"id":"effort","values":["low","high","max"],"default":"high"}]`, &agent.ModelOption{
+			ID: "effort", Choices: []agent.Choice{{ID: "low", Label: "low"}, {ID: "high", Label: "high"}, {ID: "max", Label: "max"}}, Default: "high",
+		}},
+		{"legacy Codex", `[{"id":"reasoningEffort","label":"Reasoning","type":"select","currentValue":"xhigh","options":[{"id":"medium","label":"Medium","isDefault":true},{"id":"xhigh","label":"Extra High"}]}]`, &agent.ModelOption{
+			ID: "reasoningEffort", Label: "Reasoning", Choices: []agent.Choice{{ID: "medium", Label: "Medium"}, {ID: "xhigh", Label: "Extra High"}}, Default: "xhigh",
+		}},
+		{"other options", `[{"id":"serviceTier","values":["default","priority"],"default":"default"},{"id":"fastMode","values":[false,true]}]`, nil},
+		{"empty reasoning", `[{"id":"reasoningEffort","values":[]}]`, nil},
+		{"boolean reasoning", `[{"id":"effort","values":[false,true]}]`, nil},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			var options []optionDetail
+			if err := json.Unmarshal([]byte(tc.catalog), &options); err != nil {
+				t.Fatal(err)
+			}
+			if got := reasoningOption(options); !reflect.DeepEqual(got, tc.want) {
+				t.Errorf("reasoning = %+v, want %+v", got, tc.want)
+			}
+		})
 	}
 }
 

@@ -280,8 +280,12 @@ func (c *Client) Attach(ctx context.Context, sessionID, runID string) (agent.Run
 
 // optionDetail describes an option of a model in T3 Code's catalog.
 type optionDetail struct {
-	ID      string `json:"id"`
-	Label   string `json:"label"`
+	ID    string `json:"id"`
+	Label string `json:"label"`
+	// The compact capabilities catalog uses values/default. Older servers
+	// return the full select descriptor below instead.
+	Values  []any  `json:"values"`
+	Default any    `json:"default"`
 	Type    string `json:"type"`
 	Options []struct {
 		ID        string `json:"id"`
@@ -292,28 +296,40 @@ type optionDetail struct {
 }
 
 // reasoningIDs are the ids T3 Code's providers give their reasoning
-// effort option; its label is "Reasoning" for all of them.
+// effort option. The compact catalog does not include labels.
 var reasoningIDs = map[string]bool{"reasoningEffort": true, "effort": true}
 
 // reasoningOption returns the reasoning effort option among opts, or nil.
 func reasoningOption(opts []optionDetail) *agent.ModelOption {
 	for _, o := range opts {
-		if o.Type != "select" || len(o.Options) == 0 || !reasoningIDs[o.ID] && !strings.EqualFold(o.Label, "Reasoning") {
+		if !reasoningIDs[o.ID] && !strings.EqualFold(o.Label, "Reasoning") {
 			continue
 		}
 		mo := &agent.ModelOption{ID: o.ID, Label: o.Label, Choices: []agent.Choice{}}
-		for _, c := range o.Options {
-			label := c.Label
-			if label == "" {
-				label = c.ID
+		if len(o.Values) > 0 {
+			for _, v := range o.Values {
+				if id, ok := v.(string); ok && id != "" {
+					mo.Choices = append(mo.Choices, agent.Choice{ID: id, Label: id})
+				}
 			}
-			mo.Choices = append(mo.Choices, agent.Choice{ID: c.ID, Label: label})
-			if c.IsDefault {
-				mo.Default = c.ID
+			mo.Default, _ = o.Default.(string)
+		} else if o.Type == "select" {
+			for _, c := range o.Options {
+				label := c.Label
+				if label == "" {
+					label = c.ID
+				}
+				mo.Choices = append(mo.Choices, agent.Choice{ID: c.ID, Label: label})
+				if c.IsDefault {
+					mo.Default = c.ID
+				}
+			}
+			if cur, ok := o.CurrentValue.(string); ok && cur != "" {
+				mo.Default = cur
 			}
 		}
-		if cur, ok := o.CurrentValue.(string); ok && cur != "" {
-			mo.Default = cur
+		if len(mo.Choices) == 0 {
+			continue
 		}
 		return mo
 	}
