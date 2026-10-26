@@ -58,6 +58,33 @@ func (a *App) openRepo(ctx context.Context) (*gitops.Repo, error) {
 	return gitops.Open(ctx, a.Proj.Root, exclude)
 }
 
+// validateSessionBranch accepts an unset preference or an existing local
+// branch. The caller holds gitMu while validating and saving the setting.
+func (w *Workspace) validateSessionBranch(ctx context.Context, branch string) error {
+	if branch == "" {
+		return nil
+	}
+	exclude, _ := w.Proj.DataDirInside()
+	repo, err := gitops.Open(ctx, w.Proj.Root, exclude)
+	if errors.Is(err, gitops.ErrNotRepo) {
+		return badRequest("Git のリポジトリではないため、ローカルブランチは設定できません")
+	}
+	if err != nil {
+		return gitError("Git を実行できませんでした", err)
+	}
+	if err := repo.CheckBranchName(ctx, branch); err != nil {
+		return badRequest("ブランチ名が不正です: %s", branch)
+	}
+	branches, err := repo.Branches(ctx)
+	if err != nil {
+		return gitError("ブランチの一覧を読めませんでした", err)
+	}
+	if !slices.Contains(branches, branch) {
+		return badRequest("ローカルのブランチがありません: %s", branch)
+	}
+	return nil
+}
+
 // gitRepo reports whether the project is inside a Git work tree. It is
 // checked once and updated by every GitStatus.
 func (a *App) gitRepo() bool {

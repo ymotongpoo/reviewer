@@ -298,13 +298,14 @@ func (p *Project) handleSessions(w http.ResponseWriter, r *http.Request) {
 
 func (p *Project) handleCreateSession(w http.ResponseWriter, r *http.Request) {
 	var req struct {
-		Name string `json:"name"`
+		Name   string `json:"name"`
+		Branch string `json:"branch"`
 	}
 	if err := decode(r, &req); err != nil {
 		writeError(w, err)
 		return
 	}
-	np, err := p.reg.CreateSession(p.ID, req.Name)
+	np, err := p.reg.CreateSession(r.Context(), p.ID, req.Name, req.Branch)
 	if err != nil {
 		writeError(w, err)
 		return
@@ -316,6 +317,7 @@ func (p *Project) handleUpdateSession(w http.ResponseWriter, r *http.Request) {
 	var req struct {
 		Name     *string `json:"name"`
 		Archived *bool   `json:"archived"`
+		Branch   *string `json:"branch"`
 	}
 	if err := decode(r, &req); err != nil {
 		writeError(w, err)
@@ -325,7 +327,7 @@ func (p *Project) handleUpdateSession(w http.ResponseWriter, r *http.Request) {
 		writeError(w, &app.Error{Code: http.StatusConflict, Msg: "エージェントの対応中はアーカイブできません"})
 		return
 	}
-	ss, err := p.App.UpdateSession(req.Name, req.Archived)
+	ss, err := p.App.UpdateSession(r.Context(), req.Name, req.Archived, req.Branch)
 	if err != nil {
 		writeError(w, err)
 		return

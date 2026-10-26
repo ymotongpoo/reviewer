@@ -3,6 +3,7 @@
 package app
 
 import (
+	"context"
 	"crypto/sha256"
 	"encoding/hex"
 	"errors"
@@ -149,8 +150,13 @@ func (w *Workspace) Sessions() ([]store.Session, error) {
 }
 
 // CreateSession adds a session named name.
-func (w *Workspace) CreateSession(name string) (store.Session, error) {
-	s, err := store.CreateSession(w.DataDir, name, time.Now())
+func (w *Workspace) CreateSession(ctx context.Context, name, branch string) (store.Session, error) {
+	w.gitMu.Lock()
+	defer w.gitMu.Unlock()
+	if err := w.validateSessionBranch(ctx, branch); err != nil {
+		return store.Session{}, err
+	}
+	s, err := store.CreateSession(w.DataDir, name, branch, time.Now())
 	if err != nil {
 		if _, cerr := store.CleanSessionName(name); cerr != nil {
 			return s, badRequest("%s", cerr.Error())
@@ -180,11 +186,21 @@ func (a *App) SessionInfo() store.Session {
 	return a.Session
 }
 
-// UpdateSession renames the session (when name is not nil) and archives or
-// restores it (when archived is not nil).
-func (a *App) UpdateSession(name *string, archived *bool) (store.Session, error) {
+// UpdateSession changes the supplied session settings. A branch setting is
+// a saved preference; checking out that branch uses GitSwitch explicitly.
+func (a *App) UpdateSession(ctx context.Context, name *string, archived *bool, branch *string) (store.Session, error) {
+	a.ws.gitMu.Lock()
+	defer a.ws.gitMu.Unlock()
+	if branch != nil {
+		if err := a.ws.validateSessionBranch(ctx, *branch); err != nil {
+			return a.SessionInfo(), err
+		}
+	}
 	a.mu.Lock()
 	s := a.Session
+	if branch != nil {
+		s.Branch = *branch
+	}
 	if name != nil {
 		n, err := store.CleanSessionName(*name)
 		if err != nil {

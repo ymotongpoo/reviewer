@@ -33,6 +33,9 @@ type Session struct {
 	ID        string    `json:"id"`
 	Name      string    `json:"name"`
 	CreatedAt time.Time `json:"createdAt"`
+	// Branch is the local branch selected for this review session. The
+	// working tree remains shared; opening a session does not check it out.
+	Branch string `json:"branch,omitempty"`
 	// Archived sessions are hidden from the session lists.
 	Archived bool `json:"archived,omitempty"`
 }
@@ -125,7 +128,7 @@ func CleanSessionName(name string) (string, error) {
 }
 
 // CreateSession creates a session named name under the data directory root.
-func CreateSession(root, name string, now time.Time) (Session, error) {
+func CreateSession(root, name, branch string, now time.Time) (Session, error) {
 	name, err := CleanSessionName(name)
 	if err != nil {
 		return Session{}, err
@@ -146,7 +149,7 @@ func CreateSession(root, name string, now time.Time) (Session, error) {
 			}
 			return Session{}, err
 		}
-		s := Session{ID: id, Name: name, CreatedAt: now}
+		s := Session{ID: id, Name: name, Branch: branch, CreatedAt: now}
 		return s, SaveSession(root, s)
 	}
 	return Session{}, errors.New("セッションの ID を割り当てられませんでした")

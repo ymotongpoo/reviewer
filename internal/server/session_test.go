@@ -222,6 +222,109 @@ func TestSessions(t *testing.T) {
 	}
 }
 
+func TestSessionBranchPreferences(t *testing.T) {
+	if _, err := exec.LookPath("git"); err != nil {
+		t.Skip("git is not installed")
+	}
+	t.Setenv("GIT_CONFIG_NOSYSTEM", "1")
+	t.Setenv("GIT_CONFIG_GLOBAL", os.DevNull)
+	e := newEnv(t)
+	dir := filepath.Join(e.root, "a")
+	git := func(args ...string) string {
+		t.Helper()
+		cmd := exec.Command("git", args...)
+		cmd.Dir = dir
+		out, err := cmd.CombinedOutput()
+		if err != nil {
+			t.Fatalf("git %v: %v %s", args, err, out)
+		}
+		return strings.TrimSpace(string(out))
+	}
+	git("init", "-q", "-b", "main")
+	git("config", "user.name", "Tester")
+	git("config", "user.email", "tester@example.invalid")
+	git("config", "commit.gpgsign", "false")
+	git("add", "a.md")
+	git("commit", "-q", "-m", "initial")
+	git("branch", "review/one")
+	git("branch", "review/two")
+	base := e.ts.URL + "/p/" + e.open(t, dir)
+	var first, second struct {
+		URL     string
+		Session struct{ ID, Branch string }
+	}
+	for _, tc := range []struct {
+		branch string
+		out    any
+	}{{"review/one", &first}, {"review/two", &second}} {
+		input, _ := json.Marshal(map[string]string{"name": tc.branch, "branch": tc.branch})
+		res, body := do(t, "POST", base+"/api/sessions", string(input), bearer)
+		if res.StatusCode != 200 {
+			t.Fatalf("create: %d %s", res.StatusCode, body)
+		}
+		if err := json.Unmarshal([]byte(body), tc.out); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if first.Session.Branch != "review/one" || second.Session.Branch != "review/two" {
+		t.Fatalf("created preferences: %+v %+v", first, second)
+	}
+	getBranch := func(url string) string {
+		t.Helper()
+		res, body := do(t, "GET", e.ts.URL+url+"api/project", "", bearer)
+		var info struct{ Session struct{ Branch string } }
+		if err := json.Unmarshal([]byte(body), &info); res.StatusCode != 200 || err != nil {
+			t.Fatalf("project: %d %s: %v", res.StatusCode, body, err)
+		}
+		return info.Session.Branch
+	}
+	patch := func(url, input string, want int) {
+		t.Helper()
+		res, body := do(t, "PATCH", e.ts.URL+url+"api/session", input, bearer)
+		if res.StatusCode != want {
+			t.Fatalf("patch %s: %d %s", input, res.StatusCode, body)
+		}
+	}
+	patch(first.URL, `{"branch":"main"}`, 200)
+	patch(first.URL, `{"name":"renamed"}`, 200)
+	e.reg.CloseAll()
+	if getBranch(first.URL) != "main" || getBranch(second.URL) != "review/two" {
+		t.Fatal("session preferences changed after reopening")
+	}
+	_, body := do(t, "GET", base+"/api/sessions", "", bearer)
+	var list struct{ Sessions []SessionSummary }
+	if err := json.Unmarshal([]byte(body), &list); err != nil {
+		t.Fatal(err)
+	}
+	for _, s := range list.Sessions {
+		if s.ID == second.Session.ID && s.Branch != "review/two" {
+			t.Fatalf("session summary lost its branch: %+v", s)
+		}
+	}
+	for _, branch := range []string{"missing", "origin/review/one", "--force", "@{-1}"} {
+		input, _ := json.Marshal(map[string]string{"branch": branch, "name": "invalid edit"})
+		patch(first.URL, string(input), 400)
+		if getBranch(first.URL) != "main" {
+			t.Fatal("invalid update changed the saved branch")
+		}
+		res, body := do(t, "POST", base+"/api/sessions", string(input), bearer)
+		if res.StatusCode != 400 {
+			t.Fatalf("invalid create: %d %s", res.StatusCode, body)
+		}
+	}
+	patch(first.URL, `{"branch":""}`, 200)
+	if getBranch(first.URL) != "" || getBranch(second.URL) != "review/two" {
+		t.Fatal("clearing one session changed another's branch")
+	}
+	if got := git("branch", "--show-current"); got != "main" {
+		t.Fatalf("saving preferences performed an implicit checkout: %q", got)
+	}
+	other := e.ts.URL + "/p/" + e.open(t, filepath.Join(e.root, "b"))
+	if res, body := do(t, "PATCH", other+"/api/session", `{"branch":"main"}`, bearer); res.StatusCode != 400 {
+		t.Fatalf("non-Git preference: %d %s", res.StatusCode, body)
+	}
+}
+
 func TestSessionResponseImportedBySession(t *testing.T) {
 	e := newEnv(t)
 	dir := filepath.Join(e.root, "a")

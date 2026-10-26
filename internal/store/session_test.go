@@ -17,18 +17,18 @@ func TestSessions(t *testing.T) {
 		t.Errorf("default session dir = %s", SessionDir(root, DefaultSession))
 	}
 	t0 := time.Date(2026, 10, 1, 0, 0, 0, 0, time.UTC)
-	b, err := CreateSession(root, " book  B ", t0.Add(time.Hour))
+	b, err := CreateSession(root, " book  B ", "review/b", t0.Add(time.Hour))
 	if err != nil {
 		t.Fatal(err)
 	}
-	a, err := CreateSession(root, "book A", t0)
+	a, err := CreateSession(root, "book A", "", t0)
 	if err != nil {
 		t.Fatal(err)
 	}
 	if b.Name != "book B" || !ValidSessionID(a.ID) || a.ID == b.ID {
 		t.Errorf("created %+v %+v", a, b)
 	}
-	if _, err := CreateSession(root, "   ", t0); err == nil {
+	if _, err := CreateSession(root, "   ", "", t0); err == nil {
 		t.Error("created a session without a name")
 	}
 	// Directories without session.json are ignored.
@@ -48,7 +48,7 @@ func TestSessions(t *testing.T) {
 	if got, _ := ReadSession(root, DefaultSession); got.Name != "全体" {
 		t.Errorf("renamed default = %+v", got)
 	}
-	if got, _ := ReadSession(root, b.ID); !got.Archived {
+	if got, _ := ReadSession(root, b.ID); !got.Archived || got.Branch != "review/b" {
 		t.Errorf("archived = %+v", got)
 	}
 	if _, err := ReadSession(root, "../x"); err == nil {

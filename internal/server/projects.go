@@ -350,12 +350,12 @@ func (r *Registry) GetSession(id, sid string) (*Project, error) {
 }
 
 // CreateSession adds a session named name to the directory with id.
-func (r *Registry) CreateSession(id, name string) (*Project, error) {
+func (r *Registry) CreateSession(ctx context.Context, id, name, branch string) (*Project, error) {
 	d, err := r.dir(id)
 	if err != nil {
 		return nil, err
 	}
-	s, err := d.WS.CreateSession(name)
+	s, err := d.WS.CreateSession(ctx, name, branch)
 	if err != nil {
 		return nil, err
 	}
@@ -421,6 +421,7 @@ type SessionSummary struct {
 	URL         string              `json:"url"`
 	CreatedAt   time.Time           `json:"createdAt"`
 	Archived    bool                `json:"archived,omitempty"`
+	Branch      string              `json:"branch,omitempty"`
 	Open        bool                `json:"open"`
 	Initialized bool                `json:"initialized"`
 	Round       int                 `json:"round,omitempty"`
@@ -516,7 +517,7 @@ func sessionSummaries(id, dataDir string, d *Dir, archived bool) []SessionSummar
 		if ss.Archived && !archived {
 			continue
 		}
-		sum := SessionSummary{ID: ss.ID, Name: ss.Name, URL: sessionPath(id, ss.ID), CreatedAt: ss.CreatedAt, Archived: ss.Archived}
+		sum := SessionSummary{ID: ss.ID, Name: ss.Name, URL: sessionPath(id, ss.ID), CreatedAt: ss.CreatedAt, Archived: ss.Archived, Branch: ss.Branch}
 		if st, binding, ok := store.Peek(store.SessionDir(dataDir, ss.ID)); ok {
 			sum.Initialized, sum.Round, sum.RoundStatus, sum.Agent = true, st.Round, st.RoundStatus, binding
 		}

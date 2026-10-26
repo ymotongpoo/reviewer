@@ -262,7 +262,7 @@ func TestGitShowsOnlyTheSessionsChanges(t *testing.T) {
 
 	at("old.md", "from before\n")
 	at("ch1.md", "# ch1\nedited before\n")
-	info, err := a.Workspace().CreateSession("second")
+	info, err := a.Workspace().CreateSession(ctx, "second", "")
 	if err != nil {
 		t.Fatal(err)
 	}
