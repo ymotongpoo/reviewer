@@ -81,6 +81,12 @@ type SessionCreator interface {
 	CreateSession(ctx context.Context, dir, title string, opts SessionOptions) (Session, error)
 }
 
+// SessionConfigurer changes the model and options of an existing session.
+// Agents that support only their own defaults do not implement it.
+type SessionConfigurer interface {
+	ConfigureSession(ctx context.Context, sessionID string, model ModelRef) error
+}
+
 // SessionOptions configure a new session. Agents ignore what they do not
 // support.
 type SessionOptions struct {

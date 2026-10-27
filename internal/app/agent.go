@@ -113,10 +113,11 @@ type AgentInfo struct {
 	AutoSend  bool   `json:"autoSend"`
 	// CanCreate tells whether a new session can be created as the target,
 	// and CanPickModel whether its model can be chosen.
-	CanCreate    bool                `json:"canCreate"`
-	CanPickModel bool                `json:"canPickModel"`
-	Binding      *store.AgentBinding `json:"binding,omitempty"`
-	Active       []*store.AgentRun   `json:"active"`
+	CanCreate         bool                `json:"canCreate"`
+	CanPickModel      bool                `json:"canPickModel"`
+	CanConfigureModel bool                `json:"canConfigureModel"`
+	Binding           *store.AgentBinding `json:"binding,omitempty"`
+	Active            []*store.AgentRun   `json:"active"`
 }
 
 // AgentInfo returns the agent status.
@@ -131,6 +132,8 @@ func (a *App) AgentInfo() AgentInfo {
 		info.Available, info.Kind, info.Name = true, ag.Kind(), ag.Name()
 		_, info.CanCreate = ag.(agent.SessionCreator)
 		_, info.CanPickModel = ag.(agent.ModelLister)
+		_, canConfigure := ag.(agent.SessionConfigurer)
+		info.CanConfigureModel = info.CanPickModel && canConfigure
 		if binding != nil && binding.Kind != ag.Kind() {
 			info.Binding = nil
 		}
@@ -330,6 +333,39 @@ const autoSentHeader = "（このメッセージは reviewer から自動送信�
 
 // SendToAgent sends the feedback of submitted round n to the bound session.
 func (a *App) SendToAgent(ctx context.Context, n int) (*store.AgentRun, error) {
+	return a.SendToAgentWithModel(ctx, n, agent.ModelRef{})
+}
+
+// ValidateFeedbackModel validates an optional selection before a round is
+// submitted. Empty means to keep the bound session's current configuration.
+func (a *App) ValidateFeedbackModel(model agent.ModelRef) error {
+	if model.Provider == "" && model.Model == "" && len(model.Options) == 0 {
+		return nil
+	}
+	if model.Provider == "" || model.Model == "" {
+		return badRequest("モデルのプロバイダーとモデル名を指定してください")
+	}
+	for _, option := range model.Options {
+		if option.ID == "" || option.Value == "" {
+			return badRequest("モデルのオプション名と値を指定してください")
+		}
+	}
+	ag, err := a.agentOrErr()
+	if err != nil {
+		return err
+	}
+	if _, ok := ag.(agent.SessionConfigurer); !ok {
+		return badRequest("%s では既存セッションのモデルを変更できません", ag.Name())
+	}
+	return nil
+}
+
+// SendToAgentWithModel configures the bound session, when a model was
+// specified, and sends the feedback of submitted round n to that session.
+func (a *App) SendToAgentWithModel(ctx context.Context, n int, model agent.ModelRef) (*store.AgentRun, error) {
+	if err := a.ValidateFeedbackModel(model); err != nil {
+		return nil, err
+	}
 	ag, err := a.agentOrErr()
 	if err != nil {
 		return nil, err
@@ -359,6 +395,16 @@ func (a *App) SendToAgent(ctx context.Context, n int) (*store.AgentRun, error) {
 		}
 	}
 	a.agents.mu.Unlock()
+
+	if model.Model != "" {
+		configurer, ok := ag.(agent.SessionConfigurer)
+		if !ok {
+			return nil, badRequest("%s では既存セッションのモデルを変更できません", ag.Name())
+		}
+		if err := configurer.ConfigureSession(ctx, binding.SessionID, model); err != nil {
+			return nil, &Error{Code: http.StatusBadGateway, Msg: "モデルと推論レベルを設定できませんでした: " + err.Error()}
+		}
+	}
 
 	// The submission time keeps keys unique when a data directory is recreated
 	// and round numbers start over.

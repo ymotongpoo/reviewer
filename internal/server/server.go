@@ -518,7 +518,8 @@ func (p *Project) handleDeleteReply(w http.ResponseWriter, r *http.Request) {
 }
 
 type submitReq struct {
-	SendToAgent bool `json:"sendToAgent"`
+	SendToAgent bool           `json:"sendToAgent"`
+	Model       agent.ModelRef `json:"model"`
 }
 
 type submitRes struct {
@@ -535,6 +536,14 @@ func (p *Project) handleSubmit(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 	}
+	if !req.SendToAgent && (req.Model.Model != "" || req.Model.Provider != "" || len(req.Model.Options) > 0) {
+		writeError(w, &app.Error{Code: http.StatusBadRequest, Msg: "モデルはエージェントに送信する場合だけ指定できます"})
+		return
+	}
+	if err := p.App.ValidateFeedbackModel(req.Model); err != nil {
+		writeError(w, err)
+		return
+	}
 	res, err := p.App.Submit()
 	if err != nil {
 		writeError(w, err)
@@ -543,7 +552,7 @@ func (p *Project) handleSubmit(w http.ResponseWriter, r *http.Request) {
 	out := submitRes{SubmitResult: res}
 	if req.SendToAgent {
 		// The round is submitted either way; a failed send can be retried.
-		run, err := p.App.SendToAgent(r.Context(), res.Round)
+		run, err := p.App.SendToAgentWithModel(r.Context(), res.Round, req.Model)
 		if err != nil {
 			out.AgentError = err.Error()
 		}
@@ -596,13 +605,14 @@ func (p *Project) handleAgentBinding(w http.ResponseWriter, r *http.Request) {
 
 func (p *Project) handleAgentSend(w http.ResponseWriter, r *http.Request) {
 	var req struct {
-		Round int `json:"round"`
+		Round int            `json:"round"`
+		Model agent.ModelRef `json:"model"`
 	}
 	if err := decode(r, &req); err != nil {
 		writeError(w, err)
 		return
 	}
-	run, err := p.App.SendToAgent(r.Context(), req.Round)
+	run, err := p.App.SendToAgentWithModel(r.Context(), req.Round, req.Model)
 	respond(w, run, err)
 }
 

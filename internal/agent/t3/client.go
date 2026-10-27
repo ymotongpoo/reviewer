@@ -240,6 +240,19 @@ func (c *Client) Models(ctx context.Context, dir string) ([]agent.Model, *agent.
 	return models, recent, nil
 }
 
+// ConfigureSession applies a model selection to the existing thread, keeping
+// its conversation, workspace and permission modes.
+func (c *Client) ConfigureSession(ctx context.Context, sessionID string, model agent.ModelRef) error {
+	if sessionID == "" || model.Provider == "" || model.Model == "" {
+		return errors.New("送信先のスレッドとモデルを指定してください")
+	}
+	selection := map[string]any{"instanceId": model.Provider, "model": model.Model}
+	if len(model.Options) > 0 {
+		selection["options"] = model.Options
+	}
+	return c.call(ctx, "t3_thread_configure", map[string]any{"threadId": sessionID, "modelSelection": selection}, nil)
+}
+
 // Start implements agent.Agent. The message is queued behind a turn that
 // is in progress rather than steering it.
 func (c *Client) Start(ctx context.Context, r agent.Request) (agent.Run, error) {

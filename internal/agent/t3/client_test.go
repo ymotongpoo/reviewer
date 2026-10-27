@@ -141,6 +141,11 @@ func (f *fake) tool(name string, args map[string]any) (any, string) {
 		f.launched = args
 		f.mu.Unlock()
 		return map[string]any{"threadId": "t-launched", "projectId": args["projectId"]}, ""
+	case "t3_thread_configure":
+		if args["threadId"] == "t-busy" {
+			return nil, "The target thread is busy."
+		}
+		return map[string]any{"sequence": 1}, ""
 	case "t3_thread_send":
 		if args["threadId"] == "t-busy" {
 			return nil, `{"message":"The target thread has broader permission modes than the caller."}`
@@ -286,6 +291,33 @@ func TestModels(t *testing.T) {
 	// Outside every project, related projects still tell the recent model.
 	if _, recent, _ := client(ts, "tok").Models(context.Background(), "/r"); recent == nil || recent.Model != "m-new" {
 		t.Errorf("recent outside projects = %v", recent)
+	}
+}
+
+func TestConfigureExistingSession(t *testing.T) {
+	f, ts := newFake(t)
+	c := client(ts, "tok")
+	model := agent.ModelRef{Provider: "codex", Model: "gpt-x", Options: []agent.OptionValue{{ID: "reasoningEffort", Value: "xhigh"}}}
+	if err := c.ConfigureSession(context.Background(), "t-existing", model); err != nil {
+		t.Fatal(err)
+	}
+	calls := f.called("t3_thread_configure")
+	want := map[string]any{
+		"threadId": "t-existing", "modelSelection": map[string]any{
+			"instanceId": "codex", "model": "gpt-x", "options": []any{map[string]any{"id": "reasoningEffort", "value": "xhigh"}},
+		},
+	}
+	if len(calls) != 1 || !reflect.DeepEqual(calls[0], want) {
+		t.Fatalf("configure = %v, want %v", calls, want)
+	}
+	if len(f.called("t3_thread_launch")) != 0 || len(f.called("t3_thread_send")) != 0 {
+		t.Fatal("configuration created a thread or sent feedback")
+	}
+	if err := c.ConfigureSession(context.Background(), "t-busy", model); err == nil || !strings.Contains(err.Error(), "busy") {
+		t.Fatalf("configure failure = %v", err)
+	}
+	if err := c.ConfigureSession(context.Background(), "t-existing", agent.ModelRef{Model: "gpt-x"}); err == nil {
+		t.Fatal("accepted a selection without a provider")
 	}
 }
 
