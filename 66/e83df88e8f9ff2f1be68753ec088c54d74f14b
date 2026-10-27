@@ -1,0 +1,70 @@
+internal/server/dist/assets/html-iPbD8WpW.js
+  s_aa4e6c3231925d::t_94f1aa198d44e0 1
+internal/server/dist/assets/c-8NguNkev.js
+  s_aa4e6c3231925d::t_94f1aa198d44e0 1
+web/src/types.ts
+  s_aa4e6c3231925d::t_63c4455a328391 361
+web/e2e/desktop/submit-model.e2e.ts
+  s_aa4e6c3231925d::t_0ccf1f4978191d 30,33,89
+  s_aa4e6c3231925d::t_7e25fddbb8fcc7 1-29,31-32,34-88,90-91
+internal/server/dist/assets/sql-6kpbZQ7l.js
+  s_aa4e6c3231925d::t_94f1aa198d44e0 1
+internal/server/dist/assets/xml-D1KEj_E5.js
+  s_aa4e6c3231925d::t_94f1aa198d44e0 1
+internal/server/dist/assets/tsx-CuuOU1DX.js
+  s_aa4e6c3231925d::t_94f1aa198d44e0 1
+internal/server/dist/assets/jsx-BOiDDGIu.js
+  s_aa4e6c3231925d::t_94f1aa198d44e0 1
+internal/server/dist/index.html
+  s_aa4e6c3231925d::t_94f1aa198d44e0 8
+internal/server/dist/assets/java-DE4p9h_N.js
+  s_aa4e6c3231925d::t_94f1aa198d44e0 1
+internal/server/dist/assets/rst-B1VYUTZ1.js
+  s_aa4e6c3231925d::t_94f1aa198d44e0 1
+web/src/api.ts
+  s_aa4e6c3231925d::t_63c4455a328391 138,148
+internal/server/dist/assets/graphql-BdPKGeHn.js
+  s_aa4e6c3231925d::t_94f1aa198d44e0 1
+web/src/components/Header.tsx
+  s_aa4e6c3231925d::t_63c4455a328391 7,13,443,456,505-509
+  s_aa4e6c3231925d::t_9b3c8660ecaa8e 510
+web/src/components/Agent.tsx
+  s_aa4e6c3231925d::t_63c4455a328391 66-70,77,104,278,308-310
+  s_aa4e6c3231925d::t_6bade30d8878f3 61-64,289
+internal/server/dist/assets/html-derivative-BPLYjUCH.js
+  s_aa4e6c3231925d::t_94f1aa198d44e0 1
+internal/server/dist/assets/cpp-CYR-JlcD.js
+  s_aa4e6c3231925d::t_94f1aa198d44e0 1
+internal/server/dist/assets/dist-BgbxkwYm.js
+  s_aa4e6c3231925d::t_94f1aa198d44e0 1-63
+internal/server/dist/assets/index-DxUVRHQf.js
+  s_aa4e6c3231925d::t_94f1aa198d44e0 1-256
+internal/server/dist/assets/ruby-CC7HLeoj.js
+  s_aa4e6c3231925d::t_94f1aa198d44e0 1
+internal/server/dist/assets/typescript-B7E7m6X4.js
+  s_aa4e6c3231925d::t_94f1aa198d44e0 1
+internal/server/dist/assets/vue-BXBOvT-s.js
+  s_aa4e6c3231925d::t_94f1aa198d44e0 1
+internal/server/dist/assets/lua-DRZc_XOV.js
+  s_aa4e6c3231925d::t_94f1aa198d44e0 1
+internal/server/dist/assets/css-h411Orxg.js
+  s_aa4e6c3231925d::t_94f1aa198d44e0 1
+internal/server/dist/assets/php-FqrCQkhz.js
+  s_aa4e6c3231925d::t_94f1aa198d44e0 1
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "66e83df88e8f9ff2f1be68753ec088c54d74f14b",
+  "prompts": {},
+  "sessions": {
+    "s_aa4e6c3231925d": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a1771c-5c27-7be3-8671-54a6abd12e46",
+        "model": "gpt-6.1-sol"
+      },
+      "human_author": "Yoshi Yamaguchi <ymotongpoo@gmail.com>"
+    }
+  }
+}
