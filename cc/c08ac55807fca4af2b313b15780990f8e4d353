@@ -1,0 +1,34 @@
+internal/agent/agent.go
+  s_aa4e6c3231925d::t_63c4455a328391 84-89
+internal/agent/t3/client.go
+  s_aa4e6c3231925d::t_63c4455a328391 243-255
+internal/server/server.go
+  s_aa4e6c3231925d::t_63c4455a328391 521-522,539-546,555,608-609,615
+internal/app/agent.go
+  s_aa4e6c3231925d::t_63c4455a328391 116-120,135-136,336-368,399,405-407
+  s_aa4e6c3231925d::t_6bade30d8878f3 400-404
+  s_aa4e6c3231925d::t_e7ede553167e0e 408
+internal/agent/t3/client_test.go
+  s_aa4e6c3231925d::t_6bade30d8878f3 144-148,297-321
+  s_aa4e6c3231925d::t_7dd1246ff47454 322-323
+internal/server/submit_model_test.go
+  s_aa4e6c3231925d::t_81913228e73151 105,132-134
+  s_aa4e6c3231925d::t_0e4184d0c58a0b 1-61,65-104,106-131,135-185
+  s_aa4e6c3231925d::t_ef8eee443e0881 62-64
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "ccc08ac55807fca4af2b313b15780990f8e4d353",
+  "prompts": {},
+  "sessions": {
+    "s_aa4e6c3231925d": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a1771c-5c27-7be3-8671-54a6abd12e46",
+        "model": "gpt-6.1-sol"
+      },
+      "human_author": "Yoshi Yamaguchi <ymotongpoo@gmail.com>"
+    }
+  }
+}
