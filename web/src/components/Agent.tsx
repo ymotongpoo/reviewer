@@ -58,19 +58,23 @@ function withDefaults(m: AgentModel): ModelRef {
 }
 
 /**
- * Model of a new session, grouped by provider, and its reasoning effort
- * when the model has one. It starts at the model most recently used for
- * the directory. Agents without a model catalog render nothing and pick
- * the model themselves.
+ * Model and reasoning effort, grouped by provider. New sessions start at
+ * the directory's most recent model. With allowDefault, an empty choice
+ * keeps the existing destination's settings. Agents without a catalog
+ * render nothing and pick the model themselves.
  */
-export function ModelSelect({ value, onChange }: { value: ModelRef | null; onChange: (m: ModelRef | null) => void }) {
+export function ModelSelect({ value, onChange, allowDefault = false }: {
+  value: ModelRef | null
+  onChange: (m: ModelRef | null) => void
+  allowDefault?: boolean
+}) {
   const [models, setModels] = useState<AgentModel[] | null>(null)
   const [error, setError] = useState<string | null>(null)
   useEffect(() => {
     if (!agentInfo.value?.canPickModel) return
     api.agentModels().then((r) => {
       setModels(r.models)
-      if (value) return
+      if (value || allowDefault) return
       const recent = r.recent && r.models.find((m) => modelKey(m) === modelKey(r.recent!))
       const first = recent ?? r.models[0]
       onChange(first ? withDefaults(first) : null)
@@ -97,6 +101,7 @@ export function ModelSelect({ value, onChange }: { value: ModelRef | null; onCha
           const m = models.find((m) => modelKey(m) === e.currentTarget.value)
           onChange(m ? withDefaults(m) : null)
         }}>
+          {allowDefault && <option value="">送信先の設定を使う</option>}
           {groups.map(([name, ms]) => (
             <optgroup label={name}>
               {ms.map((m) => <option value={modelKey(m)}>{m.label}</option>)}
@@ -270,6 +275,7 @@ export function SessionPicker({
 /** Progress of the agent for a round, shown on the overview page. */
 export function AgentPanel({ round }: { round: number }) {
   const a = agentInfo.value
+  const [model, setModel] = useState<ModelRef | null>(null)
   useEffect(() => {
     void showAgentRound(round)
   }, [round])
@@ -280,7 +286,7 @@ export function AgentPanel({ round }: { round: number }) {
 
   async function send() {
     try {
-      await api.agentSend(round)
+      await api.agentSend(round, a?.canConfigureModel ? model ?? undefined : undefined)
       await refreshAgent()
     } catch (e) {
       toast((e as Error).message, 'error')
@@ -299,6 +305,9 @@ export function AgentPanel({ round }: { round: number }) {
         )}
       </div>
       {!a.binding && <p class="muted">送信先のセッションが選ばれていません。右上の「🤖 {a.name}」から選んでください。</p>}
+      {submitted && a.binding && !running && a.canConfigureModel && (
+        <ModelSelect value={model} onChange={setModel} allowDefault />
+      )}
       {a.binding && runs.length === 0 && (
         <p class="muted">
           まだ送信していません。{submitted ? '「送信」を押すと' : '提出時に'}「{a.binding.title}」へフィードバックを送ります。

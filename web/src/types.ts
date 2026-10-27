@@ -358,6 +358,7 @@ export interface AgentInfo {
   /** Whether a new session can be created as the target, and whether its model can be chosen. */
   canCreate?: boolean
   canPickModel?: boolean
+  canConfigureModel?: boolean
 }
 
 export interface ModelRef {

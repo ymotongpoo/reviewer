@@ -135,7 +135,7 @@ export const api = {
   updateReply: (id: string, rid: string, body: string) =>
     request<Comment>('PATCH', `/api/comments/${q(id)}/replies/${q(rid)}`, { body }),
   deleteReply: (id: string, rid: string) => request<Comment>('DELETE', `/api/comments/${q(id)}/replies/${q(rid)}`),
-  submit: (sendToAgent = false) => request<SubmitResult>('POST', '/api/rounds/submit', { sendToAgent }),
+  submit: (sendToAgent = false, model?: ModelRef) => request<SubmitResult>('POST', '/api/rounds/submit', { sendToAgent, model }),
   openRound: () => request<{ ok: boolean }>('POST', '/api/rounds/open'),
   agent: () => request<AgentInfo>('GET', '/api/agent'),
   agentSessions: (allProjects = false) =>
@@ -145,7 +145,7 @@ export const api = {
   agentModels: () => request<AgentModels>('GET', '/api/agent/models'),
   createAgentSession: (input: { title?: string; model?: ModelRef }) =>
     request<{ binding: AgentBinding }>('POST', '/api/agent/sessions', input).then((r) => r.binding),
-  agentSend: (round: number) => request<AgentRun>('POST', '/api/agent/send', { round }),
+  agentSend: (round: number, model?: ModelRef) => request<AgentRun>('POST', '/api/agent/send', { round, model }),
   agentRuns: (round: number) => request<{ runs: AgentRunView[] }>('GET', `/api/agent/runs?round=${round}`).then((r) => r.runs),
   agentStop: (id: string) => request<{ ok: boolean }>('POST', `/api/agent/runs/${q(id)}/stop`),
   agentAnswer: (id: string, choice: string, approvalId?: string) =>

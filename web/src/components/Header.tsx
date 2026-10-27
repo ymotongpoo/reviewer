@@ -4,13 +4,13 @@ import { api, projectId, sessionId } from '../api'
 import { copyText } from '../clipboard'
 import { agentInfo, comments, dirtyReplies, draftCount, flushComposers, refreshComments, dismissResponseBanner, gitStatus, info, refreshAll, refreshGit, refreshInfo, refreshSessions, responseBanner, sessions, toast } from '../state'
 import { connState } from '../connection'
-import { AgentChip } from './Agent'
+import { AgentChip, ModelSelect } from './Agent'
 import { AnnotateButton } from './Annotate'
 import { GitButton } from './Git'
 import { isCompact, isNarrow } from '../media'
 import { closeTransientUI, drawerOpen, headerMenuOpen } from '../ui'
 import { SheetBackdrop, useDismiss } from './Sheet'
-import type { GitStatus, ProjectSummary, SessionSummary, SubmitResult } from '../types'
+import type { GitStatus, ModelRef, ProjectSummary, SessionSummary, SubmitResult } from '../types'
 
 export function CopyPrompt({ prompt, label = '指示文をコピー' }: { prompt: string; label?: string }) {
   const [done, setDone] = useState(false)
@@ -440,6 +440,7 @@ function SubmitDialog({
   const ag = agentInfo.value
   const canSend = !!ag?.available && !!ag.binding
   const [send, setSend] = useState(canSend && !!ag?.autoSend)
+  const [model, setModel] = useState<ModelRef | null>(null)
   const i = info.value!
   const all = comments.value
   const drafts = all.filter((c) => c.status === 'draft')
@@ -452,7 +453,7 @@ function SubmitDialog({
     if (preparing || saveError) return
     setBusy(true)
     try {
-      const res = await api.submit(canSend && send)
+      const res = await api.submit(canSend && send, canSend && send && ag?.canConfigureModel && model ? model : undefined)
       await refreshAll()
       setState(res)
       if (!res.agentRun) copyText(res.prompt).catch(() => {})
@@ -500,6 +501,12 @@ function SubmitDialog({
                   {ag!.name} に送信する（<b>{ag!.binding!.title}</b>）
                 </span>
               </label>
+            )}
+            {canSend && send && ag?.canConfigureModel && (
+              <>
+                <ModelSelect value={model} onChange={setModel} allowDefault />
+                <p class="muted small">選択したモデルと推論レベルを送信先のセッションに適用してから送ります。</p>
+              </>
             )}
             {ag?.available && !ag.binding && (
               <p class="muted small">右上の「🤖 {ag.name}」で送信先を選ぶと、提出と同時にエージェントへ送れます。</p>
