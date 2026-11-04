@@ -20,6 +20,18 @@ Web UI はバイナリに埋め込まれるので、リモートマシンには�
 scp dist/linux-amd64/reviewer devbox:~/bin/
 ```
 
+## macOSでHomebrewを使う
+
+```sh
+brew install ymotongpoo/macos/reviewer
+brew services start reviewer
+reviewer url
+```
+
+Homebrewのサービスはログイン時に自動起動します。停止は `brew services stop reviewer`、再起動は `brew services restart reviewer` です。`sudo` は不要です。`reviewer service` はLinuxのsystemd用なので、macOSでは `brew services` を使います。
+
+設定は `~/.config/reviewer/config.toml` を読み込みます。このMacからだけ接続する場合は、サービスの起動前に `bind = "127.0.0.1"` を設定してください。既定では全インターフェースで待ち受けます。ログは `$(brew --prefix)/var/log/reviewer.log` に保存します。エージェントのコマンドが見つからない場合は、グローバル設定にコマンドの絶対パスを指定してください。
+
 ## 使い方
 
 ### サーバーを起動する
@@ -391,3 +403,11 @@ fuzzy_threshold = 0.7
 reviewer serve ./sample --token dev     # API サーバー
 cd web && npm run dev                   # Vite の開発サーバー（/api は 7777 番に中継する）
 ```
+
+### リリースを作る
+
+```sh
+make package VERSION=0.1.0
+```
+
+`dist/release/` にWeb UIを埋め込んだ各OS・アーキテクチャ向けのアーカイブとSHA-256チェックサムを作ります。`VERSION` はバイナリの `reviewer version` にも反映されます。GitHub Releaseにアーカイブを添付し、[Homebrew tap](https://github.com/ymotongpoo/homebrew-macos) の `Formula/reviewer.rb` のURLとチェックサムを更新します。
