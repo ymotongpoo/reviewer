@@ -4,6 +4,9 @@
 #   make dist DIST_TARGETS="linux-amd64"
 DIST_TARGETS ?= linux-amd64 linux-arm64 darwin-arm64 darwin-amd64
 
+VERSION ?= dev
+GO_LDFLAGS = -X main.version=$(VERSION)
+
 all: build
 
 web/node_modules: web/package.json
@@ -14,11 +17,11 @@ web: web/node_modules
 	cd web && npm run build
 
 build: web
-	go build -o bin/reviewer ./cmd/reviewer
+	go build -ldflags "$(GO_LDFLAGS)" -o bin/reviewer ./cmd/reviewer
 
 # Build without rebuilding the web UI (uses the previously built UI).
 build-go:
-	go build -o bin/reviewer ./cmd/reviewer
+	go build -ldflags "$(GO_LDFLAGS)" -o bin/reviewer ./cmd/reviewer
 
 test:
 	go test ./...
@@ -29,7 +32,7 @@ e2e:
 	cd web && npm run e2e
 
 install: web
-	go install ./cmd/reviewer
+	go install -ldflags "$(GO_LDFLAGS)" ./cmd/reviewer
 
 clean:
 	rm -rf bin dist
@@ -41,7 +44,17 @@ dist: web
 
 dist/%/reviewer: FORCE
 	CGO_ENABLED=0 GOOS=$(word 1,$(subst -, ,$*)) GOARCH=$(word 2,$(subst -, ,$*)) \
-		go build -trimpath -o $@ ./cmd/reviewer
+		go build -trimpath -ldflags "$(GO_LDFLAGS)" -o $@ ./cmd/reviewer
 
 .PHONY: FORCE
 FORCE:
+
+# Build versioned release archives and their SHA-256 checksums.
+.PHONY: package
+package: dist
+	@test "$(VERSION)" != dev || (echo "Set VERSION to a release version"; exit 1)
+	mkdir -p dist/release
+	@for target in $(DIST_TARGETS); do \
+		tar -czf "dist/release/reviewer-$(VERSION)-$$target.tar.gz" -C "dist/$$target" reviewer || exit 1; \
+	done
+	cd dist/release && shasum -a 256 reviewer-$(VERSION)-*.tar.gz > reviewer-$(VERSION)-checksums.txt
