@@ -4,12 +4,14 @@
 package t3
 
 import (
+	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
 	"os"
 	"os/exec"
 	"path/filepath"
+	"runtime"
 	"slices"
 	"strconv"
 	"strings"
@@ -26,7 +28,7 @@ type Options struct {
 	// with the t3 CLI and keeps it in TokenFile.
 	Token string
 	// Command is the t3 CLI. Empty means the binary of the running server,
-	// then t3 on PATH.
+	// then t3 on PATH or an installed macOS desktop app.
 	Command string
 	// Home is the T3 Code data directory ($T3CODE_HOME, ~/.t3).
 	Home string
@@ -37,6 +39,9 @@ type Options struct {
 	TokenFile string
 	// PollInterval is how often a run's timeline is read.
 	PollInterval time.Duration
+
+	commandArgs []string
+	commandEnv  []string
 }
 
 // Access levels of an MCP client, narrowest first.
@@ -104,7 +109,8 @@ func Resolve(o Options) (Options, error) {
 		}
 	}
 	if o.Token == "" && o.Command == "" {
-		o.Command = findCommand(o.Home, rt.PID)
+		cli := findCommand(o.Home, rt.PID)
+		o.Command, o.commandArgs, o.commandEnv = cli.path, cli.args, cli.env
 		if o.Command == "" {
 			return o, errors.New("t3 コマンドが見つかりません（agent.t3.command で指定できます）")
 		}
@@ -112,29 +118,87 @@ func Resolve(o Options) (Options, error) {
 	return o, nil
 }
 
-// findCommand returns the t3 CLI matching the running server when
-// possible, since the CLI reads the server's database directly.
-func findCommand(home string, pid int) string {
-	if pid > 0 {
-		if exe, err := os.Readlink("/proc/" + strconv.Itoa(pid) + "/exe"); err == nil && !strings.HasSuffix(exe, " (deleted)") {
-			if st, err := os.Stat(exe); err == nil && st.Mode().IsRegular() {
-				return exe
-			}
+// cliCommand also supports the CLI bundled in the Electron desktop app.
+// Electron must run as Node with the server entry point before CLI arguments.
+type cliCommand struct {
+	path string
+	args []string
+	env  []string
+}
+
+func executable(path string) bool {
+	st, err := os.Stat(path)
+	return err == nil && st.Mode().IsRegular() && st.Mode().Perm()&0o111 != 0
+}
+
+func commandForExecutable(path string) cliCommand {
+	if !executable(path) {
+		return cliCommand{}
+	}
+	contents := filepath.Dir(filepath.Dir(path))
+	if filepath.Base(filepath.Dir(path)) == "MacOS" && filepath.Ext(filepath.Dir(contents)) == ".app" {
+		archive := filepath.Join(contents, "Resources", "app.asar")
+		if st, err := os.Stat(archive); err != nil || !st.Mode().IsRegular() {
+			return cliCommand{}
 		}
+		return cliCommand{path: path,
+			args: []string{filepath.Join(archive, "apps", "server", "dist", "bin.mjs")},
+			env:  []string{"ELECTRON_RUN_AS_NODE=1"}}
 	}
-	if p, err := exec.LookPath("t3"); err == nil {
-		return p
+	return cliCommand{path: path}
+}
+
+func processExecutable(pid int) string {
+	if pid <= 0 {
+		return ""
 	}
-	// The newest downloaded version.
+	if runtime.GOOS == "darwin" {
+		ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+		defer cancel()
+		out, err := exec.CommandContext(ctx, "/bin/ps", "-p", strconv.Itoa(pid), "-o", "comm=").Output()
+		if err == nil {
+			return strings.TrimSpace(string(out))
+		}
+		return ""
+	}
+	path, _ := os.Readlink("/proc/" + strconv.Itoa(pid) + "/exe")
+	if strings.HasSuffix(path, " (deleted)") {
+		return ""
+	}
+	return path
+}
+
+// Prefer the running server's CLI: it reads that server's database directly.
+func findCommand(home string, pid int) cliCommand {
+	if cli := commandForExecutable(processExecutable(pid)); cli.path != "" {
+		return cli
+	}
+	if path, err := exec.LookPath("t3"); err == nil {
+		return cliCommand{path: path}
+	}
 	matches, _ := filepath.Glob(filepath.Join(home, "runtime", "versions", "*", "t3"))
 	var best string
 	var bestTime time.Time
 	for _, m := range matches {
-		if st, err := os.Stat(m); err == nil && st.ModTime().After(bestTime) {
+		if st, err := os.Stat(m); err == nil && executable(m) && st.ModTime().After(bestTime) {
 			best, bestTime = m, st.ModTime()
 		}
 	}
-	return best
+	if best != "" {
+		return cliCommand{path: best}
+	}
+	if runtime.GOOS == "darwin" {
+		userHome, _ := os.UserHomeDir()
+		for _, dir := range []string{"/Applications", filepath.Join(userHome, "Applications")} {
+			apps, _ := filepath.Glob(filepath.Join(dir, "T3 Code*.app", "Contents", "MacOS", "T3 Code*"))
+			for _, app := range apps {
+				if cli := commandForExecutable(app); cli.path != "" {
+					return cli
+				}
+			}
+		}
+	}
+	return cliCommand{}
 }
 
 // origin returns the server to talk to.

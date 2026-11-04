@@ -192,8 +192,9 @@ func (c *Client) pairingCode(ctx context.Context) (string, error) {
 	for _, s := range scopes(c.opts.Access) {
 		args = append(args, "--scope", s)
 	}
-	cmd := exec.CommandContext(ctx, c.opts.Command, args...)
-	cmd.Env = append(os.Environ(), "T3CODE_HOME="+c.opts.Home)
+	cmd := exec.CommandContext(ctx, c.opts.Command, append(append([]string{}, c.opts.commandArgs...), args...)...)
+	cmd.Env = append(os.Environ(), c.opts.commandEnv...)
+	cmd.Env = append(cmd.Env, "T3CODE_HOME="+c.opts.Home)
 	var stdout, stderr bytes.Buffer
 	cmd.Stdout, cmd.Stderr = &stdout, &stderr
 	if err := cmd.Run(); err != nil {
