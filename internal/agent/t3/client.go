@@ -24,6 +24,8 @@ type Client struct {
 	tokMu sync.Mutex
 	tok   cachedToken
 
+	projectMu sync.Mutex // serialize discovery and registration of projects
+
 	sessMu    sync.Mutex
 	sid       string
 	sidOrigin string
@@ -147,15 +149,12 @@ func (c *Client) Sessions(ctx context.Context, dir string) ([]agent.Session, err
 
 // CreateSession implements agent.SessionCreator: an idle thread in the
 // innermost T3 project containing dir, using the model of opts or else the
-// model of the latest thread working on dir.
+// model of the latest thread working on dir. An unregistered directory
+// is registered as a project first.
 func (c *Client) CreateSession(ctx context.Context, dir, title string, opts agent.SessionOptions) (agent.Session, error) {
-	ps, err := c.projects(ctx)
+	ps, best, err := c.sessionProject(ctx, dir)
 	if err != nil {
 		return agent.Session{}, err
-	}
-	best := innermost(ps, dir)
-	if best == nil {
-		return agent.Session{}, fmt.Errorf("%s を含む T3 Code のプロジェクトがありません。T3 Code でプロジェクトとして追加してください", dir)
 	}
 	args := map[string]any{"projectId": best.ID, "title": title}
 	// A client outside T3 gets the project's default model, which may be
@@ -180,6 +179,38 @@ func (c *Client) CreateSession(ctx context.Context, dir, title string, opts agen
 		return agent.Session{}, err
 	}
 	return agent.Session{ID: res.ThreadID, Title: title, Source: "t3", Preview: best.Title, UpdatedAt: time.Now()}, nil
+}
+
+// sessionProject reuses an enclosing project or registers the existing folder.
+func (c *Client) sessionProject(ctx context.Context, dir string) ([]project, *project, error) {
+	c.projectMu.Lock()
+	defer c.projectMu.Unlock()
+	ps, err := c.projects(ctx)
+	if err != nil {
+		return nil, nil, err
+	}
+	if best := innermost(ps, dir); best != nil {
+		return ps, best, nil
+	}
+	dir = filepath.Clean(dir)
+	var created project
+	err = c.call(ctx, "t3_project_create", map[string]any{
+		"title": filepath.Base(dir), "workspaceRoot": dir,
+		"createWorkspaceRootIfMissing": false,
+	}, &created)
+	if err != nil {
+		// Another client may have registered it after our list request.
+		if latest, listErr := c.projects(ctx); listErr == nil {
+			if best := innermost(latest, dir); best != nil {
+				return latest, best, nil
+			}
+		}
+		return nil, nil, fmt.Errorf("T3 Code にプロジェクト %s を登録できませんでした: %w", dir, err)
+	}
+	if created.ID == "" {
+		return nil, nil, errors.New("T3 Code のプロジェクト登録結果に ID がありません")
+	}
+	return append(ps, created), &created, nil
 }
 
 // innermost returns the deepest project containing dir, or nil.

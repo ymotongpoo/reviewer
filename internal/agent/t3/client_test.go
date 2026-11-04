@@ -29,8 +29,10 @@ type fake struct {
 	reads    int
 	launched map[string]any
 	// items returns the activity timeline after the given number of reads.
-	items  func(reads int) ([]item, string)
-	expire bool // reject the current token once
+	items              func(reads int) ([]item, string)
+	expire             bool // reject the current token once
+	createdProject     *project
+	createProjectError string
 }
 
 type call struct {
@@ -106,11 +108,25 @@ func (f *fake) reply(w http.ResponseWriter, id json.RawMessage, result any) {
 func (f *fake) tool(name string, args map[string]any) (any, string) {
 	switch name {
 	case "t3_project_list":
-		return map[string]any{"projects": []map[string]any{
+		f.mu.Lock()
+		defer f.mu.Unlock()
+		projects := []map[string]any{
 			{"id": "p-repo", "title": "zenn", "workspaceRoot": "/r/zenn"},
 			{"id": "p-book", "title": "book-a", "workspaceRoot": "/r/zenn/books/a"},
 			{"id": "p-other", "title": "other", "workspaceRoot": "/r/other"},
-		}, "nextCursor": nil}, ""
+		}
+		if p := f.createdProject; p != nil {
+			projects = append(projects, map[string]any{"id": p.ID, "title": p.Title, "workspaceRoot": p.WorkspaceRoot})
+		}
+		return map[string]any{"projects": projects, "nextCursor": nil}, ""
+	case "t3_project_create":
+		if f.createProjectError != "" {
+			return nil, f.createProjectError
+		}
+		f.mu.Lock()
+		defer f.mu.Unlock()
+		f.createdProject = &project{ID: "p-created", Title: args["title"].(string), WorkspaceRoot: args["workspaceRoot"].(string)}
+		return f.createdProject, ""
 	case "t3_thread_list":
 		switch args["projectId"] {
 		case "p-repo":
@@ -364,8 +380,49 @@ func TestCreateSessionInInnermostProject(t *testing.T) {
 	if sel["model"] != "m-new" || sel["instanceId"] != "claudeAgent" {
 		t.Errorf("modelSelection = %v", sel)
 	}
-	if _, err := client(ts, "tok").CreateSession(context.Background(), "/elsewhere", "x", agent.SessionOptions{}); err == nil {
-		t.Error("created a thread outside every project")
+	if len(f.called("t3_project_create")) != 0 {
+		t.Error("registered a project despite an existing enclosing project")
+	}
+}
+
+func TestCreateSessionRegistersMissingProject(t *testing.T) {
+	f, ts := newFake(t)
+	c := client(ts, "tok")
+	opts := agent.SessionOptions{Model: agent.ModelRef{Provider: "codex", Model: "gpt-x"}}
+	for i := 0; i < 2; i++ {
+		s, err := c.CreateSession(context.Background(), "/elsewhere/new-book", "reviewer: new", opts)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if s.ID != "t-launched" || s.Preview != "new-book" {
+			t.Fatalf("session = %+v", s)
+		}
+	}
+	created := f.called("t3_project_create")
+	if len(created) != 1 {
+		t.Fatalf("project registrations = %d", len(created))
+	}
+	if created[0]["workspaceRoot"] != "/elsewhere/new-book" || created[0]["title"] != "new-book" || created[0]["createWorkspaceRootIfMissing"] != false {
+		t.Fatalf("project registration = %v", created[0])
+	}
+	if f.launched["projectId"] != "p-created" {
+		t.Fatalf("launch = %v", f.launched)
+	}
+	sel := f.launched["modelSelection"].(map[string]any)
+	if sel["model"] != "gpt-x" || sel["instanceId"] != "codex" {
+		t.Fatalf("modelSelection = %v", sel)
+	}
+}
+
+func TestCreateSessionProjectRegistrationFailure(t *testing.T) {
+	f, ts := newFake(t)
+	f.createProjectError = "Permission denied"
+	_, err := client(ts, "tok").CreateSession(context.Background(), "/elsewhere", "x", agent.SessionOptions{})
+	if err == nil || !strings.Contains(err.Error(), "Permission denied") {
+		t.Fatalf("error = %v", err)
+	}
+	if len(f.called("t3_thread_launch")) != 0 {
+		t.Fatal("launched after failed project registration")
 	}
 }
 
