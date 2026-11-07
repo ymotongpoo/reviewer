@@ -1,0 +1,20 @@
+README.md
+  s_d32f6424a3f375::t_dbbbfbee517e87 51-59,61-74
+  s_d32f6424a3f375::t_38e11d426c52a3 60
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "9317d021a8cf3b40acaeab8518db2c50100f79f4",
+  "prompts": {},
+  "sessions": {
+    "s_d32f6424a3f375": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a1b649-8501-7b63-aa51-b1b8b1355eaf",
+        "model": "gpt-6-astra"
+      },
+      "human_author": "Yoshi Yamaguchi <ymotongpoo@gmail.com>"
+    }
+  }
+}
