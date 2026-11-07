@@ -504,6 +504,7 @@ func (a *App) Comments() []*store.Comment {
 
 // NewComment is a request to create a comment.
 type NewComment struct {
+	pdfSource   *store.PDFSource
 	Scope       string             `json:"scope"`
 	Path        string             `json:"path"`
 	Start       int                `json:"start"`
@@ -553,7 +554,8 @@ func (a *App) createComment(req NewComment) (*store.Comment, error) {
 	}
 	now := a.now()
 	c := &store.Comment{
-		Scope: req.Scope, Label: req.Label, Body: req.Body, Attachments: attachments,
+		PDFSource: req.pdfSource,
+		Scope:     req.Scope, Label: req.Label, Body: req.Body, Attachments: attachments,
 		Status: store.StatusDraft, Replies: []store.Reply{}, CreatedAt: now, UpdatedAt: now,
 	}
 	switch req.Scope {

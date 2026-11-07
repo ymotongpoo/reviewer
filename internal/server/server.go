@@ -121,6 +121,8 @@ func (p *Project) Handler() http.Handler {
 		mux.HandleFunc("POST /api/attachments", p.handleUploadAttachment)
 		mux.HandleFunc("GET /api/attachments/{id}", p.handleAttachment)
 		mux.HandleFunc("POST /api/comments", p.handleCreateComment)
+		mux.HandleFunc("POST /api/pdf/match", p.handlePDFMatch)
+		mux.HandleFunc("POST /api/pdf/comments", p.handlePDFComment)
 		mux.HandleFunc("PATCH /api/comments/{id}", p.handleUpdateComment)
 		mux.HandleFunc("DELETE /api/comments/{id}", p.handleDeleteComment)
 		mux.HandleFunc("POST /api/comments/{id}/replies", p.handleAddReply)

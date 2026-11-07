@@ -2561,3 +2561,10 @@ table.frontmatter td {
   color: var(--warn);
   font-size: 12px;
 }
+.pdf-import input[type="file"] { max-width: 100%; }
+.pdf-import-actions { display: flex; gap: 8px; flex-wrap: wrap; margin: 16px 0; }
+.pdf-match { border-top: 1px solid var(--border); padding: 12px 0; overflow-wrap: anywhere; }
+.pdf-comment-body, .pdf-quote { white-space: pre-wrap; }
+.pdf-candidate { margin: 12px 0; }
+.pdf-candidate a { margin-left: 12px; }
+.pdf-candidate pre { white-space: pre-wrap; overflow-wrap: anywhere; max-height: 240px; overflow: auto; }

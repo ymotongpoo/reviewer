@@ -7,6 +7,7 @@ require (
 	github.com/fsnotify/fsnotify v1.10.1
 	github.com/go-git/go-git/v5 v5.19.2
 	github.com/sergi/go-diff v1.4.0
+	github.com/yuin/goldmark v1.8.7
 )
 
 require (

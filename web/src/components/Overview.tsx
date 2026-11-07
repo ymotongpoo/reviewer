@@ -22,6 +22,7 @@ import { Composer } from './Composer'
 import { Thread } from './Thread'
 import { CopyPrompt } from './Header'
 import { AgentPanel, RunView } from './Agent'
+import { PDFImport } from './PDFImport'
 
 type Filter = 'unresolved' | 'draft' | 'all'
 
@@ -108,6 +109,8 @@ export function Overview() {
       {i.latest && <AgentPanel round={i.latest.round} />}
 
       <AnnotationRequestsPanel />
+
+      <PDFImport />
 
       <section class="card">
         <div class="section-head">

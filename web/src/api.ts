@@ -21,6 +21,10 @@ import type {
   Info,
   ModelRef,
   Preset,
+  PDFInput,
+  PDFMatch,
+  PDFHighlight,
+  PDFCandidate,
   RequestDiff,
   ReviewSession,
   RoundChanges,
@@ -115,6 +119,9 @@ export const api = {
   roundDiff: (round: number, path: string, phase: 'review' | 'agent' = 'agent') =>
     request<RoundDiff>('GET', `/api/rounds/${round}/diff?path=${q(path)}&phase=${phase}`),
   comments: () => request<{ comments: Comment[] }>('GET', '/api/comments').then((r) => r.comments),
+  matchPDF: (input: PDFInput) => request<{ matches: PDFMatch[] }>('POST', '/api/pdf/match', input).then((r) => r.matches),
+  importPDFComment: (input: { documentHash: string; name: string; highlight: PDFHighlight; candidate: PDFCandidate }) =>
+    request<Comment>('POST', '/api/pdf/comments', input),
   uploadAttachment,
   attachmentUrl: (id: string) => `${projectBase}/api/attachments/${q(id)}`,
   createComment: (c: {

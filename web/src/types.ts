@@ -53,6 +53,36 @@ export interface Attachment {
   size: number
 }
 
+export interface PDFHighlight {
+  id: string
+  page: number
+  body: string
+  quote: string
+  before?: string
+  after?: string
+  warning?: string
+}
+
+export interface PDFInput {
+  documentHash: string
+  name: string
+  highlights: PDFHighlight[]
+}
+
+export interface PDFCandidate {
+  path: string
+  hash: string
+  range: TextRange
+}
+
+export interface PDFMatch {
+  highlight: PDFHighlight
+  candidates: PDFCandidate[]
+  automatic: boolean
+  truncated: boolean
+  existingId?: string
+}
+
 export interface Comment {
   id: string
   round: number

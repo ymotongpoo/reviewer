@@ -68,6 +68,16 @@ type Attachment struct {
 	Size int64  `json:"size"`
 }
 
+// PDFSource identifies an imported highlight in the exact PDF supplied by the
+// reviewer. It survives edits to the comment and server restarts.
+type PDFSource struct {
+	DocumentHash string `json:"documentHash"`
+	Name         string `json:"name"`
+	Page         int    `json:"page"`
+	AnnotationID string `json:"annotationId"`
+	Quote        string `json:"quote"`
+}
+
 // Comment is a review comment and its thread.
 type Comment struct {
 	ID          string       `json:"id"`
@@ -77,6 +87,7 @@ type Comment struct {
 	Label       string       `json:"label"`
 	Body        string       `json:"body"`
 	Attachments []Attachment `json:"attachments,omitempty"`
+	PDFSource   *PDFSource   `json:"pdfSource,omitempty"`
 	Status      string       `json:"status"`
 	// Anchor is the text the comment was originally written against.
 	Anchor    *anchor.Anchor `json:"anchor,omitempty"`
