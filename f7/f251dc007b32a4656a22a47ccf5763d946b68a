@@ -1,0 +1,19 @@
+README.md
+  s_51940fd3a84c81::t_9967f243bc2ae3 235-240
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "f7f251dc007b32a4656a22a47ccf5763d946b68a",
+  "prompts": {},
+  "sessions": {
+    "s_51940fd3a84c81": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a1b890-d257-7542-aead-95edc6e444b7",
+        "model": "gpt-6-luna"
+      },
+      "human_author": "Yoshi Yamaguchi <ymotongpoo@gmail.com>"
+    }
+  }
+}
