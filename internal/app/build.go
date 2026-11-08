@@ -43,20 +43,75 @@ func (b *cappedBuffer) Write(p []byte) (int, error) {
 // runPostAgentBuild invokes the configured session command after a successful
 // agent run and saves matching output files in that run's round.
 func (a *App) runPostAgentBuild(round int) {
+	if a.SessionInfo().BuildCommand == "" {
+		return
+	}
+	if _, err := a.runBuild(context.Background(), round); err != nil {
+		log.Printf("run round %d post-agent build: %v", round, err)
+	}
+}
+
+// RebuildRound reruns the configured command for an existing round.
+func (a *App) RebuildRound(ctx context.Context, round int) (*store.BuildRecord, error) {
+	if round < 1 {
+		return nil, badRequest("ラウンド番号が不正です")
+	}
+	if _, err := a.Store.Manifest(round); err != nil {
+		return nil, notFound("ラウンド%dがありません", round)
+	}
+	if a.hasRunningAgent() {
+		return nil, conflict("エージェントの対応中は再ビルドできません")
+	}
+	return a.runBuild(ctx, round)
+}
+
+func (a *App) hasRunningAgent() bool {
+	a.agents.mu.Lock()
+	defer a.agents.mu.Unlock()
+	for _, active := range a.agents.active {
+		if active.rec.EndedAt == nil {
+			return true
+		}
+	}
+	return false
+}
+
+func (a *App) buildRunning(round int) bool {
+	a.buildMu.Lock()
+	defer a.buildMu.Unlock()
+	return a.buildingBuilds[round]
+}
+
+func (a *App) runBuild(parent context.Context, round int) (*store.BuildRecord, error) {
+	a.buildMu.Lock()
+	if a.buildingBuilds == nil {
+		a.buildingBuilds = make(map[int]bool)
+	}
+	if a.buildingBuilds[round] {
+		a.buildMu.Unlock()
+		return nil, conflict("ラウンド%dのビルドはすでに実行中です", round)
+	}
+	a.buildingBuilds[round] = true
+	a.buildMu.Unlock()
+	defer func() {
+		a.buildMu.Lock()
+		delete(a.buildingBuilds, round)
+		a.buildMu.Unlock()
+	}()
+
 	a.mu.Lock()
 	session := a.Session
 	a.mu.Unlock()
 	if session.BuildCommand == "" {
-		return
+		return nil, badRequest("このセッションにビルドコマンドが設定されていません")
 	}
 	started := a.now()
 	record := &store.BuildRecord{
 		Round: round, Command: session.BuildCommand, Directory: session.BuildDir,
-		Status: "running", StartedAt: started,
+		Status: "running", StartedAt: started, ExitCode: -1,
 	}
 	if err := a.Store.SaveBuildRecord(record); err != nil {
-		log.Printf("save round %d build status: %v", round, err)
-		return
+		return nil, err
 	}
 
 	root := a.Proj.Root
@@ -68,7 +123,7 @@ func (a *App) runPostAgentBuild(round int) {
 			cwd = filepath.Join(root, session.BuildDir)
 		}
 	}
-	ctx, cancel := context.WithTimeout(context.Background(), buildTimeout)
+	ctx, cancel := context.WithTimeout(parent, buildTimeout)
 	defer cancel()
 	cmd := exec.CommandContext(ctx, "sh", "-c", session.BuildCommand)
 	cmd.Dir = cwd
@@ -142,6 +197,7 @@ func (a *App) runPostAgentBuild(round int) {
 	if a.notify != nil {
 		a.notify(Event{Type: "round", Round: round})
 	}
+	return record, nil
 }
 
 // RoundArtifact returns a stored artifact only when it belongs to this round.

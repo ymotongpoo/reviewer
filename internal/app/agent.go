@@ -366,6 +366,9 @@ func (a *App) SendToAgentWithModel(ctx context.Context, n int, model agent.Model
 	if err := a.ValidateFeedbackModel(model); err != nil {
 		return nil, err
 	}
+	if a.buildRunning(n) {
+		return nil, conflict("ラウンド%dのビルド中はエージェントに送信できません", n)
+	}
 	ag, err := a.agentOrErr()
 	if err != nil {
 		return nil, err

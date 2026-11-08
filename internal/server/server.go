@@ -118,6 +118,7 @@ func (p *Project) Handler() http.Handler {
 		mux.HandleFunc("PUT /api/file", p.handleSaveFile)
 		mux.HandleFunc("GET /api/rounds/{n}/changes", p.handleRoundChanges)
 		mux.HandleFunc("GET /api/rounds/{n}/diff", p.handleRoundDiff)
+		mux.HandleFunc("POST /api/rounds/{n}/build", p.handleRebuildRound)
 		mux.HandleFunc("GET /api/rounds/{n}/artifacts/{id}", p.handleRoundArtifact)
 		mux.HandleFunc("GET /api/blob/{hash}", p.handleBlob)
 		mux.HandleFunc("GET /api/comments", p.handleComments)
@@ -411,6 +412,16 @@ func (p *Project) handleRoundChanges(w http.ResponseWriter, r *http.Request) {
 func (p *Project) handleRoundDiff(w http.ResponseWriter, r *http.Request) {
 	d, err := p.App.RoundDiffMode(roundParam(r), r.URL.Query().Get("path"), r.URL.Query().Get("phase"))
 	respond(w, d, err)
+}
+
+func (p *Project) handleRebuildRound(w http.ResponseWriter, r *http.Request) {
+	n, err := strconv.Atoi(r.PathValue("n"))
+	if err != nil || n < 1 {
+		writeError(w, &app.Error{Code: http.StatusBadRequest, Msg: "ラウンド番号が不正です"})
+		return
+	}
+	record, err := p.App.RebuildRound(r.Context(), n)
+	respond(w, map[string]any{"build": record}, err)
 }
 
 func (p *Project) handleBlob(w http.ResponseWriter, r *http.Request) {

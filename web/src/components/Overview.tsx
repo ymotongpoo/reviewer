@@ -8,6 +8,7 @@ import {
   draftStore,
   editing,
   info,
+  refreshInfo,
   refreshAnnotationRequests,
   refreshAnnotations,
   setShowDismissedAnnotations,
@@ -36,6 +37,7 @@ export function Overview() {
     return () => { active = false }
   }, [journalVersion])
   const [filter, setFilter] = useState<Filter>('unresolved')
+  const [rebuilding, setRebuilding] = useState<number | null>(null)
   if (!i) return null
   const ed = editing.value
   const newProject = ed?.kind === 'new' && ed.scope === 'project' ? ed : null
@@ -52,6 +54,20 @@ export function Overview() {
   for (const list of byPath.values()) list.sort((a, b) => (a.scope === 'file' ? -1 : (a.loc?.start ?? 0) - (b.loc?.start ?? 0)))
 
   const latestRound = i.rounds.find((r) => r.round === i.latest?.round)
+
+  async function rebuild(round: number) {
+    setRebuilding(round)
+    try {
+      const { build } = await api.rebuildRound(round)
+      await refreshInfo()
+      if (build.status === 'completed') toast(`ラウンド${round}を再ビルドしました`, 'success')
+      else toast(`ラウンド${round}の再ビルドに失敗しました`, 'error')
+    } catch (e) {
+      toast((e as Error).message, 'error')
+    } finally {
+      setRebuilding(null)
+    }
+  }
 
   return (
     <div class="overview">
@@ -110,7 +126,13 @@ export function Overview() {
 
       {i.rounds.filter((r) => r.build).map((r) => (
         <section class="card" key={`build-${r.round}`}>
-          <h2>ラウンド{r.round}の生成結果</h2>
+          <div class="section-head">
+            <h2>ラウンド{r.round}の生成結果</h2>
+            <span class="spacer" />
+            <button class="btn small" disabled={rebuilding === r.round} onClick={() => void rebuild(r.round)}>
+              {rebuilding === r.round ? '再ビルド中…' : '再ビルド'}
+            </button>
+          </div>
           <p>{r.build!.status === 'completed' ? 'コマンドが完了しました。' : r.build!.status === 'running' ? 'コマンドを実行中です。' : 'コマンドまたは成果物の保存に失敗しました。'}</p>
           <pre>{r.build!.command}</pre>
           {r.build!.error && <div class="banner error">{r.build!.error}</div>}

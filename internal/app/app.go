@@ -62,9 +62,11 @@ type Event struct {
 // App is a running review session of a directory. A directory may have
 // several sessions at once; they share its Workspace.
 type App struct {
-	mu   sync.Mutex
-	Cfg  config.Config
-	Proj *project.Project
+	mu             sync.Mutex
+	buildMu        sync.Mutex
+	buildingBuilds map[int]bool
+	Cfg            config.Config
+	Proj           *project.Project
 	// Store holds the session's rounds, comments and annotations.
 	Store *store.Store
 	// DataDir is the session's data directory.

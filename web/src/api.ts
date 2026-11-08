@@ -11,6 +11,7 @@ import type {
   AnnotationRequest,
   AnnotationRequestView,
   Attachment,
+  BuildRecord,
   Comment,
   FileView,
   GitCommitResult,
@@ -118,6 +119,7 @@ export const api = {
     request<RoundChanges>('GET', `/api/rounds/${round}/changes?phase=${phase}`),
   roundDiff: (round: number, path: string, phase: 'review' | 'agent' = 'agent') =>
     request<RoundDiff>('GET', `/api/rounds/${round}/diff?path=${q(path)}&phase=${phase}`),
+  rebuildRound: (round: number) => request<{ build: BuildRecord }>('POST', `/api/rounds/${round}/build`, {}),
   comments: () => request<{ comments: Comment[] }>('GET', '/api/comments').then((r) => r.comments),
   matchPDF: (input: PDFInput) => request<{ matches: PDFMatch[] }>('POST', '/api/pdf/match', input).then((r) => r.matches),
   importPDFComment: (input: { documentHash: string; name: string; highlight: PDFHighlight; candidate: PDFCandidate }) =>

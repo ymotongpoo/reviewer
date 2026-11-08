@@ -10,7 +10,7 @@ import (
 func TestPostAgentBuildSavesRoundArtifact(t *testing.T) {
 	a, _ := setup(t)
 	command := "printf 'sample pdf' > build-output.pdf"
-	dir := "."
+	dir := "missing-build-directory"
 	pattern := "build-output.pdf"
 	if _, err := a.UpdateSession(context.Background(), nil, nil, nil, &command, &dir, &pattern); err != nil {
 		t.Fatal(err)
@@ -28,8 +28,19 @@ func TestPostAgentBuildSavesRoundArtifact(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if record.Status != "completed" || record.ExitCode != 0 {
+	if record.Status != "failed" || record.ExitCode == 0 {
 		t.Fatalf("build record = %+v", record)
+	}
+	dir = "."
+	if _, err := a.UpdateSession(context.Background(), nil, nil, nil, nil, &dir, nil); err != nil {
+		t.Fatal(err)
+	}
+	record, err = a.RebuildRound(context.Background(), 1)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if record.Status != "completed" || record.ExitCode != 0 {
+		t.Fatalf("retried build record = %+v", record)
 	}
 	if len(record.Artifacts) != 1 || record.Artifacts[0].Name != "build-output.pdf" {
 		t.Fatalf("artifacts = %+v", record.Artifacts)
