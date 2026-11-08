@@ -2568,3 +2568,17 @@ table.frontmatter td {
 .pdf-candidate { margin: 12px 0; }
 .pdf-candidate a { margin-left: 12px; }
 .pdf-candidate pre { white-space: pre-wrap; overflow-wrap: anywhere; max-height: 240px; overflow: auto; }
+.build-output {
+  box-sizing: border-box;
+  width: 100%;
+  max-height: 22rem;
+  margin: 8px 0;
+  padding: 8px 10px;
+  overflow: auto;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--bg-subtle);
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  word-break: break-word;
+}

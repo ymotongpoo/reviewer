@@ -123,6 +123,21 @@ func (a *App) runBuild(parent context.Context, round int) (*store.BuildRecord, e
 			cwd = filepath.Join(root, session.BuildDir)
 		}
 	}
+	pattern := session.BuildArtifact
+	if pattern != "" && !filepath.IsAbs(pattern) {
+		pattern = filepath.Join(root, pattern)
+	}
+	before, globErr := buildArtifactSnapshot(pattern)
+	if globErr != nil {
+		record.Status, record.Error, record.EndedAt = "failed", globErr.Error(), a.now()
+		if err := a.Store.SaveBuildRecord(record); err != nil {
+			log.Printf("save round %d build result: %v", round, err)
+		}
+		if a.notify != nil {
+			a.notify(Event{Type: "round", Round: round})
+		}
+		return record, nil
+	}
 	ctx, cancel := context.WithTimeout(parent, buildTimeout)
 	defer cancel()
 	cmd := exec.CommandContext(ctx, "sh", "-c", session.BuildCommand)
@@ -146,13 +161,9 @@ func (a *App) runBuild(parent context.Context, round int) (*store.BuildRecord, e
 		}
 	} else {
 		record.ExitCode = 0
-		pattern := session.BuildArtifact
 		if pattern == "" {
 			record.Status, record.Error = "failed", "成果物の glob が設定されていません"
 		} else {
-			if !filepath.IsAbs(pattern) {
-				pattern = filepath.Join(root, pattern)
-			}
 			matches, globErr := filepath.Glob(pattern)
 			if globErr != nil {
 				record.Status, record.Error = "failed", globErr.Error()
@@ -164,6 +175,9 @@ func (a *App) runBuild(parent context.Context, round int) (*store.BuildRecord, e
 				}
 				info, statErr := os.Stat(path)
 				if statErr != nil || !info.Mode().IsRegular() {
+					continue
+				}
+				if previous, existed := before[path]; existed && previous.sameFile(info) {
 					continue
 				}
 				if info.Size() > maxArtifact {
@@ -183,7 +197,7 @@ func (a *App) runBuild(parent context.Context, round int) (*store.BuildRecord, e
 				record.Artifacts = append(record.Artifacts, artifact)
 			}
 			if record.Error == "" && len(record.Artifacts) == 0 {
-				record.Status, record.Error = "failed", "成果物が見つかりませんでした"
+				record.Status, record.Error = "failed", "今回のビルドで新規作成または更新された成果物がありませんでした"
 			}
 			if record.Error == "" {
 				record.Status = "completed"
@@ -198,6 +212,39 @@ func (a *App) runBuild(parent context.Context, round int) (*store.BuildRecord, e
 		a.notify(Event{Type: "round", Round: round})
 	}
 	return record, nil
+}
+
+type artifactFingerprint struct {
+	size    int64
+	modTime time.Time
+	file    os.FileInfo
+}
+
+func fingerprint(info os.FileInfo) artifactFingerprint {
+	return artifactFingerprint{size: info.Size(), modTime: info.ModTime(), file: info}
+}
+
+func (f artifactFingerprint) sameFile(info os.FileInfo) bool {
+	return f.size == info.Size() && f.modTime.Equal(info.ModTime()) && os.SameFile(f.file, info)
+}
+
+func buildArtifactSnapshot(pattern string) (map[string]artifactFingerprint, error) {
+	snapshot := make(map[string]artifactFingerprint)
+	if pattern == "" {
+		return snapshot, nil
+	}
+	matches, err := filepath.Glob(pattern)
+	if err != nil {
+		return nil, err
+	}
+	for _, path := range matches {
+		info, err := os.Stat(path)
+		if err != nil || !info.Mode().IsRegular() {
+			continue
+		}
+		snapshot[path] = fingerprint(info)
+	}
+	return snapshot, nil
 }
 
 // RoundArtifact returns a stored artifact only when it belongs to this round.

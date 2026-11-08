@@ -139,7 +139,7 @@ export function Overview() {
           {(r.build!.artifacts ?? []).map((artifact) => (
             <p key={artifact.id}><a href={api.roundArtifactUrl(r.round, artifact.id)} target="_blank" rel="noreferrer">{artifact.name}</a> <span class="muted small">({(artifact.size / 1024 / 1024).toFixed(1)} MiB)</span></p>
           ))}
-          {r.build!.output && <details><summary>コマンド出力</summary><pre>{r.build!.output}</pre></details>}
+          {r.build!.output && <details><summary>コマンド出力</summary><pre class="build-output">{r.build!.output}</pre></details>}
         </section>
       ))}
 

@@ -8,10 +8,11 @@ import (
 )
 
 func TestPostAgentBuildSavesRoundArtifact(t *testing.T) {
-	a, _ := setup(t)
+	a, root := setup(t)
+	write(t, root, "old-output.pdf", "older build")
 	command := "printf 'sample pdf' > build-output.pdf"
 	dir := "missing-build-directory"
-	pattern := "build-output.pdf"
+	pattern := "*.pdf"
 	if _, err := a.UpdateSession(context.Background(), nil, nil, nil, &command, &dir, &pattern); err != nil {
 		t.Fatal(err)
 	}
@@ -43,7 +44,7 @@ func TestPostAgentBuildSavesRoundArtifact(t *testing.T) {
 		t.Fatalf("retried build record = %+v", record)
 	}
 	if len(record.Artifacts) != 1 || record.Artifacts[0].Name != "build-output.pdf" {
-		t.Fatalf("artifacts = %+v", record.Artifacts)
+		t.Fatalf("artifacts included stale output: %+v", record.Artifacts)
 	}
 	data, mediaType, name, err := a.RoundArtifact(1, record.Artifacts[0].ID)
 	if err != nil {
