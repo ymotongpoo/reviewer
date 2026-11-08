@@ -108,6 +108,19 @@ export function Overview() {
 
       {i.latest && <AgentPanel round={i.latest.round} />}
 
+      {i.rounds.filter((r) => r.build).map((r) => (
+        <section class="card" key={`build-${r.round}`}>
+          <h2>ラウンド{r.round}の生成結果</h2>
+          <p>{r.build!.status === 'completed' ? 'コマンドが完了しました。' : r.build!.status === 'running' ? 'コマンドを実行中です。' : 'コマンドまたは成果物の保存に失敗しました。'}</p>
+          <pre>{r.build!.command}</pre>
+          {r.build!.error && <div class="banner error">{r.build!.error}</div>}
+          {(r.build!.artifacts ?? []).map((artifact) => (
+            <p key={artifact.id}><a href={api.roundArtifactUrl(r.round, artifact.id)} target="_blank" rel="noreferrer">{artifact.name}</a> <span class="muted small">({(artifact.size / 1024 / 1024).toFixed(1)} MiB)</span></p>
+          ))}
+          {r.build!.output && <details><summary>コマンド出力</summary><pre>{r.build!.output}</pre></details>}
+        </section>
+      ))}
+
       <AnnotationRequestsPanel />
 
       <PDFImport />

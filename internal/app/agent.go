@@ -534,6 +534,9 @@ func (a *App) finish(rec *store.AgentRun, run agent.Run, ev agent.Event) {
 	a.agents.mu.Unlock()
 	a.saveRun(rec)
 	a.notify(a.agentEvent(rec, nil))
+	if status == agent.StatusCompleted {
+		a.runPostAgentBuild(rec.Round)
+	}
 
 	var msg string
 	switch status {

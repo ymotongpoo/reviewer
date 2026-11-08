@@ -36,6 +36,11 @@ type Session struct {
 	// Branch is the local branch selected for this review session. The
 	// working tree remains shared; opening a session does not check it out.
 	Branch string `json:"branch,omitempty"`
+	// BuildCommand is run after a successful agent response. BuildDir and
+	// BuildArtifact are relative to the project root; BuildArtifact is a glob.
+	BuildCommand  string `json:"buildCommand,omitempty"`
+	BuildDir      string `json:"buildDir,omitempty"`
+	BuildArtifact string `json:"buildArtifact,omitempty"`
 	// Archived sessions are hidden from the session lists.
 	Archived bool `json:"archived,omitempty"`
 }

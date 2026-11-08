@@ -111,7 +111,7 @@ export const api = {
   project: () => request<Info>('GET', '/api/project'),
   sessions: () => request<{ sessions: SessionSummary[] }>('GET', '/api/sessions').then((r) => r.sessions),
   createSession: (name: string, branch?: string) => request<{ session: ReviewSession; url: string }>('POST', '/api/sessions', { name, branch }),
-  updateSession: (patch: { name?: string; archived?: boolean; branch?: string }) => request<ReviewSession>('PATCH', '/api/session', patch),
+  updateSession: (patch: { name?: string; archived?: boolean; branch?: string; buildCommand?: string; buildDir?: string; buildArtifact?: string }) => request<ReviewSession>('PATCH', '/api/session', patch),
   tree: () => request<{ files: TreeFile[] }>('GET', '/api/tree').then((r) => r.files),
   file: (path: string) => request<FileView>('GET', `/api/file?path=${q(path)}`),
   roundChanges: (round: number, phase: 'review' | 'agent' = 'agent') =>
@@ -124,6 +124,7 @@ export const api = {
     request<Comment>('POST', '/api/pdf/comments', input),
   uploadAttachment,
   attachmentUrl: (id: string) => `${projectBase}/api/attachments/${q(id)}`,
+  roundArtifactUrl: (round: number, id: string) => `${projectBase}/api/rounds/${round}/artifacts/${q(id)}`,
   createComment: (c: {
     scope: string
     path?: string

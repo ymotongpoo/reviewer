@@ -132,6 +132,28 @@ export interface RoundSummary {
   submittedAt?: string
   comments: number
   response?: ResponseInfo
+  build?: BuildRecord
+}
+
+export interface BuildArtifact {
+  id: string
+  name: string
+  size: number
+  sha256: string
+  createdAt: string
+}
+
+export interface BuildRecord {
+  round: number
+  command: string
+  directory: string
+  status: 'running' | 'completed' | 'failed'
+  startedAt: string
+  endedAt: string
+  exitCode: number
+  error?: string
+  output?: string
+  artifacts?: BuildArtifact[]
 }
 
 /** A review session of a directory, with its own rounds, comments and agent binding. */
@@ -141,6 +163,9 @@ export interface ReviewSession {
   createdAt: string
   archived?: boolean
   branch?: string
+  buildCommand?: string
+  buildDir?: string
+  buildArtifact?: string
 }
 
 export interface SessionSummary {

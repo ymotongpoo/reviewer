@@ -107,13 +107,16 @@ function sessionStatus(s: SessionSummary) {
  */
 function SessionMenu() {
   const current = info.value!.session
-  const [mode, setMode] = useState<'list' | 'create' | 'rename' | 'branch'>('list')
+  const [mode, setMode] = useState<'list' | 'create' | 'rename' | 'branch' | 'build'>('list')
   const [name, setName] = useState('')
   const [branch, setBranch] = useState('')
   const [git, setGit] = useState<GitStatus | null>(null)
   const [loadingBranches, setLoadingBranches] = useState(false)
   const [formError, setFormError] = useState<string | null>(null)
   const [showArchived, setShowArchived] = useState(false)
+  const [buildCommand, setBuildCommand] = useState('')
+  const [buildDir, setBuildDir] = useState('')
+  const [buildArtifact, setBuildArtifact] = useState('')
   const [busy, setBusy] = useState(false)
   useEffect(() => {
     void refreshSessions().catch(() => {})
@@ -160,7 +163,7 @@ function SessionMenu() {
       setBusy(false)
     }
   }
-  async function update(patch: { name?: string; archived?: boolean; branch?: string }) {
+  async function update(patch: { name?: string; archived?: boolean; branch?: string; buildCommand?: string; buildDir?: string; buildArtifact?: string }) {
     setBusy(true)
     setFormError(null)
     try {
@@ -171,6 +174,7 @@ function SessionMenu() {
       if (patch.archived) toast(`「${current.name}」をアーカイブしました`, 'success')
       if (patch.archived === false) toast(`「${current.name}」を元に戻しました`, 'success')
       if (patch.branch !== undefined) toast(patch.branch ? `ローカルブランチを「${patch.branch}」に設定しました` : 'ローカルブランチの設定を解除しました', 'success')
+      if (patch.buildCommand !== undefined) toast(patch.buildCommand ? 'ラウンド後コマンドを保存しました' : 'ラウンド後コマンドを解除しました', 'success')
     } catch (e) {
       setFormError((e as Error).message)
       toast((e as Error).message, 'error')
@@ -179,15 +183,29 @@ function SessionMenu() {
     }
   }
 
+  function editBuild() {
+    setBuildCommand(current.buildCommand ?? '')
+    setBuildDir(current.buildDir ?? '')
+    setBuildArtifact(current.buildArtifact ?? '')
+    setMode('build')
+  }
+
   if (mode !== 'list') return (
     <form class="session-form" onSubmit={(e) => {
       e.preventDefault()
       if (mode === 'create') void create()
       else if (mode === 'branch') void update({ branch })
+      else if (mode === 'build') void update({ buildCommand, buildDir, buildArtifact })
       else void update({ name })
     }}>
       {formError && <div class="banner error" role="alert">{formError}</div>}
-      {mode !== 'branch' && (
+      {mode === 'build' ? <>
+        <p class="muted small">AIの対応が正常に完了した後、このセッションの作業環境でコマンドを実行し、生成物をそのラウンドに保存します。</p>
+        <label class="field"><span>コマンド（sh）</span><textarea rows={4} value={buildCommand} placeholder="./docker-build.sh ../property-based-testing-guide" onInput={(e) => setBuildCommand(e.currentTarget.value)} /></label>
+        <label class="field"><span>作業ディレクトリ（プロジェクトルートからの相対パス、または絶対パス）</span><input value={buildDir} placeholder="../book-template" onInput={(e) => setBuildDir(e.currentTarget.value)} /></label>
+        <label class="field"><span>成果物の glob（プロジェクトルートからの相対パス、または絶対パス）</span><input value={buildArtifact} placeholder="book-*.pdf" onInput={(e) => setBuildArtifact(e.currentTarget.value)} /></label>
+        <p class="muted small">コマンドはAI対応が成功した場合だけ実行します。出力は最大250 MiBまで各ラウンドに保存します。</p>
+      </> : mode !== 'branch' && (
         <label class="field">
           <span>{mode === 'create' ? '新しいセッションの名前' : 'セッションの名前'}</span>
           <input type="text" value={name} autoFocus maxLength={80}
@@ -219,7 +237,7 @@ function SessionMenu() {
       )}
       <div class="modal-actions">
         <button type="button" class="btn small" onClick={() => setMode('list')}>キャンセル</button>
-        <button type="submit" class="btn small primary" disabled={busy || loadingBranches || (mode !== 'branch' && !name.trim()) || (mode === 'branch' && !git)}>
+        <button type="submit" class="btn small primary" disabled={busy || loadingBranches || (mode === 'rename' && !name.trim()) || (mode === 'branch' && !git) || (mode === 'build' && Boolean(buildCommand.trim()) !== Boolean(buildArtifact.trim()))}>
           {mode === 'create' ? '作成して開く' : mode === 'branch' && branch ? '保存して切り替える' : '保存'}
         </button>
       </div>
@@ -261,6 +279,11 @@ function SessionMenu() {
           </>}
           <button class="link" disabled={busy} onClick={() => setMode('branch')}>ローカルブランチを設定・変更</button>
         </div>}
+        <div class="session-branch-setting">
+          <span class="muted small">AI対応後のコマンド</span>
+          <span class="session-branch-name">{current.buildCommand ? '設定済み' : '未設定'}</span>
+          <button class="link" disabled={busy} onClick={editBuild}>コマンドと成果物を設定</button>
+        </div>
         <button class="link" disabled={busy} onClick={() => { setName(''); setMode('create') }}>＋ 新しいセッション</button>
         <button class="link" disabled={busy} onClick={() => { setName(current.name); setMode('rename') }}>名前を変更</button>
         {current.id !== 'main' && (

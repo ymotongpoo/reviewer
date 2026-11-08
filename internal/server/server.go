@@ -13,9 +13,11 @@ import (
 	"io"
 	"io/fs"
 	"log"
+	"mime"
 	"net/http"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -116,6 +118,7 @@ func (p *Project) Handler() http.Handler {
 		mux.HandleFunc("PUT /api/file", p.handleSaveFile)
 		mux.HandleFunc("GET /api/rounds/{n}/changes", p.handleRoundChanges)
 		mux.HandleFunc("GET /api/rounds/{n}/diff", p.handleRoundDiff)
+		mux.HandleFunc("GET /api/rounds/{n}/artifacts/{id}", p.handleRoundArtifact)
 		mux.HandleFunc("GET /api/blob/{hash}", p.handleBlob)
 		mux.HandleFunc("GET /api/comments", p.handleComments)
 		mux.HandleFunc("POST /api/attachments", p.handleUploadAttachment)
@@ -317,9 +320,12 @@ func (p *Project) handleCreateSession(w http.ResponseWriter, r *http.Request) {
 
 func (p *Project) handleUpdateSession(w http.ResponseWriter, r *http.Request) {
 	var req struct {
-		Name     *string `json:"name"`
-		Archived *bool   `json:"archived"`
-		Branch   *string `json:"branch"`
+		Name          *string `json:"name"`
+		Archived      *bool   `json:"archived"`
+		Branch        *string `json:"branch"`
+		BuildCommand  *string `json:"buildCommand"`
+		BuildDir      *string `json:"buildDir"`
+		BuildArtifact *string `json:"buildArtifact"`
 	}
 	if err := decode(r, &req); err != nil {
 		writeError(w, err)
@@ -329,7 +335,7 @@ func (p *Project) handleUpdateSession(w http.ResponseWriter, r *http.Request) {
 		writeError(w, &app.Error{Code: http.StatusConflict, Msg: "エージェントの対応中はアーカイブできません"})
 		return
 	}
-	ss, err := p.App.UpdateSession(r.Context(), req.Name, req.Archived, req.Branch)
+	ss, err := p.App.UpdateSession(r.Context(), req.Name, req.Archived, req.Branch, req.BuildCommand, req.BuildDir, req.BuildArtifact)
 	if err != nil {
 		writeError(w, err)
 		return
@@ -462,6 +468,23 @@ func (p *Project) handleAttachment(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", mediaType)
 	w.Header().Set("Cache-Control", "private, max-age=31536000, immutable")
 	w.Header().Set("Content-Disposition", "inline")
+	w.Write(b)
+}
+
+func (p *Project) handleRoundArtifact(w http.ResponseWriter, r *http.Request) {
+	n, err := strconv.Atoi(r.PathValue("n"))
+	if err != nil || n < 1 {
+		writeError(w, &app.Error{Code: http.StatusBadRequest, Msg: "ラウンド番号が不正です"})
+		return
+	}
+	b, mediaType, name, err := p.App.RoundArtifact(n, r.PathValue("id"))
+	if err != nil {
+		writeError(w, err)
+		return
+	}
+	w.Header().Set("Content-Type", mediaType)
+	w.Header().Set("Cache-Control", "private, max-age=3600")
+	w.Header().Set("Content-Disposition", mime.FormatMediaType("inline", map[string]string{"filename": name}))
 	w.Write(b)
 }
 

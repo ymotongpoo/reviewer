@@ -188,9 +188,33 @@ func (a *App) SessionInfo() store.Session {
 
 // UpdateSession changes the supplied session settings. A branch setting is
 // a saved preference; checking out that branch uses GitSwitch explicitly.
-func (a *App) UpdateSession(ctx context.Context, name *string, archived *bool, branch *string) (store.Session, error) {
+func (a *App) UpdateSession(ctx context.Context, name *string, archived *bool, branch *string, buildCommand, buildDir, buildArtifact *string) (store.Session, error) {
 	a.ws.gitMu.Lock()
 	defer a.ws.gitMu.Unlock()
+	if buildCommand != nil || buildArtifact != nil {
+		command, pattern := "", ""
+		if buildCommand != nil {
+			command = strings.TrimSpace(*buildCommand)
+		} else {
+			command = a.SessionInfo().BuildCommand
+		}
+		if buildArtifact != nil {
+			pattern = strings.TrimSpace(*buildArtifact)
+		} else {
+			pattern = a.SessionInfo().BuildArtifact
+		}
+		if len(command) > 16<<10 {
+			return a.SessionInfo(), badRequest("コマンドは16 KiB以内にしてください")
+		}
+		if (command == "") != (pattern == "") {
+			return a.SessionInfo(), badRequest("コマンドと成果物の glob を両方設定してください")
+		}
+		if pattern != "" {
+			if _, err := filepath.Match(pattern, ""); err != nil {
+				return a.SessionInfo(), badRequest("成果物の glob が不正です: %v", err)
+			}
+		}
+	}
 	if branch != nil {
 		if err := a.ws.validateSessionBranch(ctx, *branch); err != nil {
 			return a.SessionInfo(), err
@@ -200,6 +224,15 @@ func (a *App) UpdateSession(ctx context.Context, name *string, archived *bool, b
 	s := a.Session
 	if branch != nil {
 		s.Branch = *branch
+	}
+	if buildCommand != nil {
+		s.BuildCommand = strings.TrimSpace(*buildCommand)
+	}
+	if buildDir != nil {
+		s.BuildDir = strings.TrimSpace(*buildDir)
+	}
+	if buildArtifact != nil {
+		s.BuildArtifact = strings.TrimSpace(*buildArtifact)
 	}
 	if name != nil {
 		n, err := store.CleanSessionName(*name)
@@ -371,6 +404,7 @@ type RoundSummary struct {
 	SubmittedAt *time.Time          `json:"submittedAt,omitempty"`
 	Comments    int                 `json:"comments"`
 	Response    *store.ResponseInfo `json:"response,omitempty"`
+	Build       *store.BuildRecord  `json:"build,omitempty"`
 }
 
 // Info returns the session summary.
@@ -396,6 +430,7 @@ func (a *App) Info() Info {
 		info.Rounds = append(info.Rounds, RoundSummary{
 			Round: n, OpenedAt: m.OpenedAt, SubmittedAt: m.SubmittedAt,
 			Comments: len(m.FeedbackIDs), Response: m.Response,
+			Build: func() *store.BuildRecord { b, _ := a.Store.BuildRecord(n); return b }(),
 		})
 	}
 	if n := a.latestSubmitted(); n >= 1 {
