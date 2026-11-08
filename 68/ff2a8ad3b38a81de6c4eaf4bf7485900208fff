@@ -1,0 +1,79 @@
+internal/server/dist/assets/ruby-BaHgAVQx.js
+  s_51940fd3a84c81::t_1988090ad1825f 1
+internal/server/dist/assets/graphql-JYO6tGPG.js
+  s_51940fd3a84c81::t_1988090ad1825f 1
+internal/server/dist/assets/html-tJKYl1s8.js
+  s_51940fd3a84c81::t_1988090ad1825f 1
+internal/app/app.go
+  s_51940fd3a84c81::t_c50b16541932cc 67
+  s_51940fd3a84c81::t_ecc44ac30b6c93 65-66,68-69
+internal/server/server.go
+  s_51940fd3a84c81::t_93d8c11f38fc66 121,417-424
+  s_51940fd3a84c81::t_15f92c6349e631 425-426
+web/src/api.ts
+  s_51940fd3a84c81::t_9f7ab723c4a16c 14,122
+internal/server/dist/assets/typescript-D3uufVD_.js
+  s_51940fd3a84c81::t_1988090ad1825f 1
+internal/app/build.go
+  s_51940fd3a84c81::t_f588664aa9bf5b 49-61,63-67,79-101,106,114,126,200
+  s_51940fd3a84c81::t_e23c7076f54fcc 62,68-78,111
+  s_51940fd3a84c81::t_51bd9034138fcb 46-48
+internal/server/build_test.go
+  s_51940fd3a84c81::t_a5860c3a04f119 1-40
+internal/server/dist/assets/css-CfDegPf4.js
+  s_51940fd3a84c81::t_1988090ad1825f 1
+internal/server/dist/assets/sql-B3zGbpfK.js
+  s_51940fd3a84c81::t_1988090ad1825f 1
+internal/server/dist/assets/c-B99DOu6o.js
+  s_51940fd3a84c81::t_1988090ad1825f 1
+internal/server/dist/assets/jsx-Dxmb8-iA.js
+  s_51940fd3a84c81::t_1988090ad1825f 1
+internal/server/dist/assets/xml-KXeOT7W4.js
+  s_51940fd3a84c81::t_1988090ad1825f 1
+internal/server/dist/index.html
+  s_51940fd3a84c81::t_1988090ad1825f 8
+internal/server/dist/assets/vue-BoylwC5e.js
+  s_51940fd3a84c81::t_1988090ad1825f 1
+internal/server/dist/assets/php-BQ2S-9_h.js
+  s_51940fd3a84c81::t_1988090ad1825f 1
+internal/app/build_test.go
+  s_51940fd3a84c81::t_aa1ac8df141a5e 13,31,34-44
+internal/server/dist/assets/cpp-DNi8YgUR.js
+  s_51940fd3a84c81::t_1988090ad1825f 1
+internal/server/dist/assets/tsx-6_IuyDRW.js
+  s_51940fd3a84c81::t_1988090ad1825f 1
+internal/server/dist/assets/dist-CghDaQ_A.js
+  s_51940fd3a84c81::t_1988090ad1825f 1-63
+internal/server/dist/assets/java-BRdtbie-.js
+  s_51940fd3a84c81::t_1988090ad1825f 1
+internal/server/dist/assets/lua-oJF5QWmV.js
+  s_51940fd3a84c81::t_1988090ad1825f 1
+internal/server/dist/assets/rst-IF4hqyjY.js
+  s_51940fd3a84c81::t_1988090ad1825f 1
+web/src/components/Overview.tsx
+  s_51940fd3a84c81::t_c2a85043c06cbd 11,40,58-71,129-135
+internal/app/agent.go
+  s_51940fd3a84c81::t_ec973e6e2d955f 369-371
+internal/server/dist/assets/html-derivative-BrQQhl5o.js
+  s_51940fd3a84c81::t_1988090ad1825f 1
+internal/server/dist/assets/extract-COnkXS_q.js
+  s_51940fd3a84c81::t_1988090ad1825f 1-57
+internal/server/dist/assets/index-Csoq0adt.js
+  s_51940fd3a84c81::t_1988090ad1825f 1-256
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "68ff2a8ad3b38a81de6c4eaf4bf7485900208fff",
+  "prompts": {},
+  "sessions": {
+    "s_51940fd3a84c81": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a1b890-d257-7542-aead-95edc6e444b7",
+        "model": "gpt-6-luna"
+      },
+      "human_author": "Yoshi Yamaguchi <ymotongpoo@gmail.com>"
+    }
+  }
+}
