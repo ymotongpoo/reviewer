@@ -1,0 +1,72 @@
+internal/server/dist/assets/jsx-CjLf29Yn.js
+  s_51940fd3a84c81::t_6e6bb4437eede8 1
+internal/server/dist/assets/sql-B8tgh2aq.js
+  s_51940fd3a84c81::t_6e6bb4437eede8 1
+internal/server/dist/assets/xml-U15IZJXH.js
+  s_51940fd3a84c81::t_6e6bb4437eede8 1
+internal/server/dist/assets/index-DUwHWlbm.css
+  s_51940fd3a84c81::t_6e6bb4437eede8 1
+internal/server/dist/assets/lua-CPJ_m7pu.js
+  s_51940fd3a84c81::t_6e6bb4437eede8 1
+internal/server/dist/assets/css-H86SZNUp.js
+  s_51940fd3a84c81::t_6e6bb4437eede8 1
+internal/server/dist/assets/graphql-CPnlhth9.js
+  s_51940fd3a84c81::t_6e6bb4437eede8 1
+internal/server/dist/assets/typescript-CEhq5ZGT.js
+  s_51940fd3a84c81::t_6e6bb4437eede8 1
+internal/server/dist/assets/vue-D3JtGoTK.js
+  s_51940fd3a84c81::t_6e6bb4437eede8 1
+internal/server/dist/assets/dist-BgO6mskO.js
+  s_51940fd3a84c81::t_6e6bb4437eede8 1-63
+internal/app/build_test.go
+  s_51940fd3a84c81::t_f6378bdf9f9b92 11-12,15,47
+internal/server/dist/index.html
+  s_51940fd3a84c81::t_6e6bb4437eede8 8-9
+internal/server/dist/assets/extract-Dg_FWLH6.js
+  s_51940fd3a84c81::t_6e6bb4437eede8 1-57
+internal/server/dist/assets/cpp-VJwnytGi.js
+  s_51940fd3a84c81::t_6e6bb4437eede8 1
+internal/server/dist/assets/php-BbeqD7iB.js
+  s_51940fd3a84c81::t_6e6bb4437eede8 1
+web/src/style.css
+  s_51940fd3a84c81::t_ed4726a64536ed 2571-2584
+internal/server/dist/assets/c-BlnibwTi.js
+  s_51940fd3a84c81::t_6e6bb4437eede8 1
+internal/server/dist/assets/index-C0qg-4AZ.js
+  s_51940fd3a84c81::t_6e6bb4437eede8 1-256
+internal/server/dist/assets/java-2pXkOEeD.js
+  s_51940fd3a84c81::t_6e6bb4437eede8 1
+internal/server/dist/assets/html-derivative-CuGIKDoW.js
+  s_51940fd3a84c81::t_6e6bb4437eede8 1
+internal/server/dist/assets/rst-XXrjw2UY.js
+  s_51940fd3a84c81::t_6e6bb4437eede8 1
+internal/server/dist/assets/ruby-CnH6lm_b.js
+  s_51940fd3a84c81::t_6e6bb4437eede8 1
+internal/server/dist/assets/tsx-jAQwhhLc.js
+  s_51940fd3a84c81::t_6e6bb4437eede8 1
+internal/server/dist/assets/html-CgsRvxVr.js
+  s_51940fd3a84c81::t_6e6bb4437eede8 1
+web/src/components/Overview.tsx
+  s_51940fd3a84c81::t_ed4726a64536ed 142
+internal/app/build.go
+  s_51940fd3a84c81::t_657d1b84aab558 180,220,224-228
+  s_51940fd3a84c81::t_56254e6b73bdb6 126-140,200,217-219,221-223,229-248
+  s_51940fd3a84c81::t_d7a955e868c110 181-182
+  s_51940fd3a84c81::t_60839b6c2f6ddb 249
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "dede9e684b61fa2c1afa62a154b9cababed67bd9",
+  "prompts": {},
+  "sessions": {
+    "s_51940fd3a84c81": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a1b890-d257-7542-aead-95edc6e444b7",
+        "model": "gpt-6-luna"
+      },
+      "human_author": "Yoshi Yamaguchi <ymotongpoo@gmail.com>"
+    }
+  }
+}
